@@ -48,6 +48,12 @@ CGO), bbolt/BadgerDB (pure key-value, would mean reimplementing relational
 queries by hand), DuckDB (built for analytical workloads, not small frequent
 transactions).
 
+## Database schema
+
+The full DDL lives in [`db/schema.sql`](../db/schema.sql): `users`, `invites`
+(the only way an account gets created), `refresh_tokens`, `items` (files and
+folders, in one table, related to each other via `parent_id`), and `shares`.
+
 ## Storage layout
 
 ```
