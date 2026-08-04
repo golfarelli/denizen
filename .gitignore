@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# Local runtime data (default DENIZEN_DATA_DIR) — never something to commit
+/data/
+
 # Editor/IDE
 # .idea/
 # .vscode/

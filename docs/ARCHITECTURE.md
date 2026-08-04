@@ -50,7 +50,8 @@ transactions).
 
 ## Database schema
 
-The full DDL lives in [`db/schema.sql`](../db/schema.sql): `users`, `invites`
+The full DDL lives in [`internal/db/schema.sql`](../internal/db/schema.sql)
+(colocated with the Go code that embeds and applies it): `users`, `invites`
 (the only way an account gets created), `refresh_tokens`, `items` (files and
 folders, in one table, related to each other via `parent_id`), and `shares`.
 
