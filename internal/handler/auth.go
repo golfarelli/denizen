@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/golfarelli/denizen/internal/apperr"
+	"github.com/golfarelli/denizen/internal/httpio"
 	"github.com/golfarelli/denizen/internal/service"
 )
 
@@ -32,7 +33,7 @@ type userResponse struct {
 func (h *AuthHandler) Register(res http.ResponseWriter, req *http.Request) {
 	var in registerRequest
 	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
-		writeError(res, apperr.Validation("invalid JSON body"))
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
 		return
 	}
 
@@ -42,11 +43,11 @@ func (h *AuthHandler) Register(res http.ResponseWriter, req *http.Request) {
 		Password:   in.Password,
 	})
 	if err != nil {
-		writeError(res, err)
+		httpio.WriteError(res, err)
 		return
 	}
 
-	writeJSON(res, http.StatusCreated, userResponse{ID: item.ID, Username: item.Username, IsAdmin: item.IsAdmin})
+	httpio.WriteJSON(res, http.StatusCreated, userResponse{ID: item.ID, Username: item.Username, IsAdmin: item.IsAdmin})
 }
 
 type loginRequest struct {
@@ -62,17 +63,17 @@ type tokenResponse struct {
 func (h *AuthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	var in loginRequest
 	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
-		writeError(res, apperr.Validation("invalid JSON body"))
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
 		return
 	}
 
 	pair, err := h.auth.Login(req.Context(), in.Username, in.Password)
 	if err != nil {
-		writeError(res, err)
+		httpio.WriteError(res, err)
 		return
 	}
 
-	writeJSON(res, http.StatusOK, tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken})
+	httpio.WriteJSON(res, http.StatusOK, tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken})
 }
 
 type refreshRequest struct {
@@ -82,28 +83,28 @@ type refreshRequest struct {
 func (h *AuthHandler) Refresh(res http.ResponseWriter, req *http.Request) {
 	var in refreshRequest
 	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
-		writeError(res, apperr.Validation("invalid JSON body"))
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
 		return
 	}
 
 	pair, err := h.auth.Refresh(req.Context(), in.RefreshToken)
 	if err != nil {
-		writeError(res, err)
+		httpio.WriteError(res, err)
 		return
 	}
 
-	writeJSON(res, http.StatusOK, tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken})
+	httpio.WriteJSON(res, http.StatusOK, tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken})
 }
 
 func (h *AuthHandler) Logout(res http.ResponseWriter, req *http.Request) {
 	var in refreshRequest
 	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
-		writeError(res, apperr.Validation("invalid JSON body"))
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
 		return
 	}
 
 	if err := h.auth.Logout(req.Context(), in.RefreshToken); err != nil {
-		writeError(res, err)
+		httpio.WriteError(res, err)
 		return
 	}
 
