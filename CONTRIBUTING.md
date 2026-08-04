@@ -53,6 +53,13 @@ reuse it everywhere rather than inventing a synonym:
 This glossary grows as new recurring concepts appear in the codebase — extend
 it in this file when you introduce one, instead of leaving it implicit.
 
+> **Go-specific gotcha:** a local variable named `sql` shadows the standard
+> `database/sql` package within its scope, so `sql.ErrNoRows`/`sql.DB`/etc.
+> become unreachable by name after the shadowing line. Repository files
+> import it under an alias instead — `stdsql "database/sql"` — which keeps
+> `sql` free for the query-string convention above. See
+> `internal/repository/*.go` for the pattern.
+
 ## Request handling flow
 
 Every handler follows the same order of operations, so any one of them reads
