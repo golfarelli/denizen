@@ -30,14 +30,15 @@ CREATE TABLE users (
 -- One-time invite codes. A user account only comes into existence by
 -- redeeming one of these (admin-only creation).
 CREATE TABLE invites (
-    id          TEXT PRIMARY KEY,
-    code        TEXT NOT NULL UNIQUE,
-    created_by  TEXT NOT NULL REFERENCES users(id),
-    quota_bytes INTEGER,           -- NULL = use the server's global default quota
-    expires_at  INTEGER NOT NULL,
-    used_at     INTEGER,           -- NULL = not redeemed yet
-    used_by     TEXT REFERENCES users(id),
-    created_at  INTEGER NOT NULL
+    id           TEXT PRIMARY KEY,
+    code         TEXT NOT NULL UNIQUE,
+    created_by   TEXT REFERENCES users(id), -- NULL for the bootstrap invite (no admin exists yet)
+    grants_admin INTEGER NOT NULL DEFAULT 0, -- 1 only for the bootstrap invite
+    quota_bytes  INTEGER,           -- NULL = use the server's global default quota
+    expires_at   INTEGER NOT NULL,
+    used_at      INTEGER,           -- NULL = not redeemed yet
+    used_by      TEXT REFERENCES users(id),
+    created_at   INTEGER NOT NULL
 );
 
 -- Issued refresh tokens, so a logout/compromise can revoke a specific one
