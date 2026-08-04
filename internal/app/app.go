@@ -13,6 +13,7 @@ import (
 	"github.com/golfarelli/denizen/internal/repository"
 	"github.com/golfarelli/denizen/internal/router"
 	"github.com/golfarelli/denizen/internal/service"
+	"github.com/golfarelli/denizen/internal/storage"
 	"github.com/golfarelli/denizen/internal/token"
 )
 
@@ -23,6 +24,7 @@ import (
 type App struct {
 	Handler http.Handler
 	Auth    *service.AuthService
+	Items   *service.ItemService
 	DB      *stdsql.DB
 }
 
@@ -37,16 +39,21 @@ func New(cfg config.Config) (*App, error) {
 	users := repository.NewUserRepository(cn)
 	invites := repository.NewInviteRepository(cn)
 	refreshTokens := repository.NewRefreshTokenRepository(cn)
+	items := repository.NewItemRepository(cn)
 	tokens := token.NewIssuer(cfg.JWTSecret)
+	store := storage.New(cfg.DataDir)
 
 	authService := service.NewAuthService(users, invites, refreshTokens, tokens,
 		cfg.DefaultQuotaBytes, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	itemService := service.NewItemService(items, users, store)
 
 	authHandler := handler.NewAuthHandler(authService)
+	itemHandler := handler.NewItemHandler(itemService)
 
 	return &App{
-		Handler: router.New(authHandler),
+		Handler: router.New(authHandler, itemHandler, tokens),
 		Auth:    authService,
+		Items:   itemService,
 		DB:      cn,
 	}, nil
 }

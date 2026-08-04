@@ -41,3 +41,27 @@ type RefreshToken struct {
 	RevokedAt *int64
 	CreatedAt int64
 }
+
+// Item is a file or a folder. Folders group other items under them via
+// ParentID; a nil ParentID means "the owner's root". See
+// docs/ARCHITECTURE.md for how an item's ID maps to a real path on disk.
+type Item struct {
+	ID         string
+	OwnerID    string
+	ParentID   *string
+	Name       string
+	Type       ItemType
+	SizeBytes  int64
+	MimeType   *string
+	Checksum   *string
+	DeletedAt  *int64 // nil = active; set = in trash since this time
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
+type ItemType string
+
+const (
+	ItemTypeFile   ItemType = "file"
+	ItemTypeFolder ItemType = "folder"
+)

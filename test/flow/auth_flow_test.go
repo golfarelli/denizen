@@ -20,12 +20,14 @@ import (
 
 // testServer is everything a flow test needs: a live HTTP server, the App
 // behind it (for DB/service access the test wouldn't otherwise have — e.g.
-// the bootstrap invite code, which is normally only logged to stdout), and
-// the JWT secret used to verify access tokens issued during the test.
+// the bootstrap invite code, which is normally only logged to stdout), the
+// JWT secret used to verify access tokens issued during the test, and the
+// data directory a test can check the real filesystem state under.
 type testServer struct {
 	*httptest.Server
 	app       *app.App
 	jwtSecret string
+	dataDir   string
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -46,7 +48,7 @@ func newTestServer(t *testing.T) *testServer {
 	srv := httptest.NewServer(a.Handler)
 	t.Cleanup(srv.Close)
 
-	return &testServer{Server: srv, app: a, jwtSecret: cfg.JWTSecret}
+	return &testServer{Server: srv, app: a, jwtSecret: cfg.JWTSecret, dataDir: cfg.DataDir}
 }
 
 func postJSON(t *testing.T, url string, body any) *http.Response {
