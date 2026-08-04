@@ -15,6 +15,7 @@ import (
 	"github.com/golfarelli/denizen/internal/service"
 	"github.com/golfarelli/denizen/internal/storage"
 	"github.com/golfarelli/denizen/internal/token"
+	"github.com/golfarelli/denizen/internal/upload"
 )
 
 // App is a fully wired Denizen instance: an HTTP handler plus the pieces
@@ -50,8 +51,14 @@ func New(cfg config.Config) (*App, error) {
 	authHandler := handler.NewAuthHandler(authService)
 	itemHandler := handler.NewItemHandler(itemService)
 
+	uploadHandler, err := upload.NewHandler(store.StagingRoot(), itemService, cfg.MaxUploadSizeBytes)
+	if err != nil {
+		cn.Close()
+		return nil, err
+	}
+
 	return &App{
-		Handler: router.New(authHandler, itemHandler, tokens),
+		Handler: router.New(authHandler, itemHandler, uploadHandler, tokens),
 		Auth:    authService,
 		Items:   itemService,
 		DB:      cn,

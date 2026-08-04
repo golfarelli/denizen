@@ -18,6 +18,11 @@ type Config struct {
 	RefreshTokenTTL    time.Duration
 	DefaultQuotaBytes  int64
 	BootstrapInviteTTL time.Duration
+	// MaxUploadSizeBytes caps a single upload independently of the uploading
+	// user's remaining quota — a sanity backstop against filling the disk,
+	// since real per-user quota *enforcement* on upload is still a TODO
+	// (see docs/ARCHITECTURE.md).
+	MaxUploadSizeBytes int64
 }
 
 // Load builds a Config from environment variables, falling back to defaults
@@ -32,6 +37,7 @@ func Load() Config {
 		RefreshTokenTTL:    getEnvDuration("DENIZEN_REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		DefaultQuotaBytes:  getEnvInt64("DENIZEN_DEFAULT_QUOTA_BYTES", 10<<30), // 10 GiB
 		BootstrapInviteTTL: 24 * time.Hour,
+		MaxUploadSizeBytes: getEnvInt64("DENIZEN_MAX_UPLOAD_SIZE_BYTES", 10<<30), // 10 GiB
 	}
 }
 

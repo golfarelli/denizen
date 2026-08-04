@@ -124,13 +124,28 @@ document scanner producing large PDFs from outside the house. The
 instead.
 
 `tusd` runs embedded in the Go binary (as a library, not a separate process —
-consistent with the single-container deployment), backed by the local
-filestore. Flow: `POST` to create an upload (`Upload-Length` /
-`Upload-Metadata` headers carry the filename and target folder) → `PATCH` the
-bytes with `Upload-Offset`, resumable via `HEAD` after an interruption. On
-completion, the finished file is moved into the user's real folder tree and
-registered in the `items` table; incomplete/abandoned uploads are garbage
-collected on a schedule.
+consistent with the single-container deployment), backed by a local filestore
+rooted at `<data>/staging/uploads` (see the storage layout above — this must
+be on the same filesystem as `users/`, since finishing an upload is a
+`Rename`, not a copy). Flow: `POST` to create an upload (`Upload-Length` /
+`Upload-Metadata` headers carry `filename`, `parent_id`, optionally
+`filetype`) → `PATCH` the bytes with `Upload-Offset`, resumable via `HEAD`
+after an interruption.
+
+The whole `/api/v1/uploads/` subtree sits behind the same JWT auth middleware
+as everything else — tusd's own hooks only cover create/finish/terminate, not
+the `PATCH`/`HEAD`/`GET` requests that continue or read back an upload, so the
+middleware is what actually closes that gap. On top of that, a `PreUploadCreateCallback`
+hook validates the destination folder up front and stamps the upload's
+metadata with the *server-verified* owner ID (never trusting whatever the
+client claims), and a `PreFinishResponseCallback` hook — which runs
+synchronously, before the completing request gets its response — checks that
+owner ID still matches the caller, then moves the finished file into the
+user's real folder tree, computes its checksum, registers it in the `items`
+table, and adjusts `storage_used_bytes`. The client learns the new item's ID
+immediately via an `X-Item-Id` response header, no separate listing needed.
+Incomplete/abandoned uploads being garbage collected on a schedule is not yet
+implemented — a follow-up, not silently skipped.
 
 ### Auth
 

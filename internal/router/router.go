@@ -9,12 +9,13 @@ import (
 	"github.com/golfarelli/denizen/internal/handler"
 	"github.com/golfarelli/denizen/internal/middleware"
 	"github.com/golfarelli/denizen/internal/token"
+	"github.com/golfarelli/denizen/internal/upload"
 )
 
-// New builds Denizen's full HTTP handler. Routes under /api/v1/items and
-// /api/v1/trash require a valid access token (middleware.RequireAuth); auth
-// routes themselves obviously don't.
-func New(auth *handler.AuthHandler, items *handler.ItemHandler, tokens *token.Issuer) http.Handler {
+// New builds Denizen's full HTTP handler. Routes under /api/v1/items,
+// /api/v1/trash and /api/v1/uploads require a valid access token
+// (middleware.RequireAuth); auth routes themselves obviously don't.
+func New(auth *handler.AuthHandler, items *handler.ItemHandler, uploads http.Handler, tokens *token.Issuer) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/register", auth.Register)
@@ -33,6 +34,12 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, tokens *token.Is
 
 	mux.Handle("GET /api/v1/trash", requireAuth(http.HandlerFunc(items.ListTrash)))
 	mux.Handle("DELETE /api/v1/trash/{id}", requireAuth(http.HandlerFunc(items.DeletePermanently)))
+
+	// tusd routes every verb (POST/PATCH/HEAD/GET/DELETE) itself once past
+	// this prefix — wrapping the whole subtree in requireAuth is what covers
+	// all of them, since tusd's own hooks only run on create/finish/
+	// terminate, not on the PATCH/HEAD requests that continue an upload.
+	mux.Handle(upload.BasePath, requireAuth(http.StripPrefix(upload.BasePath, uploads)))
 
 	return mux
 }

@@ -48,6 +48,16 @@ func (r *UserRepository) CountAll(ctx context.Context) (int, error) {
 	return count, err
 }
 
+// IncrementStorageUsed adjusts a user's storage_used_bytes counter by delta
+// (negative to free space, e.g. on permanent deletion). Kept as a simple
+// increment rather than a recomputed SUM(size_bytes) over all items, so it
+// stays cheap regardless of how many files a user has.
+func (r *UserRepository) IncrementStorageUsed(ctx context.Context, userID string, delta int64) error {
+	sql := `UPDATE users SET storage_used_bytes = storage_used_bytes + ? WHERE id = ?`
+	_, err := r.cn.ExecContext(ctx, sql, delta, userID)
+	return err
+}
+
 func (r *UserRepository) scanOne(row *stdsql.Row) (*model.User, error) {
 	item := &model.User{}
 	err := row.Scan(&item.ID, &item.Username, &item.PasswordHash, &item.IsAdmin,

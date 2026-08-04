@@ -180,6 +180,24 @@ func (s *ItemService) ListTrash(ctx context.Context, ownerID string) ([]*model.I
 	return top, nil
 }
 
+// ValidateFolder checks that parentID (nil = the user's root) is a real,
+// owned, active folder — used by the upload package's tus pre-create hook
+// to fail fast, before any bytes are staged, instead of only discovering a
+// bad target once the upload finishes (see internal/upload).
+func (s *ItemService) ValidateFolder(ctx context.Context, ownerID string, parentID *string) error {
+	if parentID == nil {
+		return nil
+	}
+	item, err := s.Get(ctx, ownerID, *parentID)
+	if err != nil {
+		return err
+	}
+	if item.Type != model.ItemTypeFolder {
+		return apperr.Validation("parent is not a folder")
+	}
+	return nil
+}
+
 // --- create ---------------------------------------------------------------
 
 // CreateFolder creates a new folder under parentID (nil = root). Files
@@ -224,6 +242,78 @@ func (s *ItemService) CreateFolder(ctx context.Context, ownerID string, parentID
 	}
 	if err := s.items.Create(ctx, item); err != nil {
 		_ = s.storage.Remove(targetPath)
+		return nil, err
+	}
+	return item, nil
+}
+
+// FinalizeUpload registers a completed upload as a file item: it moves the
+// finished upload from sourcePath (wherever the tus store staged it — see
+// internal/upload) into the owner's real folder tree, computes its
+// checksum at rest, creates its item row, and adjusts the owner's
+// storage_used_bytes counter.
+//
+// sourcePath must be on the same filesystem as the destination (both live
+// under the same data directory in the default layout — see
+// docs/ARCHITECTURE.md), since the move is a Rename, not a copy.
+//
+// Note: the item row and the quota counter update below are two sequential
+// statements, not one transaction — consistent with the rest of this
+// codebase (e.g. Register creating a user then marking its invite used).
+// A crash between them would leave the counter briefly behind the real
+// total; acceptable for now, worth revisiting if/when the repository layer
+// grows real transaction support.
+func (s *ItemService) FinalizeUpload(ctx context.Context, ownerID string, parentID *string, name, sourcePath string, sizeBytes int64, mimeType string) (*model.Item, error) {
+	if err := validateName(name); err != nil {
+		return nil, err
+	}
+	name = strings.TrimSpace(name)
+
+	username, err := s.username(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	folderPath, err := s.folderPath(ctx, ownerID, username, parentID)
+	if err != nil {
+		return nil, err
+	}
+	finalName, err := s.uniqueName(ctx, ownerID, parentID, model.ItemTypeFile, name, "")
+	if err != nil {
+		return nil, err
+	}
+
+	targetPath := filepath.Join(folderPath, finalName)
+	if err := s.storage.Rename(sourcePath, targetPath); err != nil {
+		return nil, err
+	}
+
+	checksum, err := s.storage.Checksum(targetPath)
+	if err != nil {
+		_ = s.storage.Rename(targetPath, sourcePath) // best-effort: keep DB and disk in agreement
+		return nil, err
+	}
+
+	now := s.now().Unix()
+	item := &model.Item{
+		ID:        idgen.New(),
+		OwnerID:   ownerID,
+		ParentID:  parentID,
+		Name:      finalName,
+		Type:      model.ItemTypeFile,
+		SizeBytes: sizeBytes,
+		Checksum:  &checksum,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if mimeType != "" {
+		item.MimeType = &mimeType
+	}
+	if err := s.items.Create(ctx, item); err != nil {
+		_ = s.storage.Rename(targetPath, sourcePath)
+		return nil, err
+	}
+
+	if err := s.users.IncrementStorageUsed(ctx, ownerID, sizeBytes); err != nil {
 		return nil, err
 	}
 	return item, nil
@@ -477,7 +567,16 @@ func (s *ItemService) PermanentlyDelete(ctx context.Context, ownerID, id string)
 	return s.hardDeleteSubtreeRows(ctx, ownerID, item.ID)
 }
 
+// hardDeleteSubtreeRows removes id's row (and, recursively, its
+// descendants') for good, freeing each file's bytes from the owner's quota
+// counter as it goes — this is the only path that both destroys a file and
+// permanently gives its space back (soft delete keeps counting it, exactly
+// as decided for the trash/quota interaction — see docs/ARCHITECTURE.md).
 func (s *ItemService) hardDeleteSubtreeRows(ctx context.Context, ownerID, id string) error {
+	item, err := s.items.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
 	children, err := s.items.ListChildrenDeleted(ctx, ownerID, &id)
 	if err != nil {
 		return err
@@ -487,5 +586,11 @@ func (s *ItemService) hardDeleteSubtreeRows(ctx context.Context, ownerID, id str
 			return err
 		}
 	}
-	return s.items.HardDelete(ctx, id)
+	if err := s.items.HardDelete(ctx, id); err != nil {
+		return err
+	}
+	if item.Type == model.ItemTypeFile {
+		return s.users.IncrementStorageUsed(ctx, ownerID, -item.SizeBytes)
+	}
+	return nil
 }
