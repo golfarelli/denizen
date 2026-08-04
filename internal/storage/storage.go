@@ -12,7 +12,10 @@
 package storage
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -33,6 +36,14 @@ func (s *Store) UserFilesRoot(username string) string {
 // UserTrashRoot is where username's soft-deleted items live.
 func (s *Store) UserTrashRoot(username string) string {
 	return filepath.Join(s.dataDir, "users", username, ".trash")
+}
+
+// StagingRoot is where in-progress resumable (tus) uploads are written
+// before they're finalized into a user's folder tree — see
+// internal/upload. It must be on the same filesystem as UserFilesRoot for
+// every user, since finalizing an upload is a Rename, not a copy.
+func (s *Store) StagingRoot() string {
+	return filepath.Join(s.dataDir, "staging", "uploads")
 }
 
 // TrashPath returns the path a trashed item with the given id and original
@@ -75,4 +86,21 @@ func (s *Store) Exists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// Checksum returns the hex-encoded SHA-256 of the file at path — used to
+// record a file item's checksum once its bytes are at rest (see
+// internal/service.FinalizeUpload).
+func (s *Store) Checksum(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
