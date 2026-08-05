@@ -52,6 +52,57 @@ test('rename a folder', async ({ page }) => {
 	await expect(page.locator('.item-row', { hasText: originalName })).not.toBeVisible();
 });
 
+test('the row action menu is not clipped by a short item list', async ({ page }) => {
+	await page.goto('/');
+
+	// A fresh, otherwise-empty folder guarantees a genuinely short list —
+	// the dropdown opening below a lone row has nowhere to go but past the
+	// list's own bottom edge, which is exactly the case `.item-list`'s old
+	// `overflow: hidden` used to clip it in (see app.css).
+	const containerName = `E2E Short List ${Date.now()}`;
+	page.once('dialog', (dialog) => dialog.accept(containerName));
+	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page
+		.locator('.item-row', { hasText: containerName })
+		.getByRole('button', { name: containerName, exact: true })
+		.click();
+
+	const onlyItemName = 'Only Item';
+	page.once('dialog', (dialog) => dialog.accept(onlyItemName));
+	await page.getByRole('button', { name: '+ New folder' }).click();
+
+	const row = page.locator('.item-row', { hasText: onlyItemName });
+	await expect(row).toBeVisible();
+
+	await row.getByRole('button', { name: 'Actions for' }).click();
+	const menu = row.locator('.dropdown-menu');
+	await expect(menu).toBeVisible();
+
+	// The direct regression check: `.item-list` — the ancestor whose old
+	// `overflow: hidden` clipped this menu away — must not clip its
+	// overflow. A getBoundingClientRect()-based check wouldn't catch this
+	// (an ancestor's overflow: hidden clips *painting*, not the clipped
+	// element's own box geometry, so bounding boxes look identical either
+	// way); the computed style is the one thing that actually distinguishes
+	// "renders past the list" from "invisible past the list".
+	const listOverflow = await page.locator('.item-list').evaluate((el) => getComputedStyle(el).overflow);
+	expect(listOverflow).not.toBe('hidden');
+
+	// And the end-to-end confirmation: the menu is also genuinely usable,
+	// not just present in the DOM — clicking its last (furthest-down, so
+	// furthest into the clipped region the old CSS left) item must still
+	// reach its real handler. The dialog listener has to be registered
+	// *before* the click: window.prompt() blocks synchronously, and
+	// Playwright auto-dismisses any dialog with no listener attached yet,
+	// which would otherwise silently eat it before this test ever sees it.
+	page.once('dialog', (dialog) => {
+		expect(dialog.type()).toBe('confirm');
+		dialog.dismiss();
+	});
+	await menu.getByRole('menuitem', { name: 'Delete' }).click();
+	await expect(menu).not.toBeVisible();
+});
+
 test('the row action menu closes on outside click', async ({ page }) => {
 	await page.goto('/');
 

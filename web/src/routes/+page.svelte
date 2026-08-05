@@ -243,6 +243,17 @@
 		}
 	}
 
+	// The upload panel's "Done"/error rows never went away on their own —
+	// there was no button that actually removed a settled entry, just a
+	// static status label that happened to be sitting where a dismiss
+	// button would go, easy to mistake for one. An entry can only be
+	// dismissed once it's settled (done or error): dismissing mid-upload
+	// wouldn't stop the transfer, just hide it, so an error partway through
+	// would silently vanish instead of surfacing.
+	function dismissUpload(id: string) {
+		uploads = uploads.filter((u) => u.id !== id);
+	}
+
 	function handleFileInputChange(event: Event) {
 		const input = event.target as HTMLInputElement;
 		if (input.files?.length) uploadFiles(input.files);
@@ -307,8 +318,10 @@
 					<span class="upload-percent">{entry.progress}%</span>
 				{:else if entry.status === 'done'}
 					<span class="upload-status-done">Done</span>
+					<button class="btn icon-btn" aria-label="Dismiss" onclick={() => dismissUpload(entry.id)}>✕</button>
 				{:else}
 					<span class="error-text">{entry.error ?? 'Failed'}</span>
+					<button class="btn icon-btn" aria-label="Dismiss" onclick={() => dismissUpload(entry.id)}>✕</button>
 				{/if}
 			</div>
 		{/each}

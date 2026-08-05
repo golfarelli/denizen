@@ -42,3 +42,18 @@ test('upload a file and download it back byte-for-byte', async ({ page }) => {
 function sha256(data: Buffer): string {
 	return createHash('sha256').update(data).digest('hex');
 }
+
+test('dismiss button removes a settled upload entry from the panel', async ({ page }) => {
+	await page.goto('/');
+	await page.locator('input[type="file"]').setInputFiles(FIXTURE_PATH);
+
+	// "Done" used to be a static label sitting where a dismiss control
+	// would naturally go — easy to mistake for a button, but clicking it
+	// did nothing (see routes/+page.svelte's dismissUpload). This is the
+	// regression test for that: the entry must actually disappear.
+	const doneEntry = page.locator('.upload-entry', { hasText: 'sample.txt' });
+	await expect(doneEntry.getByText('Done')).toBeVisible({ timeout: 15_000 });
+
+	await doneEntry.getByRole('button', { name: 'Dismiss' }).click();
+	await expect(doneEntry).not.toBeVisible();
+});
