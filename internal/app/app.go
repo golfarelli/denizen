@@ -27,7 +27,12 @@ type App struct {
 	Auth    *service.AuthService
 	Items   *service.ItemService
 	Shares  *service.ShareService
-	DB      *stdsql.DB
+	Users   *service.UserService
+	// Store gives cmd/server what it needs for the background upload-GC
+	// sweep (StagingRoot) without exposing the whole storage layer more
+	// broadly than that.
+	Store *storage.Store
+	DB    *stdsql.DB
 }
 
 // New builds a fully wired App from cfg, opening (and, on a fresh install,
@@ -50,10 +55,12 @@ func New(cfg config.Config) (*App, error) {
 		cfg.DefaultQuotaBytes, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	itemService := service.NewItemService(items, users, store)
 	shareService := service.NewShareService(shares, itemService)
+	userService := service.NewUserService(users)
 
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, cfg.InviteTTL)
 	itemHandler := handler.NewItemHandler(itemService)
 	shareHandler := handler.NewShareHandler(shareService, tokens)
+	userHandler := handler.NewUserHandler(userService)
 
 	uploadHandler, err := upload.NewHandler(store.StagingRoot(), itemService, cfg.MaxUploadSizeBytes)
 	if err != nil {
@@ -62,10 +69,12 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	return &App{
-		Handler: router.New(authHandler, itemHandler, shareHandler, uploadHandler, tokens),
+		Handler: router.New(authHandler, itemHandler, shareHandler, userHandler, uploadHandler, tokens),
 		Auth:    authService,
 		Items:   itemService,
 		Shares:  shareService,
+		Users:   userService,
+		Store:   store,
 		DB:      cn,
 	}, nil
 }

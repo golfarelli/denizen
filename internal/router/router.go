@@ -13,10 +13,12 @@ import (
 )
 
 // New builds Denizen's full HTTP handler. Routes under /api/v1/items,
-// /api/v1/trash, /api/v1/uploads and /api/v1/shares require a valid access
-// token (middleware.RequireAuth); auth routes and the public /s/{token}
-// routes (for whoever opens a share link) obviously don't.
-func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, uploads http.Handler, tokens *token.Issuer) http.Handler {
+// /api/v1/trash, /api/v1/uploads, /api/v1/shares and /api/v1/me require a
+// valid access token (middleware.RequireAuth); /api/v1/invites and
+// /api/v1/users additionally require an admin (middleware.RequireAdmin).
+// The /api/v1/auth/* routes and the public /s/{token} routes (for whoever
+// opens a share link) require neither.
+func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, users *handler.UserHandler, uploads http.Handler, tokens *token.Issuer) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/register", auth.Register)
@@ -25,6 +27,8 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.HandleFunc("POST /api/v1/auth/logout", auth.Logout)
 
 	requireAuth := middleware.RequireAuth(tokens)
+
+	mux.Handle("POST /api/v1/invites", requireAuth(middleware.RequireAdmin(http.HandlerFunc(auth.CreateInvite))))
 
 	mux.Handle("POST /api/v1/items", requireAuth(http.HandlerFunc(items.Create)))
 	mux.Handle("GET /api/v1/items", requireAuth(http.HandlerFunc(items.List)))
@@ -40,6 +44,10 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.Handle("POST /api/v1/items/{id}/shares", requireAuth(http.HandlerFunc(shares.Create)))
 	mux.Handle("GET /api/v1/shares", requireAuth(http.HandlerFunc(shares.ListMine)))
 	mux.Handle("DELETE /api/v1/shares/{id}", requireAuth(http.HandlerFunc(shares.Revoke)))
+
+	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(users.Me)))
+	mux.Handle("GET /api/v1/users", requireAuth(middleware.RequireAdmin(http.HandlerFunc(users.List))))
+	mux.Handle("PATCH /api/v1/users/{id}", requireAuth(middleware.RequireAdmin(http.HandlerFunc(users.Update))))
 
 	// Public: no RequireAuth wrapper. Whoever opens a share link may not
 	// have (or need) a Denizen account at all — see ShareService.Resolve

@@ -64,7 +64,7 @@ func TestContentFlow_DownloadAndRange(t *testing.T) {
 	}
 
 	// --- someone else can't download it -----------------------------------------
-	secondCode, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}

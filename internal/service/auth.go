@@ -76,23 +76,25 @@ func (s *AuthService) EnsureBootstrapInvite(ctx context.Context, ttl time.Durati
 	return code, true, nil
 }
 
-// CreateInvite issues a new invite. The caller (handler) is responsible for
-// checking that createdBy is an admin — this layer doesn't re-check
-// authorization, only records who asked.
-func (s *AuthService) CreateInvite(ctx context.Context, createdBy string, quotaBytes *int64, ttl time.Duration) (string, error) {
-	code := idgen.New()
-	err := s.invites.Create(ctx, &model.Invite{
+// CreateInvite issues a new invite. Authorization (createdBy must be an
+// admin) is enforced by middleware.RequireAdmin at the route level, not
+// re-checked here — see internal/router.
+func (s *AuthService) CreateInvite(ctx context.Context, createdBy string, quotaBytes *int64, ttl time.Duration) (code string, expiresAt int64, err error) {
+	now := s.now()
+	code = idgen.New()
+	expiresAt = now.Add(ttl).Unix()
+	err = s.invites.Create(ctx, &model.Invite{
 		ID:         idgen.New(),
 		Code:       code,
 		CreatedBy:  createdBy,
 		QuotaBytes: quotaBytes,
-		ExpiresAt:  s.now().Add(ttl).Unix(),
-		CreatedAt:  s.now().Unix(),
+		ExpiresAt:  expiresAt,
+		CreatedAt:  now.Unix(),
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return code, nil
+	return code, expiresAt, nil
 }
 
 // RegisterInput is the validated-on-entry input to Register.

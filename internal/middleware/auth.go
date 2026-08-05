@@ -35,6 +35,22 @@ func RequireAuth(issuer *token.Issuer) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireAdmin rejects any request whose claims (already attached by
+// RequireAuth, which must run first in the chain) don't belong to an admin.
+// Nothing else about the request is resource-specific — an admin may act on
+// any user — so unlike item ownership checks, this is the whole
+// authorization decision, made once at the route level.
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		claims, ok := ClaimsFromContext(req.Context())
+		if !ok || !claims.IsAdmin {
+			httpio.WriteError(res, apperr.Forbidden)
+			return
+		}
+		next.ServeHTTP(res, req)
+	})
+}
+
 // ClaimsFromContext retrieves the claims RequireAuth attached to the
 // request context. Only meaningful on a route wrapped with RequireAuth —
 // everywhere else, ok is false.

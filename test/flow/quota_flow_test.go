@@ -21,7 +21,7 @@ func TestQuotaFlow_UploadRejectedOverQuota(t *testing.T) {
 	fabio := registerAndLogin(t, ts, bootstrapCode, "fabio", "correct-horse-battery-staple")
 
 	smallQuota := int64(1000) // bytes
-	guestCode, err := ts.app.Auth.CreateInvite(ctx, fabio.id, &smallQuota, time.Hour)
+	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, &smallQuota, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite with quota override: %v", err)
 	}
