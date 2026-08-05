@@ -476,6 +476,99 @@ func (s *ItemService) checkNotSelfOrDescendant(ctx context.Context, itemID, targ
 	}
 }
 
+// --- copy ---------------------------------------------------------------
+
+// Copy duplicates item — and, if it's a folder, its whole active subtree —
+// into destParentID (nil = root; the caller passes the item's own current
+// parent explicitly for a same-folder "make a copy", the same way every
+// other endpoint treats nil as root, not as an item-specific shorthand).
+//
+// A file copy is real new bytes on disk (never a hard link — see
+// storage.CopyFile), so it's real new storage, checked against quota the
+// same way an upload is (CheckQuota), once per file as it's copied rather
+// than as one upfront total for a whole folder. A large folder can
+// therefore end up partially copied if quota runs out partway through — a
+// narrow edge case, flagged here rather than silently mishandled, in the
+// same spirit as Delete's documented gap around already-individually-
+// trashed descendants.
+func (s *ItemService) Copy(ctx context.Context, ownerID, id string, destParentID *string) (*model.Item, error) {
+	item, err := s.Get(ctx, ownerID, id)
+	if err != nil {
+		return nil, err
+	}
+	username, err := s.username(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	destFolderPath, err := s.folderPath(ctx, ownerID, username, destParentID)
+	if err != nil {
+		return nil, err
+	}
+	if item.Type == model.ItemTypeFolder && destParentID != nil {
+		if err := s.checkNotSelfOrDescendant(ctx, item.ID, *destParentID); err != nil {
+			return nil, err
+		}
+	}
+	return s.copyRecursive(ctx, ownerID, username, item, destParentID, destFolderPath)
+}
+
+func (s *ItemService) copyRecursive(ctx context.Context, ownerID, username string, item *model.Item, destParentID *string, destFolderPath string) (*model.Item, error) {
+	finalName, err := s.uniqueName(ctx, ownerID, destParentID, item.Type, item.Name, "")
+	if err != nil {
+		return nil, err
+	}
+	targetPath := filepath.Join(destFolderPath, finalName)
+	now := s.now().Unix()
+
+	if item.Type == model.ItemTypeFolder {
+		if err := s.storage.CreateFolder(targetPath); err != nil {
+			return nil, err
+		}
+		newItem := &model.Item{
+			ID: idgen.New(), OwnerID: ownerID, ParentID: destParentID, Name: finalName,
+			Type: model.ItemTypeFolder, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := s.items.Create(ctx, newItem); err != nil {
+			_ = s.storage.Remove(targetPath)
+			return nil, err
+		}
+		children, err := s.items.ListChildren(ctx, ownerID, &item.ID)
+		if err != nil {
+			return newItem, err // the folder itself copied fine; report the error rather than roll it back
+		}
+		for _, child := range children {
+			if _, err := s.copyRecursive(ctx, ownerID, username, child, &newItem.ID, targetPath); err != nil {
+				return newItem, err
+			}
+		}
+		return newItem, nil
+	}
+
+	if err := s.CheckQuota(ctx, ownerID, item.SizeBytes); err != nil {
+		return nil, err
+	}
+	sourcePath, err := s.pathOf(ctx, item, username)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.storage.CopyFile(sourcePath, targetPath); err != nil {
+		return nil, err
+	}
+	newItem := &model.Item{
+		ID: idgen.New(), OwnerID: ownerID, ParentID: destParentID, Name: finalName,
+		Type: model.ItemTypeFile, SizeBytes: item.SizeBytes, MimeType: item.MimeType, Checksum: item.Checksum,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.items.Create(ctx, newItem); err != nil {
+		_ = s.storage.Remove(targetPath)
+		return nil, err
+	}
+	if err := s.users.IncrementStorageUsed(ctx, ownerID, item.SizeBytes); err != nil {
+		return nil, err
+	}
+	return newItem, nil
+}
+
 // --- trash ------------------------------------------------------------------
 
 // Delete moves item — and, if it's a folder, everything under it — to

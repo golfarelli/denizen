@@ -34,17 +34,38 @@ test('rename a folder', async ({ page }) => {
 	const folderRow = page.locator('.item-row', { hasText: originalName });
 	await expect(folderRow).toBeVisible();
 
+	// Rename now lives behind the row's "⋮" action menu (see
+	// routes/+page.svelte) rather than a flat button — open it first.
+	await folderRow.getByRole('button', { name: 'Actions for' }).click();
+	const menu = folderRow.locator('.dropdown-menu');
+	await expect(menu).toBeVisible();
+
 	// The "Rename" flow also uses a native prompt() (see
 	// routes/+page.svelte's handleRename), pre-filled with the current name.
 	page.once('dialog', (dialog) => {
 		expect(dialog.defaultValue()).toBe(originalName);
 		dialog.accept(renamedName);
 	});
-	// exact: true matters here — without it, "Rename" as a substring also
-	// matches the item-name button itself, since its accessible name
-	// ("E2E Before Rename") happens to contain the word "Rename" too.
-	await folderRow.getByRole('button', { name: 'Rename', exact: true }).click();
+	await menu.getByRole('menuitem', { name: 'Rename' }).click();
 
 	await expect(page.locator('.item-row', { hasText: renamedName })).toBeVisible();
 	await expect(page.locator('.item-row', { hasText: originalName })).not.toBeVisible();
+});
+
+test('the row action menu closes on outside click', async ({ page }) => {
+	await page.goto('/');
+
+	const name = `E2E Menu Close ${Date.now()}`;
+	page.once('dialog', (dialog) => dialog.accept(name));
+	await page.getByRole('button', { name: '+ New folder' }).click();
+
+	const row = page.locator('.item-row', { hasText: name });
+	await expect(row).toBeVisible();
+
+	await row.getByRole('button', { name: 'Actions for' }).click();
+	const menu = row.locator('.dropdown-menu');
+	await expect(menu).toBeVisible();
+
+	await page.getByRole('heading', { name: 'Files' }).click();
+	await expect(menu).not.toBeVisible();
 });

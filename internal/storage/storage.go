@@ -107,6 +107,33 @@ func (s *Store) Checksum(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// CopyFile duplicates the file at src to dst as independent bytes — a real
+// copy, not a hard link, since trashing or overwriting one of the two must
+// never affect the other.
+func (s *Store) CopyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst) // don't leave a partial file behind
+		return err
+	}
+	return nil
+}
+
 // FreeBytes reports the actual free space on the filesystem backing the
 // data directory — a safety net checked independently of the logical
 // per-user quota (users.quota_bytes), since quotas assigned to different

@@ -349,3 +349,77 @@ dialog::backdrop {
 	font-size: 0.9rem;
 	margin-top: 0;
 }
+
+/* Per-row action menu (the "⋮" kebab button and its dropdown) — a plain
+   absolutely-positioned panel anchored to this wrapper, not the native
+   Popover API: positioning a popover next to its trigger needs CSS anchor
+   positioning, whose mobile browser support isn't reliable enough yet for
+   a menu whose whole point is to work well on mobile. */
+.row-menu {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.icon-btn {
+	padding: var(--space-1) var(--space-3);
+	font-size: 1.1rem;
+	line-height: 1;
+}
+
+.dropdown-menu {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	z-index: 20;
+	margin-top: var(--space-1);
+	min-width: 11rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	background: var(--color-bg);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+	padding: var(--space-1);
+}
+
+.dropdown-menu button {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	background: none;
+	border: none;
+	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-3);
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.dropdown-menu button:hover {
+	background: var(--color-surface);
+}
+
+.dropdown-menu button.danger {
+	color: var(--color-danger);
+}
+
+/* Mobile: the item name is the scarce space, so the size column goes first
+   — the kebab menu already carries every action, so there's no row of
+   buttons left to fight for room the way there was before. */
+@media (max-width: 480px) {
+	.item-size {
+		display: none;
+	}
+
+	.item-row {
+		padding: var(--space-3);
+		gap: var(--space-2);
+	}
+
+	.toolbar {
+		flex-wrap: wrap;
+	}
+}

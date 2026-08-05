@@ -5,6 +5,7 @@
 	import { auth } from '$lib/auth';
 	import { startUpload } from '$lib/upload';
 	import ShareDialog from '$lib/ShareDialog.svelte';
+	import MoveDialog from '$lib/MoveDialog.svelte';
 
 	interface Crumb {
 		id: string | null;
@@ -27,6 +28,43 @@
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
 	let sharingItem = $state<Item | null>(null);
+	let movingItem = $state<Item | null>(null);
+
+	// Which row's action menu is open, by item id — null means none. Only
+	// one at a time, mirroring how a real menu behaves (opening another
+	// row's menu closes whichever one was already open, see toggleMenu).
+	let openMenuFor = $state<string | null>(null);
+
+	function toggleMenu(id: string, event: MouseEvent) {
+		event.stopPropagation();
+		openMenuFor = openMenuFor === id ? null : id;
+	}
+
+	function closeMenu() {
+		openMenuFor = null;
+	}
+
+	// A plain hand-rolled outside-click/Escape close, not the native Popover
+	// API: Popover's own light-dismiss would solve this for free, but
+	// positioning a popover next to its trigger button relies on CSS anchor
+	// positioning, which isn't reliably supported across mobile browsers yet
+	// — and a mispositioned action menu on the one platform this feature is
+	// explicitly for (mobile) would be worse than not using the new API.
+	$effect(() => {
+		if (!openMenuFor) return;
+		function handlePointerDown() {
+			closeMenu();
+		}
+		function handleKeydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') closeMenu();
+		}
+		window.addEventListener('click', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('click', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
 
 	// A local tracking key for the upload progress panel below — doesn't
 	// need to be globally unique or unguessable, just distinct within this
@@ -99,6 +137,7 @@
 
 	async function handleDelete(item: Item, event: MouseEvent) {
 		event.stopPropagation();
+		closeMenu();
 		if (!confirm(`Move "${item.name}" to trash?`)) return;
 		try {
 			await api.deleteItem(item.id);
@@ -114,6 +153,7 @@
 	// folder it's already in, only the name actually changing.
 	async function handleRename(item: Item, event: MouseEvent) {
 		event.stopPropagation();
+		closeMenu();
 		const newName = prompt('New name', item.name);
 		if (!newName || newName === item.name) return;
 		try {
@@ -124,11 +164,39 @@
 		}
 	}
 
+	function handleStartMove(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		movingItem = item;
+	}
+
+	function handleStartShare(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		sharingItem = item;
+	}
+
+	// Mirrors Google Drive's own "Make a copy": duplicates into the same
+	// folder the original is currently sitting in (which, for any row
+	// visible here, is exactly currentFolderId), auto-suffixed by the
+	// backend since the name is guaranteed to collide with the original.
+	async function handleCopy(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		try {
+			await api.copyItem(item.id, currentFolderId);
+			await load(currentFolderId);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not copy this item.';
+		}
+	}
+
 	// A plain <a href> can't carry the Authorization header a download
 	// needs, so the file is fetched as a blob and handed to the browser via
 	// a throwaway object URL instead.
 	async function handleDownload(item: Item, event: MouseEvent) {
 		event.stopPropagation();
+		closeMenu();
 		try {
 			const blob = await api.downloadContent(item.id);
 			const url = URL.createObjectURL(blob);
@@ -278,20 +346,32 @@
 					{item.name}
 				</button>
 				<span class="item-size">{formatSize(item.size_bytes)}</span>
-				{#if item.type === 'file'}
-					<button class="btn" onclick={(e) => handleDownload(item, e)}>Download</button>
-				{/if}
-				<button class="btn" onclick={(e) => handleRename(item, e)}>Rename</button>
-				<button
-					class="btn"
-					onclick={(e) => {
-						e.stopPropagation();
-						sharingItem = item;
-					}}
-				>
-					Share
-				</button>
-				<button class="btn" onclick={(e) => handleDelete(item, e)}>Delete</button>
+				<div class="row-menu">
+					<button
+						class="btn icon-btn"
+						aria-label="Actions for {item.name}"
+						aria-haspopup="true"
+						aria-expanded={openMenuFor === item.id}
+						onclick={(e) => toggleMenu(item.id, e)}
+					>
+						⋮
+					</button>
+					{#if openMenuFor === item.id}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_interactive_supports_focus -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
+							{#if item.type === 'file'}
+								<button role="menuitem" onclick={(e) => handleDownload(item, e)}>⬇ Download</button>
+							{/if}
+							<button role="menuitem" onclick={(e) => handleRename(item, e)}>✎ Rename</button>
+							<button role="menuitem" onclick={(e) => handleStartMove(item, e)}>➜ Move</button>
+							<button role="menuitem" onclick={(e) => handleCopy(item, e)}>⧉ Make a copy</button>
+							<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>🔗 Share</button>
+							<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>🗑 Delete</button>
+						</div>
+					{/if}
+				</div>
 			</div>
 			{/each}
 		</div>
@@ -299,3 +379,4 @@
 </div>
 
 <ShareDialog bind:item={sharingItem} />
+<MoveDialog bind:item={movingItem} onMoved={() => load(currentFolderId)} />

@@ -4,10 +4,12 @@
 your own personal cloud storage, running on your own hardware.
 
 > 🚧 Early development. The whole MVP feature set — auth, folders, resumable
-> uploads with progress and drag-and-drop, download, sharing, quotas, and
-> admin user/invite management — works end to end through the UI now, with
-> both a Go backend test suite and a Playwright end-to-end suite driving a
-> real browser against the real binary.
+> uploads with progress and drag-and-drop, download, rename, move, copy,
+> trash (with restore), sharing, quotas, and admin user/invite management —
+> works end to end through the UI now, including a mobile-friendly kebab
+> action menu on each row, with both a Go backend test suite and a
+> Playwright end-to-end suite driving a real browser against the real
+> binary.
 
 ## Why
 

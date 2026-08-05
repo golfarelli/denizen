@@ -139,7 +139,8 @@ Sketch of the main endpoints:
   (invite-only, requires an `invite_code`).
 - **Invites** — `POST /invites` (admin only).
 - **Items** — `GET/POST /items`, `GET/PATCH /items/{id}`, `DELETE /items/{id}`
-  (soft delete → trash).
+  (soft delete → trash), `POST /items/{id}/copy` (real new bytes for files,
+  recursive for folders — never a hard link, see `ItemService.Copy`).
 - **Trash** — `GET /trash`, `POST /items/{id}/restore`, `DELETE /trash/{id}`
   (permanent).
 - **Content** — `GET /items/{id}/content` (streamed, supports `Range`).
