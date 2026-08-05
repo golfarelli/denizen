@@ -122,6 +122,15 @@
 		goto(`/?folder=${encodeURIComponent(id)}`);
 	}
 
+	// The "from" param is how /file/[id] knows which folder's "← Back" link
+	// to build — it can't just always mean root, and browser-history back()
+	// isn't reliable for that either (a bookmark or a page reload before
+	// this navigation both have no history entry to go back to).
+	function openFile(id: string) {
+		const from = currentFolderId ? `?from=${encodeURIComponent(currentFolderId)}` : '';
+		goto(`/file/${id}${from}`);
+	}
+
 	function goToCrumb(id: string | null) {
 		goto(id ? `/?folder=${encodeURIComponent(id)}` : '/');
 	}
@@ -363,8 +372,7 @@
 				<span class="item-icon">{item.type === 'folder' ? '📁' : '📄'}</span>
 				<button
 					class="item-name"
-					onclick={() => (item.type === 'folder' ? openFolder(item.id) : undefined)}
-					disabled={item.type === 'file'}
+					onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}
 				>
 					{item.name}
 				</button>

@@ -7,7 +7,9 @@ your own personal cloud storage, running on your own hardware.
 > uploads with progress and drag-and-drop, download, rename, move, copy,
 > trash (with restore), sharing, quotas, and admin user/invite management —
 > works end to end through the UI now, including a mobile-friendly kebab
-> action menu on each row. The app is also an installable PWA now: a real
+> action menu on each row and an inline preview (images, PDFs, text) when
+> you tap a file instead of only ever downloading it. The app is also an
+> installable PWA now: a real
 > manifest + service worker, receiving files shared from other Android apps
 > via the OS share sheet, and a camera-based document scanner that saves
 > captures as a multi-page PDF, same as Google Drive's own scan flow.

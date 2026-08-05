@@ -51,6 +51,23 @@ binary and a real, disposable SQLite database — not `npm run dev`'s proxy
 setup, and nothing mocked — the browser-side counterpart to the backend's
 own flow tests. See CONTRIBUTING.md's Testing section.
 
+**File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
+here instead of only ever offering a download, for the types the browser can
+render natively: images, PDFs, and text (`text/*`, plus a small hardcoded
+extension list — `.md`, `.json`, `.log`, etc. — for cases Go's
+`mime.TypeByExtension` doesn't reliably know about). Anything else falls
+back to a "preview not available" message with a Download button, the same
+way Google Drive itself degrades for a type it can't render. `<img>`/
+`<iframe>` can't carry the `Authorization` header the content endpoint
+needs, so the bytes are fetched once as a blob (same constraint, same fix,
+as the download button) and handed to the viewer as a `blob:` URL or
+in-memory text — not streamed via `Range` requests the way a direct
+`<img src>` could. That's a deliberate scope cut, not an oversight: it's
+fine for images/PDFs/text, but it's exactly the tradeoff that would need
+revisiting for audio/video preview, where seeking through a multi-hundred-
+MB file without downloading all of it first actually matters — out of scope
+for now (see "Goals for the first release" in the README).
+
 ## Deployment: a single container
 
 The Go binary embeds the built SvelteKit static assets (`go:embed`) and serves
