@@ -40,6 +40,48 @@ func tusRequest(t *testing.T, method, url string, user registeredUser, body io.R
 	return res
 }
 
+// uploadFile drives the full tus create+upload dance in one call and
+// returns the resulting item — shared by tests (download, shares, quota)
+// that need a real uploaded file to work with but aren't themselves testing
+// the upload mechanics.
+func uploadFile(t *testing.T, ts *testServer, user registeredUser, parentID *string, filename string, content []byte) apiItem {
+	t.Helper()
+
+	meta := map[string]string{"filename": filename}
+	if parentID != nil {
+		meta["parent_id"] = *parentID
+	}
+
+	createRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", user, nil, map[string]string{
+		"Upload-Length":   strconv.Itoa(len(content)),
+		"Upload-Metadata": handler.SerializeMetadataHeader(meta),
+	})
+	if createRes.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createRes.Body)
+		t.Fatalf("create upload for %q: got status %d, body: %s", filename, createRes.StatusCode, body)
+	}
+	location := createRes.Header.Get("Location")
+
+	patchRes := tusRequest(t, http.MethodPatch, location, user, bytes.NewReader(content), map[string]string{
+		"Content-Type":  "application/offset+octet-stream",
+		"Upload-Offset": "0",
+	})
+	if patchRes.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(patchRes.Body)
+		t.Fatalf("upload bytes for %q: got status %d, body: %s", filename, patchRes.StatusCode, body)
+	}
+	itemID := patchRes.Header.Get("X-Item-Id")
+	if itemID == "" {
+		t.Fatalf("upload %q: no X-Item-Id header", filename)
+	}
+
+	getRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+itemID, user, nil)
+	if getRes.StatusCode != http.StatusOK {
+		t.Fatalf("fetch uploaded item %q: got status %d", filename, getRes.StatusCode)
+	}
+	return decodeJSON[apiItem](t, getRes)
+}
+
 func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := t.Context()

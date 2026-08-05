@@ -98,6 +98,17 @@ func (h *hooks) preCreate(event handler.HookEvent) (handler.HTTPResponse, handle
 		return handler.HTTPResponse{}, handler.FileInfoChanges{}, toTusError(err)
 	}
 
+	// Optimistic check against the client's declared Upload-Length — fails
+	// fast, before a single byte is staged, instead of only discovering the
+	// quota is blown after however long the upload takes. The definitive
+	// check happens again in FinalizeUpload, since two uploads racing each
+	// other could both pass this one.
+	if !event.Upload.SizeIsDeferred {
+		if err := h.items.CheckQuota(event.Context, claims.UserID, event.Upload.Size); err != nil {
+			return handler.HTTPResponse{}, handler.FileInfoChanges{}, toTusError(err)
+		}
+	}
+
 	meta := make(handler.MetaData, len(event.Upload.MetaData)+1)
 	for k, v := range event.Upload.MetaData {
 		meta[k] = v

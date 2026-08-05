@@ -54,26 +54,26 @@ func TestAccessToken_RejectsGarbage(t *testing.T) {
 	}
 }
 
-func TestRefreshToken_HashIsDeterministic(t *testing.T) {
-	raw, hash, err := NewRefreshToken()
+func TestOpaqueToken_HashIsDeterministic(t *testing.T) {
+	raw, hash, err := NewOpaque()
 	if err != nil {
-		t.Fatalf("NewRefreshToken: %v", err)
+		t.Fatalf("NewOpaque: %v", err)
 	}
-	if got := HashRefreshToken(raw); got != hash {
-		t.Errorf("HashRefreshToken(raw) = %q, want %q (the hash NewRefreshToken returned)", got, hash)
+	if got := HashOpaque(raw); got != hash {
+		t.Errorf("HashOpaque(raw) = %q, want %q (the hash NewOpaque returned)", got, hash)
 	}
 }
 
-func TestRefreshToken_ProducesUniqueValues(t *testing.T) {
-	_, hash1, err := NewRefreshToken()
+func TestOpaqueToken_ProducesUniqueValues(t *testing.T) {
+	_, hash1, err := NewOpaque()
 	if err != nil {
-		t.Fatalf("NewRefreshToken: %v", err)
+		t.Fatalf("NewOpaque: %v", err)
 	}
-	_, hash2, err := NewRefreshToken()
+	_, hash2, err := NewOpaque()
 	if err != nil {
-		t.Fatalf("NewRefreshToken: %v", err)
+		t.Fatalf("NewOpaque: %v", err)
 	}
 	if hash1 == hash2 {
-		t.Error("two calls to NewRefreshToken produced the same hash")
+		t.Error("two calls to NewOpaque produced the same hash")
 	}
 }

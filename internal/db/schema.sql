@@ -86,12 +86,18 @@ CREATE UNIQUE INDEX idx_items_unique_name_per_folder
     WHERE deleted_at IS NULL;
 
 -- Public share links. A link's mere existence is the grant — anyone holding
--- the token (and satisfying requires_auth, if set) can access the item it
--- points to. Revoking a share is a row delete, not a soft delete.
+-- the raw token (and satisfying requires_auth, if set) can access the item
+-- it points to. Only the token's hash is stored (same reasoning as
+-- refresh_tokens: a database leak alone shouldn't hand out live share
+-- links), which is why revocation and listing are keyed by the row's own
+-- id, not by the token — the raw value is only ever shown once, at
+-- creation, and deliberately not retrievable after that (see
+-- docs/ARCHITECTURE.md). Revoking a share is a row delete, not a soft
+-- delete.
 CREATE TABLE shares (
     id            TEXT PRIMARY KEY,
     item_id       TEXT NOT NULL REFERENCES items(id),
-    token         TEXT NOT NULL UNIQUE,
+    token_hash    TEXT NOT NULL UNIQUE,
     created_by    TEXT NOT NULL REFERENCES users(id),
     requires_auth INTEGER NOT NULL DEFAULT 0, -- 1 = visitor must be logged in to some account
     expires_at    INTEGER,                    -- NULL = never expires

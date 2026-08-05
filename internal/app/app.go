@@ -26,6 +26,7 @@ type App struct {
 	Handler http.Handler
 	Auth    *service.AuthService
 	Items   *service.ItemService
+	Shares  *service.ShareService
 	DB      *stdsql.DB
 }
 
@@ -41,15 +42,18 @@ func New(cfg config.Config) (*App, error) {
 	invites := repository.NewInviteRepository(cn)
 	refreshTokens := repository.NewRefreshTokenRepository(cn)
 	items := repository.NewItemRepository(cn)
+	shares := repository.NewShareRepository(cn)
 	tokens := token.NewIssuer(cfg.JWTSecret)
 	store := storage.New(cfg.DataDir)
 
 	authService := service.NewAuthService(users, invites, refreshTokens, tokens,
 		cfg.DefaultQuotaBytes, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	itemService := service.NewItemService(items, users, store)
+	shareService := service.NewShareService(shares, itemService)
 
 	authHandler := handler.NewAuthHandler(authService)
 	itemHandler := handler.NewItemHandler(itemService)
+	shareHandler := handler.NewShareHandler(shareService, tokens)
 
 	uploadHandler, err := upload.NewHandler(store.StagingRoot(), itemService, cfg.MaxUploadSizeBytes)
 	if err != nil {
@@ -58,9 +62,10 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	return &App{
-		Handler: router.New(authHandler, itemHandler, uploadHandler, tokens),
+		Handler: router.New(authHandler, itemHandler, shareHandler, uploadHandler, tokens),
 		Auth:    authService,
 		Items:   itemService,
+		Shares:  shareService,
 		DB:      cn,
 	}, nil
 }

@@ -65,3 +65,15 @@ const (
 	ItemTypeFile   ItemType = "file"
 	ItemTypeFolder ItemType = "folder"
 )
+
+// Share is a public link granting access to one Item. See internal/db's
+// schema.sql for why only TokenHash — never the raw token — is persisted.
+type Share struct {
+	ID           string
+	ItemID       string
+	TokenHash    string
+	CreatedBy    string
+	RequiresAuth bool
+	ExpiresAt    *int64 // nil = never expires
+	CreatedAt    int64
+}
