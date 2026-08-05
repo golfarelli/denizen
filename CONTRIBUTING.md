@@ -82,8 +82,15 @@ Three layers, one responsibility each:
 ## Testing
 
 - **Unit tests** — normal, focused, may use fakes/mocks where reasonable.
-- **Flow tests** — end-to-end, *no mocks*: start a real server on a random port,
-  issue real HTTP requests (including the full tus protocol for uploads), then
-  assert on the real result — every relevant field of the DB record after the
-  operation, and, where applicable, a byte-for-byte comparison of the file
-  actually written to storage against the input.
+- **Flow tests** (Go, `test/flow/`) — end-to-end, *no mocks*: start a real
+  server on a random port, issue real HTTP requests (including the full tus
+  protocol for uploads), then assert on the real result — every relevant
+  field of the DB record after the operation, and, where applicable, a
+  byte-for-byte comparison of the file actually written to storage against
+  the input.
+- **E2E tests** (`web/e2e/`, Playwright) — the frontend's counterpart to Go's
+  flow tests, same "no mocks" spirit: a real Chromium browser drives the
+  actual built frontend (`npm run build`'s output, not `npm run dev`) served
+  by the actual `denizen` binary, talking to a real (freshly created,
+  disposable) SQLite database — not a single backend call or DOM interaction
+  is faked. Run with `npm run test:e2e` from `web/`.

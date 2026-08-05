@@ -21,3 +21,8 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Playwright (see e2e/) — .auth holds a real (test-account) session token
+/test-results
+/playwright-report
+/e2e/.auth

@@ -46,6 +46,11 @@ outlive the access token's TTL (default 15 minutes), and that per-request
 re-read (plus a 401-triggered refresh wired through `onShouldRetry`) is what
 keeps a long upload from failing partway through purely because of that.
 
+Tested end-to-end with Playwright (`web/e2e/`), against the actual `denizen`
+binary and a real, disposable SQLite database — not `npm run dev`'s proxy
+setup, and nothing mocked — the browser-side counterpart to the backend's
+own flow tests. See CONTRIBUTING.md's Testing section.
+
 ## Deployment: a single container
 
 The Go binary embeds the built SvelteKit static assets (`go:embed`) and serves
