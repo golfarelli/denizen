@@ -1,9 +1,13 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { setAuth } from '$lib/auth';
 
-	let inviteCode = $state('');
+	// Prefilled from an admin-generated invite link (see routes/admin —
+	// it builds exactly this ?code= shape), so following one doesn't also
+	// require retyping the code by hand.
+	let inviteCode = $state($page.url.searchParams.get('code') ?? '');
 	let username = $state('');
 	let password = $state('');
 	let error = $state('');
