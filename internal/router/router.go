@@ -10,15 +10,16 @@ import (
 	"github.com/golfarelli/denizen/internal/middleware"
 	"github.com/golfarelli/denizen/internal/token"
 	"github.com/golfarelli/denizen/internal/upload"
+	"github.com/golfarelli/denizen/internal/webui"
 )
 
 // New builds Denizen's full HTTP handler. Routes under /api/v1/items,
 // /api/v1/trash, /api/v1/uploads, /api/v1/shares and /api/v1/me require a
 // valid access token (middleware.RequireAuth); /api/v1/invites and
 // /api/v1/users additionally require an admin (middleware.RequireAdmin).
-// The /api/v1/auth/* routes and the public /s/{token} routes (for whoever
-// opens a share link) require neither.
-func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, users *handler.UserHandler, uploads http.Handler, tokens *token.Issuer) http.Handler {
+// The /api/v1/auth/* routes, the public /s/{token} routes (for whoever
+// opens a share link), and the frontend itself require neither.
+func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, users *handler.UserHandler, uploads http.Handler, tokens *token.Issuer) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/register", auth.Register)
@@ -61,5 +62,14 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	// terminate, not on the PATCH/HEAD requests that continue an upload.
 	mux.Handle(upload.BasePath, requireAuth(http.StripPrefix(upload.BasePath, uploads)))
 
-	return mux
+	// Catch-all: the built frontend. Matches only what nothing more
+	// specific above already claimed, per net/http.ServeMux's precedence
+	// rules — every /api/v1/* and /s/* path is handled well before this.
+	webHandler, err := webui.Handler()
+	if err != nil {
+		return nil, err
+	}
+	mux.Handle("/", webHandler)
+
+	return mux, nil
 }

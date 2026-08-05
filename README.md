@@ -3,7 +3,10 @@
 **Denizen** is a self-hosted, open-source alternative to Google Drive / Nextcloud —
 your own personal cloud storage, running on your own hardware.
 
-> 🚧 Early development. Not usable yet — architecture and scaffolding stage.
+> 🚧 Early development. The backend (auth, folders, resumable uploads,
+> sharing, quotas) and a first slice of the frontend (login/register, folder
+> browsing, download, delete) work end to end — still missing an upload UI,
+> a sharing UI, and more.
 
 ## Why
 
@@ -37,6 +40,27 @@ home-server hardware.
 See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full design
 write-up, and [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the conventions this
 codebase follows (git workflow, versioning, naming, testing).
+
+## Building & running locally
+
+The frontend has to be built *before* the Go binary, since it's embedded
+into it (`internal/webui`, via `go:embed`) rather than served separately:
+
+```sh
+cd web && npm install && npm run build && cd ..
+go build -o denizen ./cmd/server
+./denizen
+```
+
+On first run, with no accounts yet, the server logs an invite code — use it
+to create the admin account via the UI (or `POST /api/v1/auth/register`).
+See `internal/config/config.go` for the environment variables that control
+where data lives, token lifetimes, quotas, and background sweep intervals.
+
+For frontend-only iteration, `cd web && npm run dev` runs SvelteKit's own
+dev server (proxying `/api` and `/s` to a Go instance — see
+`web/vite.config.ts`); `go test ./...` from the repo root runs the backend's
+own test suite and doesn't need the frontend built at all.
 
 ## License
 

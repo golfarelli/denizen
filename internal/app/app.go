@@ -68,8 +68,14 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
+	mux, err := router.New(authHandler, itemHandler, shareHandler, userHandler, uploadHandler, tokens)
+	if err != nil {
+		cn.Close()
+		return nil, err
+	}
+
 	return &App{
-		Handler: router.New(authHandler, itemHandler, shareHandler, userHandler, uploadHandler, tokens),
+		Handler: mux,
 		Auth:    authService,
 		Items:   itemService,
 		Shares:  shareService,

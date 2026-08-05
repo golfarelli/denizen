@@ -21,6 +21,20 @@ containers on modest home-server hardware, not on a dedicated box.
 Compiles away, no virtual DOM shipped to the client, small bundles — consistent
 with a deliberately light backend.
 
+Built as a static SPA (`@sveltejs/adapter-static`, `fallback: 'index.html'`,
+`ssr`/`prerender` off in the root layout) rather than with SvelteKit's own
+Node server — there's no Node runtime in the deployed container to run one
+(see "Deployment" below). No CSS framework either: a small hand-written
+design system (`web/src/lib/styles/app.css`, CSS custom properties for
+light/dark) — consistent with CONTRIBUTING.md's minimal-dependencies rule,
+and the current surface (auth forms, a file browser) doesn't need more.
+Both tokens from login live in `localStorage` for now (see `web/src/lib/auth.ts`)
+rather than the access-token-in-memory + refresh-token-in-an-httpOnly-cookie
+split noted as the eventual hardening target below (under Auth) — the
+backend hands back both tokens in the JSON body, not a cookie, so this is
+the as-built API shape's straightforward client-side counterpart, not the
+final design.
+
 ## Deployment: a single container
 
 The Go binary embeds the built SvelteKit static assets (`go:embed`) and serves
@@ -168,6 +182,13 @@ mtime (tusd's `FileInfo` doesn't carry a timestamp of its own).
 JWT (access + refresh tokens). Registration is invite-only — no public
 sign-up, matching a private drive for family/friends rather than a public
 service.
+
+The API itself is transport-agnostic about where the client keeps these
+(it just expects an `Authorization: Bearer` header) — the frontend currently
+keeps both in `localStorage` rather than the more hardened
+access-token-in-memory + refresh-token-in-an-httpOnly-cookie split floated
+early on; see "Frontend: SvelteKit" above for why that's an acceptable
+starting point, not the final design.
 
 ### Sharing (MVP)
 

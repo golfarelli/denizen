@@ -1,0 +1,269 @@
+/* Denizen's design system: deliberately small and hand-written rather than
+   a CSS framework dependency — consistent with CONTRIBUTING.md's "minimal
+   dependencies" rule, and this app's surface (auth forms, a file browser)
+   doesn't need more than a a few reusable primitives. */
+
+:root {
+	--color-bg: #ffffff;
+	--color-surface: #f7f7fb;
+	--color-border: #e3e3ea;
+	--color-text: #1b1b23;
+	--color-text-muted: #6b6b7a;
+	--color-accent: #5b5bd6;
+	--color-accent-contrast: #ffffff;
+	--color-danger: #d1435b;
+
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+
+	--radius: 8px;
+	--font-sans:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		Roboto,
+		sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-bg: #17171d;
+		--color-surface: #1f1f27;
+		--color-border: #2e2e39;
+		--color-text: #f1f1f5;
+		--color-text-muted: #9a9aab;
+		--color-accent: #8080e6;
+		--color-accent-contrast: #12121a;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--color-bg);
+	color: var(--color-text);
+	font-family: var(--font-sans);
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+	line-height: 1.2;
+	margin: 0 0 var(--space-2);
+}
+
+a {
+	color: var(--color-accent);
+}
+
+button,
+input {
+	font: inherit;
+	color: inherit;
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	color: var(--color-text);
+	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-4);
+	cursor: pointer;
+}
+
+.btn:hover {
+	border-color: var(--color-accent);
+}
+
+.btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.btn-primary {
+	background: var(--color-accent);
+	border-color: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
+.btn-primary:hover {
+	filter: brightness(1.08);
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin-bottom: var(--space-4);
+}
+
+.field label {
+	font-size: 0.85rem;
+	color: var(--color-text-muted);
+}
+
+.field input {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-3);
+	background: var(--color-bg);
+}
+
+.field input:focus {
+	outline: 2px solid var(--color-accent);
+	outline-offset: -1px;
+}
+
+.error-text {
+	color: var(--color-danger);
+	font-size: 0.9rem;
+}
+
+.card {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: var(--space-6);
+}
+
+.topbar {
+	position: sticky;
+	top: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--space-3) var(--space-6);
+	border-bottom: 1px solid var(--color-border);
+	background: var(--color-bg);
+	z-index: 10;
+}
+
+.brand {
+	font-weight: 600;
+	font-size: 1.1rem;
+	color: var(--color-text);
+	text-decoration: none;
+}
+
+main.with-topbar {
+	max-width: 960px;
+	margin: 0 auto;
+	padding: var(--space-6);
+}
+
+.auth-page {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-4);
+}
+
+.auth-page .card {
+	width: 100%;
+	max-width: 360px;
+}
+
+.breadcrumb {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+	align-items: center;
+	margin-bottom: var(--space-4);
+	color: var(--color-text-muted);
+}
+
+.breadcrumb button {
+	background: none;
+	border: none;
+	color: inherit;
+	cursor: pointer;
+	padding: 0;
+	font: inherit;
+}
+
+.breadcrumb button:hover {
+	color: var(--color-accent);
+}
+
+.item-list {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+.item-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-4);
+	border-bottom: 1px solid var(--color-border);
+	background: var(--color-bg);
+}
+
+.item-row:last-child {
+	border-bottom: none;
+}
+
+.item-row:hover {
+	background: var(--color-surface);
+}
+
+.item-name {
+	flex: 1;
+	background: none;
+	border: none;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	padding: 0;
+}
+
+.item-name:disabled {
+	cursor: default;
+}
+
+.item-icon {
+	width: 1.25rem;
+	text-align: center;
+	color: var(--color-text-muted);
+}
+
+.item-size {
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	min-width: 5rem;
+	text-align: right;
+}
+
+.toolbar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: var(--space-4);
+	gap: var(--space-3);
+}
+
+.empty-state {
+	padding: var(--space-8);
+	text-align: center;
+	color: var(--color-text-muted);
+}
