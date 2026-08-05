@@ -69,6 +69,18 @@ func NewHandler(stagingDir string, items *service.ItemService, maxUploadSizeByte
 		PreUploadCreateCallback:    h.preCreate,
 		PreFinishResponseCallback:  h.preFinish,
 		PreUploadTerminateCallback: h.preTerminate,
+		// Without this, the absolute Location URL tusd returns on upload
+		// creation (which tus-js-client then uses for every subsequent
+		// PATCH/HEAD) is built from the raw scheme/host of the connection
+		// tusd itself receives — correct for the plain-HTTP LAN deployment,
+		// but wrong the moment anything sits in front as a TLS-terminating
+		// reverse proxy (Tailscale's `tailscale serve`, or any future one):
+		// tusd would still see plain HTTP from the proxy and hand back an
+		// http:// URL to a client that loaded the page over https://,
+		// breaking every upload past the initial POST. Trusting
+		// X-Forwarded-Proto/-Host instead is what makes that URL match what
+		// the client actually connected over.
+		RespectForwardedHeaders: true,
 	})
 }
 

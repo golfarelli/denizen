@@ -7,9 +7,14 @@ your own personal cloud storage, running on your own hardware.
 > uploads with progress and drag-and-drop, download, rename, move, copy,
 > trash (with restore), sharing, quotas, and admin user/invite management —
 > works end to end through the UI now, including a mobile-friendly kebab
-> action menu on each row, with both a Go backend test suite and a
-> Playwright end-to-end suite driving a real browser against the real
-> binary.
+> action menu on each row. The app is also an installable PWA now: a real
+> manifest + service worker, receiving files shared from other Android apps
+> via the OS share sheet, and a camera-based document scanner that saves
+> captures as a multi-page PDF, same as Google Drive's own scan flow.
+> Installability and the share target both need HTTPS (or `localhost`) to
+> work at all — see "Running with Docker" below. Both a Go backend test
+> suite and a Playwright end-to-end suite drive a real browser against the
+> real binary.
 
 ## Why
 
@@ -25,8 +30,10 @@ home-server hardware.
   editing, no desktop sync client (yet).
 - Multi-user, invite-only (no public registration).
 - A single container: Go backend + embedded SvelteKit frontend.
-- An Android PWA client with a built-in document scanner and share-sheet
-  integration.
+- The same app installable as an Android PWA, with a built-in document
+  scanner and share-sheet integration — not a separate client, the same
+  responsive web app extended with a manifest, a service worker, and a
+  scan-to-PDF flow (see "Progressive Web App" in `docs/ARCHITECTURE.md`).
 
 ## Tech stack
 
@@ -86,6 +93,15 @@ Node.js install — everything happens inside the build. See
 replace `DENIZEN_JWT_SECRET`'s placeholder with a real random value —
 `openssl rand -hex 32` — before running this anywhere but a throwaway local
 test) and where data persists on the host.
+
+Denizen itself only ever speaks plain HTTP — TLS termination is deliberately
+left to whatever sits in front of it (a reverse proxy, a tunnel, your
+router), not baked into the container. That's a hard requirement, not just
+best practice, for the PWA features specifically: service workers (so
+installability and the share target — see below) refuse to register outside
+a secure context (HTTPS or `localhost`), so reaching Denizen over plain HTTP
+via a LAN IP, as in a minimal home-server setup, means those two features
+are silently unavailable — the rest of the app is unaffected either way.
 
 ## License
 

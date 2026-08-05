@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import '$lib/styles/app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/stores';
@@ -6,8 +7,11 @@
 	import { auth, clearAuth } from '$lib/auth';
 	import { api } from '$lib/api';
 	import { me, refreshMe, clearMe } from '$lib/me';
+	import { registerServiceWorker } from '$lib/pwa';
 
 	let { children } = $props();
+
+	onMount(registerServiceWorker);
 
 	const PUBLIC_ROUTES = ['/login', '/register'];
 

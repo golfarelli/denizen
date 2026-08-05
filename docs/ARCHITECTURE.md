@@ -247,12 +247,58 @@ rather than per-user ACLs.
 
 Manual browsing/upload/download rather than an automatic camera-roll backup
 (that's already covered on this stack by a separate photo-management tool).
+
+**Not a separate client.** The same SvelteKit SPA that's already
+mobile-responsive (see the kebab action menu above) is the PWA — turning it
+into one meant adding a manifest, icons, and a service worker
+(`web/static/manifest.json`, `web/static/sw.js`), not building anything new
+from scratch. Duplicating the file browser in a second codebase was
+considered and rejected: same UI, twice the maintenance, no real benefit.
+
+**Hard requirement: a secure context.** Service worker registration itself
+refuses to run outside HTTPS or `localhost` — on a plain-HTTP LAN deployment
+(the minimal home-server setup this project also targets) that means
+`navigator.serviceWorker` never appears, and everything below silently
+doesn't work while the rest of the app is unaffected. TLS termination is
+left to whatever's in front of Denizen (see "Running with Docker" in the
+README) — deliberately not something the container does itself.
+
 Two things worth calling out:
 
-- **Document scanner**, entirely in the browser: `getUserMedia` for camera
-  access, edge detection + perspective correction client-side, pages
-  assembled into a PDF before upload — no native app needed.
+- **Document scanner**: `<input type="file" accept="image/*"
+  capture="environment">` for the actual capture (native camera UI, one
+  photo per tap — no `getUserMedia` + hand-rolled camera preview needed for
+  that part), then each captured photo is normalized through a canvas
+  (`lib/scan.ts` — applies EXIF orientation, caps the longest side at 2000px,
+  re-encodes as JPEG) and assembled into a single multi-page PDF by a
+  hand-rolled writer (`lib/pdf.ts`) before upload, mirroring Google Drive's
+  own scan-to-PDF flow. The PDF writer is a deliberately small, bounded
+  subset of the spec — one full-page JPEG per page via the `DCTDecode`
+  filter (the JPEG bytes are embedded as-is, no re-compression at that
+  layer), no fonts, no general compression — a genuinely small and
+  self-contained thing worth writing directly rather than taking on a
+  general-purpose PDF library dependency for it (see CONTRIBUTING.md on
+  this project's dependency philosophy — the same reasoning that keeps
+  `internal/idgen`'s UUIDs hand-rolled while still pulling in a real tus
+  client for resumable uploads, a genuinely complex piece of protocol).
+  No edge detection/perspective correction (yet) — flagged as a possible
+  follow-up once real usage says it's worth the added complexity, not
+  built speculatively.
 - **Web Share Target API** so other apps' "Share" menu can hand files
   straight to Denizen. Android/Chrome only for now (iOS Safari doesn't
-  implement it for PWAs) — acceptable since Android is the only mobile target
-  for this MVP.
+  implement it for PWAs) — acceptable since Android is the only mobile
+  target for this MVP. The action route (`/share-target`, declared in the
+  manifest) receives a POST with the shared file(s) as `multipart/form-data`
+  — but that POST comes from the OS, not this app's own authenticated
+  `fetch()` wrapper (`lib/api.ts`), so there's no way to attach the
+  `Authorization` header the real upload endpoint needs, and this app
+  doesn't use cookie-based auth that a plain POST would carry automatically
+  either. The service worker's `fetch` handler intercepts that POST before
+  it ever reaches the network, stashes each file in the Cache Storage API
+  (private per-origin storage, unrelated to this app's own file storage),
+  and redirects (303) to `/share-target?share_id=...` — a normal SPA route
+  (`routes/share-target/+page.svelte`) that reads the file(s) back out of
+  the cache and hands them to the exact same authenticated `startUpload()`
+  every other upload path already uses. No backend route or change was
+  needed for any of this — it's resolved entirely client-side before the
+  request would otherwise hit Go's router at all.

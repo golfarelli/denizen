@@ -6,6 +6,7 @@
 	import { startUpload } from '$lib/upload';
 	import ShareDialog from '$lib/ShareDialog.svelte';
 	import MoveDialog from '$lib/MoveDialog.svelte';
+	import ScanDialog from '$lib/ScanDialog.svelte';
 
 	interface Crumb {
 		id: string | null;
@@ -29,6 +30,7 @@
 	let fileInput: HTMLInputElement;
 	let sharingItem = $state<Item | null>(null);
 	let movingItem = $state<Item | null>(null);
+	let scanOpen = $state(false);
 
 	// Which row's action menu is open, by item id — null means none. Only
 	// one at a time, mirroring how a real menu behaves (opening another
@@ -243,6 +245,13 @@
 		}
 	}
 
+	// ScanDialog hands back one already-built PDF File — from here it's a
+	// normal upload into the current folder, same as anything picked via
+	// "+ Upload" or dropped in, reusing the exact same progress-tracked path.
+	function handleScanned(file: File) {
+		uploadFiles([file]);
+	}
+
 	// The upload panel's "Done"/error rows never went away on their own —
 	// there was no button that actually removed a settled entry, just a
 	// static status label that happened to be sitting where a dismiss
@@ -296,6 +305,7 @@
 	<h1 style="margin:0">Files</h1>
 	<div style="display:flex; gap: var(--space-2)">
 		<button class="btn" onclick={() => fileInput.click()}>+ Upload</button>
+		<button class="btn" onclick={() => (scanOpen = true)}>📷 Scan</button>
 		<button class="btn btn-primary" onclick={handleNewFolder}>+ New folder</button>
 	</div>
 </div>
@@ -393,3 +403,4 @@
 
 <ShareDialog bind:item={sharingItem} />
 <MoveDialog bind:item={movingItem} onMoved={() => load(currentFolderId)} />
+<ScanDialog bind:open={scanOpen} onScanned={handleScanned} />
