@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { auth, clearAuth } from '$lib/auth';
 	import { api } from '$lib/api';
+	import { me, refreshMe, clearMe } from '$lib/me';
 
 	let { children } = $props();
 
@@ -19,6 +20,15 @@
 		}
 	});
 
+	// Populates $me (used for the "Admin" link below and the /admin page's
+	// own access check) whenever a session appears — right after login, or
+	// on a reload that finds a token already in localStorage.
+	$effect(() => {
+		if ($auth && $me === null) {
+			refreshMe();
+		}
+	});
+
 	async function handleLogout() {
 		if ($auth) {
 			await api.logout($auth.refreshToken).catch(() => {
@@ -27,6 +37,7 @@
 			});
 		}
 		clearAuth();
+		clearMe();
 		await goto('/login');
 	}
 </script>
@@ -40,6 +51,9 @@
 		<a class="brand" href="/">Denizen</a>
 		<nav style="display:flex; gap: var(--space-3); align-items:center">
 			<a href="/shares">My shares</a>
+			{#if $me?.is_admin}
+				<a href="/admin">Admin</a>
+			{/if}
 			<button class="btn" onclick={handleLogout}>Log out</button>
 		</nav>
 	</header>

@@ -161,5 +161,15 @@ export const api = {
 
 	listShares: () => req<Share[]>('/api/v1/shares'),
 
-	revokeShare: (id: string) => req<void>(`/api/v1/shares/${id}`, { method: 'DELETE' })
+	revokeShare: (id: string) => req<void>(`/api/v1/shares/${id}`, { method: 'DELETE' }),
+
+	// Admin-only — enforced server-side by middleware.RequireAdmin; a
+	// non-admin calling these just gets a 403 back, same as any other route.
+	listUsers: () => req<Me[]>('/api/v1/users'),
+
+	updateUser: (id: string, changes: { quota_bytes?: number; disabled?: boolean }) =>
+		req<Me>(`/api/v1/users/${id}`, jsonInit(changes, 'PATCH')),
+
+	createInvite: (quotaBytes: number | null) =>
+		req<{ code: string; expires_at: number }>('/api/v1/invites', jsonInit({ quota_bytes: quotaBytes }))
 };
