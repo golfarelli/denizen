@@ -3,10 +3,10 @@
 **Denizen** is a self-hosted, open-source alternative to Google Drive / Nextcloud —
 your own personal cloud storage, running on your own hardware.
 
-> 🚧 Early development. The backend (auth, folders, resumable uploads,
-> sharing, quotas) and the frontend (login/register, folder browsing,
-> resumable upload with progress and drag-and-drop, download, delete) work
-> end to end — still missing a sharing UI and more.
+> 🚧 Early development. The whole MVP feature set (auth, folders, resumable
+> uploads with progress and drag-and-drop, download, sharing, quotas) works
+> end to end through the UI now — still no automated browser-based test of
+> the frontend itself, and no admin UI (user/invite management) yet.
 
 ## Why
 
