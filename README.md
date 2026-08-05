@@ -4,9 +4,9 @@
 your own personal cloud storage, running on your own hardware.
 
 > 🚧 Early development. The backend (auth, folders, resumable uploads,
-> sharing, quotas) and a first slice of the frontend (login/register, folder
-> browsing, download, delete) work end to end — still missing an upload UI,
-> a sharing UI, and more.
+> sharing, quotas) and the frontend (login/register, folder browsing,
+> resumable upload with progress and drag-and-drop, download, delete) work
+> end to end — still missing a sharing UI and more.
 
 ## Why
 

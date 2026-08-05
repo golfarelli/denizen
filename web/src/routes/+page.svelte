@@ -3,16 +3,28 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Item } from '$lib/api';
 	import { auth } from '$lib/auth';
+	import { startUpload } from '$lib/upload';
 
 	interface Crumb {
 		id: string | null;
 		name: string;
 	}
 
+	interface UploadEntry {
+		id: string;
+		name: string;
+		progress: number;
+		status: 'uploading' | 'done' | 'error';
+		error?: string;
+	}
+
 	let items = $state<Item[]>([]);
 	let breadcrumb = $state<Crumb[]>([{ id: null, name: 'Home' }]);
 	let loading = $state(true);
 	let error = $state('');
+	let uploads = $state<UploadEntry[]>([]);
+	let dragging = $state(false);
+	let fileInput: HTMLInputElement;
 
 	// The current folder lives in the URL (?folder=<id>, absent = root) so a
 	// reload or a shared link lands back in the same place.
@@ -96,6 +108,51 @@
 		}
 	}
 
+	function uploadFiles(fileList: FileList | File[]) {
+		for (const file of fileList) {
+			const entryId = crypto.randomUUID();
+			uploads.push({ id: entryId, name: file.name, progress: 0, status: 'uploading' });
+
+			startUpload(file, currentFolderId, {
+				onProgress: (percent) => {
+					const entry = uploads.find((u) => u.id === entryId);
+					if (entry) entry.progress = percent;
+				},
+				onSuccess: () => {
+					const entry = uploads.find((u) => u.id === entryId);
+					if (entry) {
+						entry.status = 'done';
+						entry.progress = 100;
+					}
+					// Only the current folder's own listing needs refreshing —
+					// an upload started elsewhere and finishing later shouldn't
+					// yank the view out from under whatever the user is looking
+					// at now, so this deliberately doesn't force-navigate.
+					load(currentFolderId);
+				},
+				onError: (message) => {
+					const entry = uploads.find((u) => u.id === entryId);
+					if (entry) {
+						entry.status = 'error';
+						entry.error = message;
+					}
+				}
+			});
+		}
+	}
+
+	function handleFileInputChange(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (input.files?.length) uploadFiles(input.files);
+		input.value = ''; // allow re-selecting the same file later
+	}
+
+	function handleDrop(event: DragEvent) {
+		event.preventDefault();
+		dragging = false;
+		if (event.dataTransfer?.files.length) uploadFiles(event.dataTransfer.files);
+	}
+
 	function formatSize(bytes: number): string {
 		if (bytes === 0) return '';
 		const units = ['B', 'KB', 'MB', 'GB'];
@@ -124,20 +181,59 @@
 
 <div class="toolbar">
 	<h1 style="margin:0">Files</h1>
-	<button class="btn btn-primary" onclick={handleNewFolder}>+ New folder</button>
+	<div style="display:flex; gap: var(--space-2)">
+		<button class="btn" onclick={() => fileInput.click()}>+ Upload</button>
+		<button class="btn btn-primary" onclick={handleNewFolder}>+ New folder</button>
+	</div>
 </div>
+
+<input
+	bind:this={fileInput}
+	type="file"
+	multiple
+	hidden
+	onchange={handleFileInputChange}
+/>
+
+{#if uploads.length > 0}
+	<div class="card" style="margin-bottom: var(--space-4)">
+		{#each uploads as entry (entry.id)}
+			<div class="upload-entry">
+				<span class="upload-name">{entry.name}</span>
+				{#if entry.status === 'uploading'}
+					<div class="upload-bar"><div class="upload-bar-fill" style="width: {entry.progress}%"></div></div>
+					<span class="upload-percent">{entry.progress}%</span>
+				{:else if entry.status === 'done'}
+					<span class="upload-status-done">Done</span>
+				{:else}
+					<span class="error-text">{entry.error ?? 'Failed'}</span>
+				{/if}
+			</div>
+		{/each}
+	</div>
+{/if}
 
 {#if error}
 	<p class="error-text">{error}</p>
 {/if}
 
-{#if loading}
-	<p>Loading…</p>
-{:else if items.length === 0}
-	<div class="empty-state">This folder is empty.</div>
-{:else}
-	<div class="item-list">
-		{#each items as item (item.id)}
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	ondragover={(e) => {
+		e.preventDefault();
+		dragging = true;
+	}}
+	ondragleave={() => (dragging = false)}
+	ondrop={handleDrop}
+	class:dropzone-active={dragging}
+>
+	{#if loading}
+		<p>Loading…</p>
+	{:else if items.length === 0}
+		<div class="empty-state">This folder is empty. Drop files here, or use "+ Upload".</div>
+	{:else}
+		<div class="item-list">
+			{#each items as item (item.id)}
 			<div class="item-row">
 				<span class="item-icon">{item.type === 'folder' ? '📁' : '📄'}</span>
 				<button
@@ -153,6 +249,7 @@
 				{/if}
 				<button class="btn" onclick={(e) => handleDelete(item, e)}>Delete</button>
 			</div>
-		{/each}
-	</div>
-{/if}
+			{/each}
+		</div>
+	{/if}
+</div>
