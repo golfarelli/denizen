@@ -206,7 +206,14 @@ main.with-topbar {
 .item-list {
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
-	overflow: hidden;
+	/* No overflow: hidden here on purpose — it used to clip the corners of
+	   the first/last row's square background to match this container's
+	   rounded border, but it also clipped anything that overflows a row's
+	   own box on purpose, like the kebab action menu's dropdown, which is
+	   especially visible on a short list where the dropdown has nowhere to
+	   extend into but past the list's own bottom edge. Rounding the
+	   first/last row's own corners below gets the same visual result
+	   without clipping content that's supposed to escape the row. */
 }
 
 .item-row {
@@ -218,8 +225,15 @@ main.with-topbar {
 	background: var(--color-bg);
 }
 
+.item-row:first-child {
+	border-top-left-radius: var(--radius);
+	border-top-right-radius: var(--radius);
+}
+
 .item-row:last-child {
 	border-bottom: none;
+	border-bottom-left-radius: var(--radius);
+	border-bottom-right-radius: var(--radius);
 }
 
 .item-row:hover {
