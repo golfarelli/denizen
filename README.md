@@ -5,8 +5,9 @@ your own personal cloud storage, running on your own hardware.
 
 > 🚧 Early development. The whole MVP feature set — auth, folders, resumable
 > uploads with progress and drag-and-drop, download, sharing, quotas, and
-> admin user/invite management — works end to end through the UI now. Still
-> no automated browser-based test of the frontend itself.
+> admin user/invite management — works end to end through the UI now, with
+> both a Go backend test suite and a Playwright end-to-end suite driving a
+> real browser against the real binary.
 
 ## Why
 
@@ -61,6 +62,13 @@ For frontend-only iteration, `cd web && npm run dev` runs SvelteKit's own
 dev server (proxying `/api` and `/s` to a Go instance — see
 `web/vite.config.ts`); `go test ./...` from the repo root runs the backend's
 own test suite and doesn't need the frontend built at all.
+
+### Running the tests
+
+```sh
+go test ./...              # backend: unit + flow tests (no mocks — see CONTRIBUTING.md)
+cd web && npm run test:e2e # frontend: a real browser against the real binary (first run: npx playwright install chromium)
+```
 
 ## License
 
