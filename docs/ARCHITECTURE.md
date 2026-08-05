@@ -35,6 +35,17 @@ backend hands back both tokens in the JSON body, not a cookie, so this is
 the as-built API shape's straightforward client-side counterpart, not the
 final design.
 
+Uploads go through [tus-js-client](https://github.com/tus/tus-js-client)
+(`web/src/lib/upload.ts`) — the official JS client for the same protocol
+`tusd` speaks server-side (see "Uploads" below), the same "genuinely complex
+infrastructure" exception CONTRIBUTING.md already carves out for `tusd`
+itself, made again for the same reason on the client. Its `onBeforeRequest`
+hook re-reads the access token from the store on *every* HTTP request the
+client makes, not just once at the start — a large upload can easily
+outlive the access token's TTL (default 15 minutes), and that per-request
+re-read (plus a 401-triggered refresh wired through `onShouldRetry`) is what
+keeps a long upload from failing partway through purely because of that.
+
 ## Deployment: a single container
 
 The Go binary embeds the built SvelteKit static assets (`go:embed`) and serves

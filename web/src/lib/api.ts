@@ -28,7 +28,11 @@ async function rawFetch(path: string, init: RequestInit = {}): Promise<Response>
 	return fetch(path, { ...init, headers });
 }
 
-async function refreshTokens(): Promise<boolean> {
+/** Exported for internal/upload.ts's tus client too — a large upload can
+ * easily outlive the access token's TTL (default 15 minutes), so it needs
+ * to be able to refresh mid-upload the same way apiFetch does between two
+ * ordinary requests. */
+export async function refreshAccessToken(): Promise<boolean> {
 	const state = get(auth);
 	if (!state?.refreshToken) return false;
 	const res = await fetch('/api/v1/auth/refresh', {
@@ -47,7 +51,7 @@ async function refreshTokens(): Promise<boolean> {
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
 	let res = await rawFetch(path, init);
 	if (res.status === 401 && get(auth)) {
-		if (await refreshTokens()) {
+		if (await refreshAccessToken()) {
 			res = await rawFetch(path, init);
 		} else {
 			clearAuth();

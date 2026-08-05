@@ -267,3 +267,53 @@ main.with-topbar {
 	text-align: center;
 	color: var(--color-text-muted);
 }
+
+.dropzone-active {
+	outline: 2px dashed var(--color-accent);
+	outline-offset: 4px;
+	border-radius: var(--radius);
+}
+
+.upload-entry {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
+}
+
+.upload-entry:not(:last-child) {
+	border-bottom: 1px solid var(--color-border);
+}
+
+.upload-name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.upload-bar {
+	width: 8rem;
+	height: 6px;
+	background: var(--color-border);
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.upload-bar-fill {
+	height: 100%;
+	background: var(--color-accent);
+	transition: width 0.2s ease;
+}
+
+.upload-percent {
+	min-width: 2.5rem;
+	text-align: right;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+}
+
+.upload-status-done {
+	color: var(--color-accent);
+	font-size: 0.85rem;
+}
