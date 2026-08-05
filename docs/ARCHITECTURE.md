@@ -26,6 +26,11 @@ with a deliberately light backend.
 The Go binary embeds the built SvelteKit static assets (`go:embed`) and serves
 both the API and the web app from one process, one image, one port.
 
+`cmd/server` shuts down on `SIGINT`/`SIGTERM` (what `docker stop` sends) via
+`signal.NotifyContext` and `http.Server.Shutdown`, rather than dying mid-request —
+the same cancellable context also stops the two background sweeps (upload GC,
+trash purge; see below) instead of leaving them running past shutdown.
+
 ## Database: SQLite (not Postgres)
 
 SQLite is embedded, not a server process — the entire database is one file on
@@ -81,9 +86,11 @@ folders, in one table, related to each other via `parent_id`), and `shares`.
   source of truth.
 - Filename collisions in the same folder get an auto-suffix (`file (1).pdf`),
   the same behavior as a normal desktop file manager.
-- Trash is auto-purged after 30 days and **counts against the user's quota**
-  while it sits there — otherwise "deleting" would be a way to dodge the quota
-  for a month without freeing real space.
+- Trash is auto-purged after 30 days (`DENIZEN_TRASH_RETENTION`, swept every
+  `DENIZEN_TRASH_PURGE_INTERVAL`, default 1h, by
+  `ItemService.PurgeExpiredTrash`) and **counts against the user's quota**
+  while it sits there — otherwise "deleting" would be a way to dodge the
+  quota for a month without freeing real space.
 
 ## API
 
@@ -116,8 +123,10 @@ Sketch of the main endpoints:
   section) meant the raw token can't be shown again after creation to key
   anything by.
 - **Users** (admin) — `GET /users`, `PATCH /users/{id}`
-  (`quota_bytes`, `disabled`). Not yet implemented.
-- **Me** — `GET /me` (`quota_used`, `quota_total`). Not yet implemented.
+  (`quota_bytes`, `disabled`). Unlike items' PATCH (a full replacement, see
+  above), this one is a genuine partial update — either field can be sent on
+  its own and the other is left as it was.
+- **Me** — `GET /me` (`quota_bytes`, `storage_used_bytes`, ...).
 
 ### Uploads: resumable, chunked (tus)
 
@@ -148,8 +157,11 @@ owner ID still matches the caller, then moves the finished file into the
 user's real folder tree, computes its checksum, registers it in the `items`
 table, and adjusts `storage_used_bytes`. The client learns the new item's ID
 immediately via an `X-Item-Id` response header, no separate listing needed.
-Incomplete/abandoned uploads being garbage collected on a schedule is not yet
-implemented — a follow-up, not silently skipped.
+Incomplete/abandoned uploads (started, never finished, and untouched for
+`DENIZEN_UPLOAD_GC_AFTER`, default 24h) are swept from the staging directory
+on a timer (`DENIZEN_UPLOAD_GC_INTERVAL`, default 1h) by
+`internal/upload.CollectGarbage`, judging age from each upload's `.info` file
+mtime (tusd's `FileInfo` doesn't carry a timestamp of its own).
 
 ### Auth
 

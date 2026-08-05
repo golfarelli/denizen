@@ -138,7 +138,7 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 		t.Errorf("anonymous visitor on a requires_auth share: got status %d, want %d", anonRes.StatusCode, http.StatusUnauthorized)
 	}
 
-	secondCode, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestShareFlow_CannotShareSomeoneElsesItem(t *testing.T) {
 	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
 	item := uploadFile(t, ts, fabio, nil, "mine.txt", []byte("fabio's file"))
 
-	secondCode, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}

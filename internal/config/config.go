@@ -18,11 +18,26 @@ type Config struct {
 	RefreshTokenTTL    time.Duration
 	DefaultQuotaBytes  int64
 	BootstrapInviteTTL time.Duration
-	// MaxUploadSizeBytes caps a single upload independently of the uploading
-	// user's remaining quota — a sanity backstop against filling the disk,
-	// since real per-user quota *enforcement* on upload is still a TODO
-	// (see docs/ARCHITECTURE.md).
+	// InviteTTL is how long an admin-issued invite (as opposed to the
+	// one-off bootstrap invite) stays redeemable.
+	InviteTTL time.Duration
+	// MaxUploadSizeBytes caps a single upload independently of the
+	// uploading user's remaining quota (which is separately enforced —
+	// see internal/service.ItemService.CheckQuota) — a sanity backstop
+	// against a single absurdly large upload regardless of quota math.
 	MaxUploadSizeBytes int64
+	// UploadGCInterval/UploadGCAfter control the background sweep that
+	// removes abandoned tus uploads left in the staging directory (started
+	// but never finished, and untouched for UploadGCAfter) — see
+	// internal/upload.CollectGarbage.
+	UploadGCInterval time.Duration
+	UploadGCAfter    time.Duration
+	// TrashPurgeInterval/TrashRetention control the background sweep that
+	// permanently deletes trashed items older than TrashRetention — the
+	// 30-day auto-purge policy from docs/ARCHITECTURE.md — see
+	// internal/service.ItemService.PurgeExpiredTrash.
+	TrashPurgeInterval time.Duration
+	TrashRetention     time.Duration
 }
 
 // Load builds a Config from environment variables, falling back to defaults
@@ -37,7 +52,12 @@ func Load() Config {
 		RefreshTokenTTL:    getEnvDuration("DENIZEN_REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		DefaultQuotaBytes:  getEnvInt64("DENIZEN_DEFAULT_QUOTA_BYTES", 10<<30), // 10 GiB
 		BootstrapInviteTTL: 24 * time.Hour,
+		InviteTTL:          getEnvDuration("DENIZEN_INVITE_TTL", 7*24*time.Hour),
 		MaxUploadSizeBytes: getEnvInt64("DENIZEN_MAX_UPLOAD_SIZE_BYTES", 10<<30), // 10 GiB
+		UploadGCInterval:   getEnvDuration("DENIZEN_UPLOAD_GC_INTERVAL", time.Hour),
+		UploadGCAfter:      getEnvDuration("DENIZEN_UPLOAD_GC_AFTER", 24*time.Hour),
+		TrashPurgeInterval: getEnvDuration("DENIZEN_TRASH_PURGE_INTERVAL", time.Hour),
+		TrashRetention:     getEnvDuration("DENIZEN_TRASH_RETENTION", 30*24*time.Hour),
 	}
 }
 

@@ -63,6 +63,22 @@ func (r *ItemRepository) ListTrash(ctx context.Context, ownerID string) ([]*mode
 	return r.scanAll(rows)
 }
 
+// ListTrashedBefore lists every trashed item, across all owners, whose
+// deleted_at is older than cutoff — the system-wide counterpart to
+// ListTrash (which is scoped to one owner), used only by the scheduled
+// auto-purge sweep (see ItemService.PurgeExpiredTrash).
+func (r *ItemRepository) ListTrashedBefore(ctx context.Context, cutoff int64) ([]*model.Item, error) {
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	        FROM items WHERE deleted_at IS NOT NULL AND deleted_at < ?
+	        ORDER BY deleted_at ASC`
+	rows, err := r.cn.QueryContext(ctx, sql, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanAll(rows)
+}
+
 // ListChildrenDeleted lists the trashed direct children of parentID —
 // the mirror image of ListChildren, used to walk down a trashed folder's
 // subtree (e.g. while restoring it — see internal/service/item.go).

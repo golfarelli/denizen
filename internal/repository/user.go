@@ -58,13 +58,52 @@ func (r *UserRepository) IncrementStorageUsed(ctx context.Context, userID string
 	return err
 }
 
+// ListAll lists every user — admin-only (see internal/handler.UserHandler).
+func (r *UserRepository) ListAll(ctx context.Context) ([]*model.User, error) {
+	sql := `SELECT id, username, password_hash, is_admin, quota_bytes, storage_used_bytes, disabled, created_at
+	        FROM users ORDER BY created_at ASC`
+	rows, err := r.cn.QueryContext(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []*model.User
+	for rows.Next() {
+		item, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// UpdateQuotaAndDisabled sets both fields at once — the service layer reads
+// the current row first and fills in whichever of the two the caller didn't
+// ask to change, since the PATCH endpoint accepts either independently
+// (see internal/service.UserService.Update).
+func (r *UserRepository) UpdateQuotaAndDisabled(ctx context.Context, id string, quotaBytes int64, disabled bool) error {
+	sql := `UPDATE users SET quota_bytes = ?, disabled = ? WHERE id = ?`
+	_, err := r.cn.ExecContext(ctx, sql, quotaBytes, disabled, id)
+	return err
+}
+
 func (r *UserRepository) scanOne(row *stdsql.Row) (*model.User, error) {
-	item := &model.User{}
-	err := row.Scan(&item.ID, &item.Username, &item.PasswordHash, &item.IsAdmin,
-		&item.QuotaBytes, &item.StorageUsedBytes, &item.Disabled, &item.CreatedAt)
+	item, err := scanUser(row)
 	if errors.Is(err, stdsql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
+	if err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+func scanUser(row rowScanner) (*model.User, error) {
+	item := &model.User{}
+	err := row.Scan(&item.ID, &item.Username, &item.PasswordHash, &item.IsAdmin,
+		&item.QuotaBytes, &item.StorageUsedBytes, &item.Disabled, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}

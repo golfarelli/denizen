@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -632,6 +633,43 @@ func (s *ItemService) PermanentlyDelete(ctx context.Context, ownerID, id string)
 		return err
 	}
 	return s.hardDeleteSubtreeRows(ctx, ownerID, item.ID)
+}
+
+// PurgeExpiredTrash permanently deletes every trashed item, across every
+// user, whose deleted_at is older than retention — the scheduled
+// counterpart to the 30-day auto-purge policy from docs/ARCHITECTURE.md
+// (cmd/server/main.go calls this on a timer; see config.TrashPurgeInterval/
+// TrashRetention).
+//
+// Only top-level entries within the expired set are purged directly — the
+// same "one trash entry per deletion, not one per nested file" collapsing
+// ListTrash does — since PermanentlyDelete already recurses through a
+// subtree's descendants on its own. A single item's failure doesn't stop
+// the rest of the sweep; every error is collected and returned together.
+func (s *ItemService) PurgeExpiredTrash(ctx context.Context, retention time.Duration) (purged int, err error) {
+	cutoff := s.now().Add(-retention).Unix()
+	expired, err := s.items.ListTrashedBefore(ctx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+
+	expiredIDs := make(map[string]bool, len(expired))
+	for _, item := range expired {
+		expiredIDs[item.ID] = true
+	}
+
+	var errs []error
+	for _, item := range expired {
+		if item.ParentID != nil && expiredIDs[*item.ParentID] {
+			continue // not top-level within this batch — its ancestor's purge recurses through it
+		}
+		if err := s.PermanentlyDelete(ctx, item.OwnerID, item.ID); err != nil {
+			errs = append(errs, fmt.Errorf("purge item %s: %w", item.ID, err))
+			continue
+		}
+		purged++
+	}
+	return purged, errors.Join(errs...)
 }
 
 // hardDeleteSubtreeRows removes id's row (and, recursively, its
