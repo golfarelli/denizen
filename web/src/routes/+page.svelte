@@ -28,6 +28,22 @@
 	let fileInput: HTMLInputElement;
 	let sharingItem = $state<Item | null>(null);
 
+	// A local tracking key for the upload progress panel below — doesn't
+	// need to be globally unique or unguessable, just distinct within this
+	// tab's own `uploads` array, so crypto.randomUUID() would be overkill
+	// even where it works. It also *doesn't* work everywhere: it's a
+	// secure-context-only API (HTTPS or localhost), so on a home server
+	// reached over plain http via its LAN IP — a real deployment shape for
+	// this app, not a hypothetical one — it throws, silently aborting the
+	// whole upload before startUpload() is ever called. Caught by exactly
+	// that: a real user on the real deployment clicking "+ Upload" and
+	// seeing nothing happen.
+	let nextUploadId = 0;
+	function newUploadId(): string {
+		nextUploadId += 1;
+		return `upload-${Date.now()}-${nextUploadId}`;
+	}
+
 	// The current folder lives in the URL (?folder=<id>, absent = root) so a
 	// reload or a shared link lands back in the same place.
 	let currentFolderId = $derived($page.url.searchParams.get('folder'));
@@ -112,7 +128,7 @@
 
 	function uploadFiles(fileList: FileList | File[]) {
 		for (const file of fileList) {
-			const entryId = crypto.randomUUID();
+			const entryId = newUploadId();
 			uploads.push({ id: entryId, name: file.name, progress: 0, status: 'uploading' });
 
 			startUpload(file, currentFolderId, {
