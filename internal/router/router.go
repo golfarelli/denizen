@@ -13,9 +13,10 @@ import (
 )
 
 // New builds Denizen's full HTTP handler. Routes under /api/v1/items,
-// /api/v1/trash and /api/v1/uploads require a valid access token
-// (middleware.RequireAuth); auth routes themselves obviously don't.
-func New(auth *handler.AuthHandler, items *handler.ItemHandler, uploads http.Handler, tokens *token.Issuer) http.Handler {
+// /api/v1/trash, /api/v1/uploads and /api/v1/shares require a valid access
+// token (middleware.RequireAuth); auth routes and the public /s/{token}
+// routes (for whoever opens a share link) obviously don't.
+func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, uploads http.Handler, tokens *token.Issuer) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/register", auth.Register)
@@ -28,12 +29,23 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, uploads http.Han
 	mux.Handle("POST /api/v1/items", requireAuth(http.HandlerFunc(items.Create)))
 	mux.Handle("GET /api/v1/items", requireAuth(http.HandlerFunc(items.List)))
 	mux.Handle("GET /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Get)))
+	mux.Handle("GET /api/v1/items/{id}/content", requireAuth(http.HandlerFunc(items.Content)))
 	mux.Handle("PATCH /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Move)))
 	mux.Handle("DELETE /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Delete)))
 	mux.Handle("POST /api/v1/items/{id}/restore", requireAuth(http.HandlerFunc(items.Restore)))
 
 	mux.Handle("GET /api/v1/trash", requireAuth(http.HandlerFunc(items.ListTrash)))
 	mux.Handle("DELETE /api/v1/trash/{id}", requireAuth(http.HandlerFunc(items.DeletePermanently)))
+
+	mux.Handle("POST /api/v1/items/{id}/shares", requireAuth(http.HandlerFunc(shares.Create)))
+	mux.Handle("GET /api/v1/shares", requireAuth(http.HandlerFunc(shares.ListMine)))
+	mux.Handle("DELETE /api/v1/shares/{id}", requireAuth(http.HandlerFunc(shares.Revoke)))
+
+	// Public: no RequireAuth wrapper. Whoever opens a share link may not
+	// have (or need) a Denizen account at all — see ShareService.Resolve
+	// for how requires_auth is still honored per-share.
+	mux.HandleFunc("GET /s/{token}", shares.PublicMetadata)
+	mux.HandleFunc("GET /s/{token}/content", shares.PublicContent)
 
 	// tusd routes every verb (POST/PATCH/HEAD/GET/DELETE) itself once past
 	// this prefix — wrapping the whole subtree in requireAuth is what covers

@@ -145,6 +145,40 @@ func (s *ItemService) Get(ctx context.Context, ownerID, id string) (*model.Item,
 	return item, nil
 }
 
+// GetForShare returns an active item by ID with no ownership check — used
+// only by the public share-resolution path (internal/service/share.go),
+// where authorization comes from presenting a valid share token instead of
+// being the item's owner. Regular authenticated access must go through Get.
+func (s *ItemService) GetForShare(ctx context.Context, id string) (*model.Item, error) {
+	item, err := s.items.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, apperr.NotFound
+		}
+		return nil, err
+	}
+	if item.DeletedAt != nil {
+		return nil, apperr.NotFound
+	}
+	return item, nil
+}
+
+// FilePath resolves the real on-disk path of an already-authorized file
+// item. Callers (the private download handler, having called Get; the
+// public share handler, having validated a share token) are responsible
+// for their own authorization before calling this — it doesn't re-check
+// anything itself.
+func (s *ItemService) FilePath(ctx context.Context, item *model.Item) (string, error) {
+	if item.Type != model.ItemTypeFile {
+		return "", apperr.Validation("not a file")
+	}
+	username, err := s.username(ctx, item.OwnerID)
+	if err != nil {
+		return "", err
+	}
+	return s.pathOf(ctx, item, username)
+}
+
 // ListChildren lists the active direct children of parentID (nil = root).
 func (s *ItemService) ListChildren(ctx context.Context, ownerID string, parentID *string) ([]*model.Item, error) {
 	if parentID != nil {
@@ -194,6 +228,32 @@ func (s *ItemService) ValidateFolder(ctx context.Context, ownerID string, parent
 	}
 	if item.Type != model.ItemTypeFolder {
 		return apperr.Validation("parent is not a folder")
+	}
+	return nil
+}
+
+// CheckQuota reports whether ownerID has enough quota left for
+// additionalBytes more, plus an independent real-disk-space safety net
+// (see internal/storage.FreeBytes) — quotas assigned to different users can
+// add up to more than the disk actually has, so the logical check alone
+// isn't enough. Side-effect-free: called both optimistically (the upload
+// package's pre-create hook, against the client's declared upload size) and
+// definitively (FinalizeUpload, right before committing the file) — see
+// docs/ARCHITECTURE.md.
+func (s *ItemService) CheckQuota(ctx context.Context, ownerID string, additionalBytes int64) error {
+	user, err := s.users.GetByID(ctx, ownerID)
+	if err != nil {
+		return err
+	}
+	if user.StorageUsedBytes+additionalBytes > user.QuotaBytes {
+		return apperr.QuotaExceeded
+	}
+	free, err := s.storage.FreeBytes()
+	if err != nil {
+		return err
+	}
+	if additionalBytes > int64(free) {
+		return apperr.DiskFull
 	}
 	return nil
 }
@@ -279,6 +339,13 @@ func (s *ItemService) FinalizeUpload(ctx context.Context, ownerID string, parent
 	}
 	finalName, err := s.uniqueName(ctx, ownerID, parentID, model.ItemTypeFile, name, "")
 	if err != nil {
+		return nil, err
+	}
+
+	// The definitive quota check (see CheckQuota) — right before touching
+	// the real files tree, so a rejection here never leaves a partial file
+	// where the user would see it.
+	if err := s.CheckQuota(ctx, ownerID, sizeBytes); err != nil {
 		return nil, err
 	}
 

@@ -109,11 +109,15 @@ Sketch of the main endpoints:
 - **Uploads** — resumable, chunked, via the [tus protocol](https://tus.io/) at
   `/uploads` (see below).
 - **Shares** — `POST /items/{id}/shares`, `GET /shares`, `DELETE
-  /shares/{token}`, and public (no-auth) `GET /s/{token}` / `GET
-  /s/{token}/content`.
+  /shares/{id}`, and public (no-auth) `GET /s/{token}` / `GET
+  /s/{token}/content`. Revocation and listing are keyed by the share's own
+  `id`, not its token — a deliberate deviation from an earlier draft of this
+  sketch, made once the token-hashing decision (see the database schema
+  section) meant the raw token can't be shown again after creation to key
+  anything by.
 - **Users** (admin) — `GET /users`, `PATCH /users/{id}`
-  (`quota_bytes`, `disabled`).
-- **Me** — `GET /me` (`quota_used`, `quota_total`).
+  (`quota_bytes`, `disabled`). Not yet implemented.
+- **Me** — `GET /me` (`quota_used`, `quota_total`). Not yet implemented.
 
 ### Uploads: resumable, chunked (tus)
 
@@ -160,20 +164,34 @@ system. Simpler to build and matches the actual use case (send someone a
 link, they don't need an account). A proper "shared with a specific user,
 with a role" model is a plausible v2 if the need for it shows up in practice.
 
+Only the token's **hash** is stored (same reasoning as refresh tokens — a
+database leak alone shouldn't hand out live share links); the raw token is
+shown exactly once, in the `Create` response, and can't be retrieved again.
+That's also why revocation and the "my shares" listing are keyed by the
+share's own `id` rather than the token itself (see the API sketch above).
+`requires_auth` only asks "is this visitor logged in to *some* Denizen
+account", not "do they own anything" — consistent with link-based sharing
+rather than per-user ACLs.
+
 ## Quotas
 
 - `users.storage_used_bytes` is an incrementally maintained counter, not a
   `du` scan on every check.
 - Two checks on upload: an optimistic one at creation time (declared
-  `Upload-Length` vs. remaining quota), and an authoritative one inside the
-  same transaction that finalizes the upload and increments the counter — so
-  two concurrent uploads can't both slip past the optimistic check and
-  overrun the quota together.
-- A `statfs` check against real free disk space runs independently of the
-  logical quota, as a safety net against quotas summing to more than the disk
-  actually has.
-- New users get a configurable global default quota, adjustable per-user
-  afterwards by an admin.
+  `Upload-Length` vs. remaining quota, checked in the tus pre-create hook —
+  rejects before a single byte is staged), and a second one right before the
+  file is actually committed in `FinalizeUpload` — so two uploads racing
+  each other can't both slip past the optimistic check and overrun the quota
+  together. These are two sequential checks, not one atomic database
+  transaction (the repository layer doesn't have transaction support yet —
+  see CONTRIBUTING.md's note on this same trade-off for invite redemption).
+- A `statfs` check against real free disk space (`internal/storage.FreeBytes`)
+  runs alongside the logical quota check, as a safety net against quotas
+  summing to more than the disk actually has.
+- New users get a configurable global default quota, adjustable per invite
+  (`quota_bytes` override) and, later, per-user by an admin (the `PATCH
+  /users/{id}` endpoint that would let an admin change it after the fact
+  isn't built yet — see the API sketch above).
 
 ## Mobile: Android PWA
 

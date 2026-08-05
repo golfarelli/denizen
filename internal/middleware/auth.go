@@ -23,15 +23,8 @@ const claimsContextKey contextKey = iota
 func RequireAuth(issuer *token.Issuer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
-			const prefix = "Bearer "
-			authHeader := req.Header.Get("Authorization")
-			if !strings.HasPrefix(authHeader, prefix) {
-				httpio.WriteError(res, apperr.Unauthorized)
-				return
-			}
-
-			claims, err := issuer.ParseAccessToken(strings.TrimPrefix(authHeader, prefix))
-			if err != nil {
+			claims, ok := parseBearer(issuer, req)
+			if !ok {
 				httpio.WriteError(res, apperr.Unauthorized)
 				return
 			}
@@ -48,4 +41,27 @@ func RequireAuth(issuer *token.Issuer) func(http.Handler) http.Handler {
 func ClaimsFromContext(ctx context.Context) (*token.Claims, bool) {
 	claims, ok := ctx.Value(claimsContextKey).(*token.Claims)
 	return claims, ok
+}
+
+// IsAuthenticated reports whether req carries a valid bearer access token,
+// without rejecting the request if it doesn't. For public endpoints where
+// being logged in is optional in general but required by a specific
+// resource — e.g. a share link created with requires_auth — see the /s/
+// routes in internal/handler/share.go.
+func IsAuthenticated(issuer *token.Issuer, req *http.Request) bool {
+	_, ok := parseBearer(issuer, req)
+	return ok
+}
+
+func parseBearer(issuer *token.Issuer, req *http.Request) (*token.Claims, bool) {
+	const prefix = "Bearer "
+	authHeader := req.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, prefix) {
+		return nil, false
+	}
+	claims, err := issuer.ParseAccessToken(strings.TrimPrefix(authHeader, prefix))
+	if err != nil {
+		return nil, false
+	}
+	return claims, true
 }

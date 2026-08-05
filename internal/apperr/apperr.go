@@ -28,8 +28,10 @@ func Conflict(message string) *Error {
 }
 
 var (
-	Unauthorized = New(http.StatusUnauthorized, "unauthorized", "invalid credentials")
-	Forbidden    = New(http.StatusForbidden, "forbidden", "not allowed")
-	NotFound     = New(http.StatusNotFound, "not_found", "resource not found")
-	Internal     = New(http.StatusInternalServerError, "internal_error", "something went wrong")
+	Unauthorized  = New(http.StatusUnauthorized, "unauthorized", "invalid credentials")
+	Forbidden     = New(http.StatusForbidden, "forbidden", "not allowed")
+	NotFound      = New(http.StatusNotFound, "not_found", "resource not found")
+	Internal      = New(http.StatusInternalServerError, "internal_error", "something went wrong")
+	QuotaExceeded = New(http.StatusRequestEntityTooLarge, "quota_exceeded", "not enough storage quota remaining")
+	DiskFull      = New(http.StatusInsufficientStorage, "disk_full", "server is out of disk space")
 )

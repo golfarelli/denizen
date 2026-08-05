@@ -200,7 +200,7 @@ func (s *AuthService) issueTokenPair(ctx context.Context, user *model.User) (*To
 	if err != nil {
 		return nil, err
 	}
-	raw, hash, err := token.NewRefreshToken()
+	raw, hash, err := token.NewOpaque()
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (s *AuthService) issueTokenPair(ctx context.Context, user *model.User) (*To
 // new pair is issued, so a stolen-and-replayed refresh token stops working
 // the moment the legitimate client uses it again.
 func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*TokenPair, error) {
-	hash := token.HashRefreshToken(rawRefreshToken)
+	hash := token.HashOpaque(rawRefreshToken)
 	item, err := s.refreshTokens.GetByHash(ctx, hash)
 	if err != nil {
 		if err == repository.ErrNotFound {
@@ -248,7 +248,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Tok
 // short-lived enough (see config.AccessTokenTTL) that it's left to expire
 // naturally rather than tracked for revocation too.
 func (s *AuthService) Logout(ctx context.Context, rawRefreshToken string) error {
-	hash := token.HashRefreshToken(rawRefreshToken)
+	hash := token.HashOpaque(rawRefreshToken)
 	item, err := s.refreshTokens.GetByHash(ctx, hash)
 	if err != nil {
 		if err == repository.ErrNotFound {

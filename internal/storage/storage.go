@@ -18,6 +18,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/sys/unix"
 )
 
 type Store struct {
@@ -103,4 +105,19 @@ func (s *Store) Checksum(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// FreeBytes reports the actual free space on the filesystem backing the
+// data directory — a safety net checked independently of the logical
+// per-user quota (users.quota_bytes), since quotas assigned to different
+// users can add up to more than the disk actually has. Linux-only (this is
+// always a container running on Linux — see docs/ARCHITECTURE.md), via
+// golang.org/x/sys/unix rather than a new dependency: it's already pulled
+// in transitively by the SQLite driver.
+func (s *Store) FreeBytes() (uint64, error) {
+	var stat unix.Statfs_t
+	if err := unix.Statfs(s.dataDir, &stat); err != nil {
+		return 0, fmt.Errorf("storage: statfs %s: %w", s.dataDir, err)
+	}
+	return stat.Bavail * uint64(stat.Bsize), nil
 }

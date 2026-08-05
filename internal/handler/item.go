@@ -116,6 +116,24 @@ func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
 	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item))
 }
 
+// Content handles GET /api/v1/items/{id}/content — streams a file's bytes,
+// with Range support (via http.ServeContent, so a paused download or a
+// video/PDF preview seeking around doesn't need custom byte-range logic
+// here).
+func (h *ItemHandler) Content(res http.ResponseWriter, req *http.Request) {
+	item, err := h.items.Get(req.Context(), ownerID(req), req.PathValue("id"))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	path, err := h.items.FilePath(req.Context(), item)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	serveFileContent(res, req, item, path)
+}
+
 type moveRequest struct {
 	Name     string  `json:"name"`
 	ParentID *string `json:"parent_id"`
