@@ -105,6 +105,19 @@ interface TokenPair {
 	refresh_token: string;
 }
 
+export interface Share {
+	id: string;
+	item_id: string;
+	requires_auth: boolean;
+	expires_at?: number;
+	created_at: number;
+	// token/url are only ever present in the response to createShare — the
+	// backend never persists the raw token, only its hash (see
+	// docs/ARCHITECTURE.md), so there's no "look it up again later".
+	token?: string;
+	url?: string;
+}
+
 export const api = {
 	login: (username: string, password: string) =>
 		publicReq<TokenPair>('/api/v1/auth/login', jsonInit({ username, password })),
@@ -141,5 +154,12 @@ export const api = {
 		const res = await apiFetch(`/api/v1/items/${id}/content`);
 		if (!res.ok) throw await parseError(res);
 		return res.blob();
-	}
+	},
+
+	createShare: (itemId: string, requiresAuth: boolean, expiresAt: number | null) =>
+		req<Share>(`/api/v1/items/${itemId}/shares`, jsonInit({ requires_auth: requiresAuth, expires_at: expiresAt })),
+
+	listShares: () => req<Share[]>('/api/v1/shares'),
+
+	revokeShare: (id: string) => req<void>(`/api/v1/shares/${id}`, { method: 'DELETE' })
 };

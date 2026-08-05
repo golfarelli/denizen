@@ -38,7 +38,10 @@
 {#if $auth}
 	<header class="topbar">
 		<a class="brand" href="/">Denizen</a>
-		<button class="btn" onclick={handleLogout}>Log out</button>
+		<nav style="display:flex; gap: var(--space-3); align-items:center">
+			<a href="/shares">My shares</a>
+			<button class="btn" onclick={handleLogout}>Log out</button>
+		</nav>
 	</header>
 {/if}
 

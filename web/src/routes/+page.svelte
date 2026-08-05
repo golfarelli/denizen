@@ -4,6 +4,7 @@
 	import { api, ApiError, type Item } from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { startUpload } from '$lib/upload';
+	import ShareDialog from '$lib/ShareDialog.svelte';
 
 	interface Crumb {
 		id: string | null;
@@ -25,6 +26,7 @@
 	let uploads = $state<UploadEntry[]>([]);
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
+	let sharingItem = $state<Item | null>(null);
 
 	// The current folder lives in the URL (?folder=<id>, absent = root) so a
 	// reload or a shared link lands back in the same place.
@@ -247,9 +249,20 @@
 				{#if item.type === 'file'}
 					<button class="btn" onclick={(e) => handleDownload(item, e)}>Download</button>
 				{/if}
+				<button
+					class="btn"
+					onclick={(e) => {
+						e.stopPropagation();
+						sharingItem = item;
+					}}
+				>
+					Share
+				</button>
 				<button class="btn" onclick={(e) => handleDelete(item, e)}>Delete</button>
 			</div>
 			{/each}
 		</div>
 	{/if}
 </div>
+
+<ShareDialog bind:item={sharingItem} />
