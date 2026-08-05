@@ -108,6 +108,22 @@
 		}
 	}
 
+	// api.move (PATCH /items/{id}) is a full replacement of name + location
+	// (see CONTRIBUTING.md on why that's items' convention, unlike users'
+	// partial-update PATCH) — a rename is just that call with the same
+	// folder it's already in, only the name actually changing.
+	async function handleRename(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		const newName = prompt('New name', item.name);
+		if (!newName || newName === item.name) return;
+		try {
+			await api.move(item.id, newName, currentFolderId);
+			await load(currentFolderId);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not rename this item.';
+		}
+	}
+
 	// A plain <a href> can't carry the Authorization header a download
 	// needs, so the file is fetched as a blob and handed to the browser via
 	// a throwaway object URL instead.
@@ -265,6 +281,7 @@
 				{#if item.type === 'file'}
 					<button class="btn" onclick={(e) => handleDownload(item, e)}>Download</button>
 				{/if}
+				<button class="btn" onclick={(e) => handleRename(item, e)}>Rename</button>
 				<button
 					class="btn"
 					onclick={(e) => {
