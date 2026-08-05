@@ -51,6 +51,7 @@
 		<a class="brand" href="/">Denizen</a>
 		<nav style="display:flex; gap: var(--space-3); align-items:center">
 			<a href="/shares">My shares</a>
+			<a href="/trash">Trash</a>
 			{#if $me?.is_admin}
 				<a href="/admin">Admin</a>
 			{/if}

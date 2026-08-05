@@ -170,6 +170,29 @@ func (h *ItemHandler) Delete(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(http.StatusNoContent)
 }
 
+type copyRequest struct {
+	ParentID *string `json:"parent_id"`
+}
+
+// Copy handles POST /api/v1/items/{id}/copy. parent_id nil/absent means
+// root, consistently with every other endpoint that takes one — it is the
+// caller's job to pass the item's own current parent for a same-folder
+// "make a copy", not this endpoint's.
+func (h *ItemHandler) Copy(res http.ResponseWriter, req *http.Request) {
+	var in copyRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+
+	item, err := h.items.Copy(req.Context(), ownerID(req), req.PathValue("id"), in.ParentID)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item))
+}
+
 func (h *ItemHandler) ListTrash(res http.ResponseWriter, req *http.Request) {
 	items, err := h.items.ListTrash(req.Context(), ownerID(req))
 	if err != nil {

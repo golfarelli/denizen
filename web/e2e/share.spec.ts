@@ -13,7 +13,8 @@ test('share a file, a visitor with no account can fetch it, then revoking the li
 	const fileRow = page.locator('.item-row', { hasText: 'sample.txt' });
 	await expect(fileRow).toBeVisible({ timeout: 15_000 });
 
-	await fileRow.getByRole('button', { name: 'Share' }).click();
+	await fileRow.getByRole('button', { name: 'Actions for' }).click();
+	await fileRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
 	await page.getByRole('button', { name: 'Create link' }).click();
 
 	const linkInput = page.locator('dialog input[readonly]');

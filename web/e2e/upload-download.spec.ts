@@ -22,7 +22,8 @@ test('upload a file and download it back byte-for-byte', async ({ page }) => {
 	await expect(fileRow).toBeVisible({ timeout: 15_000 });
 
 	const downloadPromise = page.waitForEvent('download');
-	await fileRow.getByRole('button', { name: 'Download' }).click();
+	await fileRow.getByRole('button', { name: 'Actions for' }).click();
+	await fileRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Download' }).click();
 	const download = await downloadPromise;
 
 	const downloadedPath = await download.path();

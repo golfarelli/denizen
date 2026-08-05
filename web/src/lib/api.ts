@@ -147,6 +147,15 @@ export const api = {
 
 	deleteItem: (id: string) => req<void>(`/api/v1/items/${id}`, { method: 'DELETE' }),
 
+	copyItem: (id: string, parentId: string | null) =>
+		req<Item>(`/api/v1/items/${id}/copy`, jsonInit({ parent_id: parentId })),
+
+	listTrash: () => req<Item[]>('/api/v1/trash'),
+
+	restoreItem: (id: string) => req<Item>(`/api/v1/items/${id}/restore`, jsonInit({})),
+
+	permanentlyDeleteItem: (id: string) => req<void>(`/api/v1/trash/${id}`, { method: 'DELETE' }),
+
 	// A plain <a href> can't carry the Authorization header a download
 	// needs, so callers fetch the response themselves (as a blob) instead
 	// of following a link — see the download handler in routes/+page.svelte.
