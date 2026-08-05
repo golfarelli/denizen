@@ -1,0 +1,21 @@
+# Reference compose file for running Denizen — see docs/ARCHITECTURE.md's
+# "single container" deployment decision, and internal/config/config.go for
+# the full list of environment variables this understands.
+#
+#   docker compose up -d --build
+#
+# DENIZEN_JWT_SECRET below is a placeholder — replace it with a real random
+# value before running this anywhere but a throwaway local test (e.g.
+# `openssl rand -hex 32`). Every session is only as secure as this secret.
+services:
+  denizen:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./data:/data
+    environment:
+      DENIZEN_DATA_DIR: /data
+      DENIZEN_LISTEN_ADDR: ':8080'
+      DENIZEN_JWT_SECRET: 'change-me-to-a-real-random-secret'

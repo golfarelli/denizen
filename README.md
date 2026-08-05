@@ -70,6 +70,21 @@ go test ./...              # backend: unit + flow tests (no mocks — see CONTRI
 cd web && npm run test:e2e # frontend: a real browser against the real binary (first run: npx playwright install chromium)
 ```
 
+## Running with Docker
+
+```sh
+git clone https://github.com/golfarelli/denizen.git && cd denizen
+docker compose up -d --build
+```
+
+`Dockerfile` is a multi-stage build (frontend → backend → a minimal runtime
+image with nothing but the resulting binary) that needs no local Go or
+Node.js install — everything happens inside the build. See
+`docker-compose.yml` for the environment variables to set (in particular,
+replace `DENIZEN_JWT_SECRET`'s placeholder with a real random value —
+`openssl rand -hex 32` — before running this anywhere but a throwaway local
+test) and where data persists on the host.
+
 ## License
 
 [AGPL-3.0](./LICENSE) — if you run a modified version of Denizen as a network
