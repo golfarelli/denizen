@@ -1,8 +1,11 @@
 package flow
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -29,10 +32,14 @@ type onlyOfficeConfigResp struct {
 		} `json:"permissions"`
 	} `json:"document"`
 	DocumentType string `json:"documentType"`
-	Type         string `json:"type"`
-	Width        string `json:"width"`
-	Height       string `json:"height"`
-	Token        string `json:"token"`
+	EditorConfig struct {
+		Mode        string `json:"mode"`
+		CallbackURL string `json:"callbackUrl"`
+	} `json:"editorConfig"`
+	Type   string `json:"type"`
+	Width  string `json:"width"`
+	Height string `json:"height"`
+	Token  string `json:"token"`
 }
 
 func TestOnlyOfficeFlow_DisabledByDefault(t *testing.T) {
@@ -109,8 +116,15 @@ func TestOnlyOfficeFlow_EnabledReportsStatusAndSignedConfig(t *testing.T) {
 	if cfg.DocumentType != "word" {
 		t.Errorf("DocumentType = %q, want %q", cfg.DocumentType, "word")
 	}
-	if cfg.Document.Permissions.Edit {
-		t.Error("Permissions.Edit = true — phase 1 is view-only, editing isn't wired up yet")
+	if !cfg.Document.Permissions.Edit {
+		t.Error("Permissions.Edit = false, want true — phase 2 wires real editing up")
+	}
+	if cfg.EditorConfig.Mode != "edit" {
+		t.Errorf("EditorConfig.Mode = %q, want %q", cfg.EditorConfig.Mode, "edit")
+	}
+	wantCallbackURL := "http://denizen.example.internal/api/v1/items/" + uploaded.ID + "/onlyoffice-callback"
+	if cfg.EditorConfig.CallbackURL != wantCallbackURL {
+		t.Errorf("EditorConfig.CallbackURL = %q, want %q", cfg.EditorConfig.CallbackURL, wantCallbackURL)
 	}
 	if cfg.Type != "desktop" {
 		t.Errorf("Type = %q, want %q (no ?type= sent, so the default)", cfg.Type, "desktop")
@@ -226,5 +240,179 @@ func TestOnlyOfficeFlow_EnforcesOwnership(t *testing.T) {
 	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+fabioFile.ID+"/onlyoffice-config", guest, nil)
 	if res.StatusCode == http.StatusOK {
 		t.Fatal("guest was able to get an OnlyOffice config for fabio's file")
+	}
+}
+
+// onlyOfficeCallbackBody mirrors handler.onlyOfficeCallbackBody — this is a
+// different package (a real Document Server has no idea this codebase's
+// internal types exist either), so it gets its own copy rather than
+// importing internal/handler.
+type onlyOfficeCallbackBody struct {
+	Status int    `json:"status"`
+	URL    string `json:"url,omitempty"`
+}
+
+// signOnlyOfficeCallback signs body the same way onlyoffice.Client.Sign
+// signs an editor config — the payload itself becomes the JWT's claims —
+// since that's what a real Document Server does for its own callback
+// requests too.
+func signOnlyOfficeCallback(t *testing.T, secret string, body onlyOfficeCallbackBody) string {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal callback body: %v", err)
+	}
+	var claims jwt.MapClaims
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		t.Fatalf("callback body to claims: %v", err)
+	}
+	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign callback JWT: %v", err)
+	}
+	return tok
+}
+
+// postOnlyOfficeCallback POSTs body to callbackURL, JWT-signed with secret
+// exactly as a real Document Server would (Authorization: Bearer header —
+// see onlyoffice.Client.VerifyCallback).
+func postOnlyOfficeCallback(t *testing.T, callbackURL, secret string, body onlyOfficeCallbackBody) *http.Response {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal callback body: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("build callback request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if secret != "" {
+		req.Header.Set("Authorization", "Bearer "+signOnlyOfficeCallback(t, secret, body))
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST callback: %v", err)
+	}
+	return res
+}
+
+func TestOnlyOfficeFlow_CallbackSavesDocument(t *testing.T) {
+	const secret = "oo-jwt-secret"
+	ts := newTestServerWithConfig(t, withOnlyOffice(
+		"http://onlyoffice.example.internal",
+		secret,
+		"http://denizen.example.internal",
+	))
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	original := []byte("original spreadsheet bytes")
+	item := uploadFile(t, ts, fabio, nil, "Budget.xlsx", original)
+
+	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/onlyoffice-config", fabio, nil)
+	cfg := decodeJSON[onlyOfficeConfigResp](t, configRes)
+	callbackURL := strings.Replace(cfg.EditorConfig.CallbackURL, "http://denizen.example.internal", ts.URL, 1)
+
+	// Stands in for the Document Server's own storage, which is where a
+	// real callback's "url" field points — Denizen has to fetch the edited
+	// bytes from there, it isn't handed them directly in the callback body.
+	edited := []byte("edited spreadsheet bytes, now longer than the original")
+	editedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(edited)
+	}))
+	t.Cleanup(editedServer.Close)
+
+	callbackRes := postOnlyOfficeCallback(t, callbackURL, secret, onlyOfficeCallbackBody{
+		Status: 2, // ready to save
+		URL:    editedServer.URL,
+	})
+	if callbackRes.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(callbackRes.Body)
+		t.Fatalf("callback: got status %d, body: %s", callbackRes.StatusCode, body)
+	}
+	var callbackBody struct {
+		Error int `json:"error"`
+	}
+	if err := json.NewDecoder(callbackRes.Body).Decode(&callbackBody); err != nil {
+		t.Fatalf("decode callback response: %v", err)
+	}
+	if callbackBody.Error != 0 {
+		t.Errorf("callback response error = %d, want 0", callbackBody.Error)
+	}
+
+	// The real assertion: the item's actual content on disk changed, not
+	// just that the callback returned success.
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	contentBody, err := io.ReadAll(contentRes.Body)
+	if err != nil {
+		t.Fatalf("read content: %v", err)
+	}
+	if !bytes.Equal(contentBody, edited) {
+		t.Errorf("content after callback = %q, want %q", contentBody, edited)
+	}
+
+	updated := decodeJSON[apiItem](t, authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID, fabio, nil))
+	if updated.SizeBytes != int64(len(edited)) {
+		t.Errorf("SizeBytes after callback = %d, want %d", updated.SizeBytes, len(edited))
+	}
+	// >=, not >: UpdatedAt has one-second resolution (time.Time.Unix()), and
+	// upload+callback both landing in the same wall-clock second is a real,
+	// non-buggy possibility in a fast-running test — SizeBytes above is
+	// already the assertion that the row's content metadata really updated.
+	if updated.UpdatedAt < item.UpdatedAt {
+		t.Errorf("UpdatedAt after callback = %d, want it not to have gone backwards from the original %d", updated.UpdatedAt, item.UpdatedAt)
+	}
+}
+
+func TestOnlyOfficeFlow_CallbackRejectsInvalidSignature(t *testing.T) {
+	const secret = "oo-jwt-secret"
+	ts := newTestServerWithConfig(t, withOnlyOffice(
+		"http://onlyoffice.example.internal",
+		secret,
+		"http://denizen.example.internal",
+	))
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	original := []byte("do not touch me")
+	item := uploadFile(t, ts, fabio, nil, "Contract.docx", original)
+
+	editedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("forged edit"))
+	}))
+	t.Cleanup(editedServer.Close)
+
+	callbackURL := ts.URL + "/api/v1/items/" + item.ID + "/onlyoffice-callback"
+
+	// No Authorization header at all — the most basic forgery attempt, and
+	// exactly what a plain POST from anywhere on the internet would send.
+	res := postOnlyOfficeCallback(t, callbackURL, "" /* no secret => no header */, onlyOfficeCallbackBody{
+		Status: 2,
+		URL:    editedServer.URL,
+	})
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("callback with no Authorization header was accepted")
+	}
+
+	// And the content genuinely wasn't touched — not just that the HTTP
+	// response looked like a rejection.
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	contentBody, err := io.ReadAll(contentRes.Body)
+	if err != nil {
+		t.Fatalf("read content: %v", err)
+	}
+	if !bytes.Equal(contentBody, original) {
+		t.Errorf("content changed despite an unauthenticated callback: got %q, want original %q", contentBody, original)
 	}
 }

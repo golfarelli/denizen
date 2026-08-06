@@ -57,6 +57,11 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	// these are always safe to mount, whether or not the feature is used.
 	mux.Handle("GET /api/v1/onlyoffice/status", requireAuth(http.HandlerFunc(onlyOffice.Status)))
 	mux.Handle("GET /api/v1/items/{id}/onlyoffice-config", requireAuth(http.HandlerFunc(onlyOffice.Config)))
+	// No RequireAuth: this is the Document Server itself calling back to
+	// report a save, not a logged-in user — it authenticates via a JWT
+	// signed with the shared secret instead (see
+	// onlyoffice.Client.VerifyCallback, called inside Callback itself).
+	mux.HandleFunc("POST /api/v1/items/{id}/onlyoffice-callback", onlyOffice.Callback)
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(users.Me)))
 	mux.Handle("GET /api/v1/users", requireAuth(middleware.RequireAdmin(http.HandlerFunc(users.List))))

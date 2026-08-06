@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -50,8 +54,8 @@ func (h *OnlyOfficeHandler) Status(res http.ResponseWriter, req *http.Request) {
 }
 
 // Config handles GET /api/v1/items/{id}/onlyoffice-config — mints a signed
-// OnlyOffice editor config for one item, view-only (see package onlyoffice's
-// own doc comment on why editing isn't wired up yet).
+// OnlyOffice editor config for one item, with real editing wired up (mode:
+// "edit" plus a callbackUrl — see Callback below).
 func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 	if !h.oo.Enabled() {
 		httpio.WriteError(res, apperr.NotFound)
@@ -96,22 +100,24 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 	cfg := onlyoffice.EditorConfig{
 		Document: onlyoffice.DocumentConfig{
 			FileType: ext,
-			// Changes whenever the file's content does (once saving exists —
-			// see package onlyoffice — this is what tells the Document
-			// Server a previously-cached copy is stale).
+			// Changes whenever the file's content does — including right
+			// after Callback below saves an edit — so the Document Server
+			// knows a previously-cached copy (its own or another open tab's)
+			// is stale rather than reusing it.
 			Key:   id + "-" + strconv.FormatInt(item.UpdatedAt, 10),
 			Title: item.Name,
 			URL:   h.oo.DocumentURL(id, contentToken),
 			Permissions: onlyoffice.Permissions{
-				Edit:     false,
+				Edit:     true,
 				Download: true,
 				Print:    true,
 			},
 		},
 		DocumentType: docType,
 		EditorConfig: onlyoffice.EditorSettings{
-			Mode: "view",
-			User: onlyoffice.UserInfo{ID: ownerID(req), Name: ownerID(req)},
+			Mode:        "edit",
+			CallbackURL: h.oo.CallbackURL(id),
+			User:        onlyoffice.UserInfo{ID: ownerID(req), Name: ownerID(req)},
 		},
 		Type:   editorType,
 		Width:  "100%",
@@ -126,4 +132,108 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 	cfg.Token = signed
 
 	httpio.WriteJSON(res, http.StatusOK, cfg)
+}
+
+// onlyOfficeCallbackBody mirrors the fields this handler actually reads
+// from OnlyOffice's own callback payload — see
+// https://api.onlyoffice.com/docs/document-server/website/callback-handlers/.
+type onlyOfficeCallbackBody struct {
+	Status int    `json:"status"`
+	URL    string `json:"url,omitempty"` // where to download the saved document from — present for status 2/6
+}
+
+// Per OnlyOffice's own callback status codes.
+const (
+	onlyOfficeStatusSave      = 2 // editing finished, document is ready to save
+	onlyOfficeStatusForceSave = 6 // still being edited, but a force-save was requested
+)
+
+// maxOnlyOfficeCallbackBodyBytes bounds the callback JSON itself (small
+// metadata — status, a URL, a key), not the document it might point at,
+// which Callback fetches separately.
+const maxOnlyOfficeCallbackBodyBytes = 1 << 16 // 64KiB
+
+// Callback handles POST /api/v1/items/{id}/onlyoffice-callback — called by
+// the Document Server itself, not a logged-in user, so it's mounted
+// without RequireAuth (see router.New) and authenticated a different way:
+// a JWT signed with the same shared secret used to sign the editor config
+// in Config above (see onlyoffice.Client.VerifyCallback). id in the URL
+// path was itself only ever handed out inside that signed config, as part
+// of the document/callback URLs it contains.
+func (h *OnlyOfficeHandler) Callback(res http.ResponseWriter, req *http.Request) {
+	if !h.oo.Enabled() {
+		httpio.WriteError(res, apperr.NotFound)
+		return
+	}
+	id := req.PathValue("id")
+
+	body, err := io.ReadAll(io.LimitReader(req.Body, maxOnlyOfficeCallbackBodyBytes+1))
+	if err != nil {
+		httpio.WriteError(res, apperr.Validation("could not read callback body"))
+		return
+	}
+	if len(body) > maxOnlyOfficeCallbackBodyBytes {
+		httpio.WriteError(res, apperr.Validation("callback body too large"))
+		return
+	}
+
+	if err := h.oo.VerifyCallback(req.Header.Get("Authorization"), body); err != nil {
+		httpio.WriteError(res, apperr.Unauthorized)
+		return
+	}
+
+	var payload onlyOfficeCallbackBody
+	if err := json.Unmarshal(body, &payload); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid callback body"))
+		return
+	}
+
+	// Every other status (still editing, closed with no changes, a save
+	// error the Document Server is only informing us of) needs no action
+	// here — {"error":0} just acknowledges receipt, which the switch below
+	// falls through to.
+	if payload.Status == onlyOfficeStatusSave || payload.Status == onlyOfficeStatusForceSave {
+		if err := h.saveCallbackDocument(req.Context(), id, payload.URL); err != nil {
+			// error:1 (any nonzero value) tells the Document Server the save
+			// failed, so it keeps its own copy of the edit instead of
+			// discarding it — see the API docs linked above.
+			httpio.WriteJSON(res, http.StatusOK, map[string]int{"error": 1})
+			return
+		}
+	}
+
+	httpio.WriteJSON(res, http.StatusOK, map[string]int{"error": 0})
+}
+
+// saveCallbackDocument downloads the edited document from documentURL (a
+// short-lived URL on the Document Server's own storage, provided in the
+// callback payload — not one Denizen minted) and writes it over itemID's
+// content. The item's real owner is looked up from the DB rather than
+// trusted from anywhere in the request, since this whole path runs with no
+// authenticated user at all.
+func (h *OnlyOfficeHandler) saveCallbackDocument(ctx context.Context, itemID, documentURL string) error {
+	if documentURL == "" {
+		return fmt.Errorf("onlyoffice: save callback missing document url")
+	}
+
+	item, err := h.items.GetForShare(ctx, itemID)
+	if err != nil {
+		return err
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, documentURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("onlyoffice: fetching saved document: unexpected status %d", resp.StatusCode)
+	}
+
+	_, err = h.items.ReplaceContent(ctx, item.OwnerID, itemID, resp.Body)
+	return err
 }

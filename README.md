@@ -15,8 +15,8 @@ your own personal cloud storage, running on your own hardware.
 > captures as a multi-page PDF, same as Google Drive's own scan flow.
 > Installability and the share target both need HTTPS (or `localhost`) to
 > work at all — see "Running with Docker" below. Word/Excel/PowerPoint
-> documents can also open with genuine, high-fidelity rendering (view-only
-> for now) via an optional OnlyOffice Document Server integration — a real
+> documents can also open with genuine, high-fidelity rendering **and real
+> editing** via an optional OnlyOffice Document Server integration — a real
 > second container, entirely opt-in, see `docker-compose.onlyoffice.yml`.
 > Both a Go backend test suite and a Playwright end-to-end suite drive a
 > real browser against the real binary.
@@ -120,8 +120,9 @@ rendering engine), so it's an entirely separate, opt-in overlay rather than
 part of the default single-container setup. Without it, Word/Excel still
 preview client-side (docx-preview/xlsx) with lower fidelity and no
 PowerPoint support at all. See `docker-compose.onlyoffice.yml`'s own
-comments for the environment variables both sides need to agree on. Viewing
-only for now — editing is a planned follow-up, see `docs/ARCHITECTURE.md`.
+comments for the environment variables both sides need to agree on. Real
+editing, saved back to Denizen's own storage — see `docs/ARCHITECTURE.md`
+for how the save callback is authenticated and applied.
 
 ## License
 
