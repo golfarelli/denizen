@@ -43,8 +43,11 @@
 	let officeBlob = $state<Blob | null>(null);
 	let textContent = $state('');
 	let videoUrl = $state(''); // a real URL (content-token query param), not a blob: one — see getContentToken
-	// null until checked; only checked at all for docx/xlsx/pptx, since
-	// nothing else cares. See onMount and OnlyOfficeViewer.svelte.
+	// null until checked; only checked at all for docx/xlsx/pptx/pdf, since
+	// nothing else cares — notably not images, which OnlyOffice has never
+	// supported (it's a document-editing engine, not an image viewer; see
+	// onlyoffice.DocumentType's own comment). See onMount and
+	// OnlyOfficeViewer.svelte.
 	let onlyOffice = $state<OnlyOfficeStatus | null>(null);
 
 	// Set by the file list when navigating here (routes/+page.svelte) so
@@ -101,9 +104,8 @@
 				return;
 			}
 
-			if (kind === 'docx' || kind === 'xlsx' || kind === 'pptx') {
-				// Real fidelity + editing (view-only for now — see
-				// OnlyOfficeViewer's own comment) if a Document Server is
+			if (kind === 'docx' || kind === 'xlsx' || kind === 'pptx' || kind === 'pdf') {
+				// Real fidelity + real editing if a Document Server is
 				// configured, checked before deciding whether to fetch
 				// anything here at all — OnlyOffice does its own fetching,
 				// server-side, from the URL its config points at.
@@ -119,8 +121,9 @@
 					loading = false;
 					return;
 				}
-				// docx/xlsx fall through to the blob-fetch path below —
-				// same client-side viewers as before OnlyOffice existed.
+				// docx/xlsx/pdf fall through to the blob-fetch path below —
+				// same client-side viewers as before OnlyOffice existed (pdf.js
+				// for pdf specifically).
 			}
 
 			// <img> can't carry the Authorization header content needs (same
@@ -203,13 +206,7 @@
 				<div class="preview-frame">
 					<img src={objectUrl} alt={item.name} />
 				</div>
-			{:else if kind === 'pdf'}
-				{#if officeBlob}
-					{#await import('$lib/PdfViewer.svelte') then { default: PdfViewer }}
-						<PdfViewer blob={officeBlob} />
-					{/await}
-				{/if}
-			{:else if kind === 'docx' || kind === 'xlsx' || kind === 'pptx'}
+			{:else if kind === 'docx' || kind === 'xlsx' || kind === 'pptx' || kind === 'pdf'}
 				{#if onlyOffice?.enabled}
 					{#await import('$lib/OnlyOfficeViewer.svelte') then { default: OnlyOfficeViewer }}
 						<OnlyOfficeViewer itemId={item.id} apiJsUrl={onlyOffice.api_js_url ?? ''} />
@@ -221,6 +218,10 @@
 				{:else if kind === 'xlsx' && officeBlob}
 					{#await import('$lib/XlsxViewer.svelte') then { default: XlsxViewer }}
 						<XlsxViewer blob={officeBlob} />
+					{/await}
+				{:else if kind === 'pdf' && officeBlob}
+					{#await import('$lib/PdfViewer.svelte') then { default: PdfViewer }}
+						<PdfViewer blob={officeBlob} />
 					{/await}
 				{/if}
 			{:else if kind === 'text'}

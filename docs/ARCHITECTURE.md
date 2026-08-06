@@ -129,7 +129,7 @@ like any other untrusted text) needs no such trust at all.
 
 ### Optional: OnlyOffice for real Office fidelity and editing
 
-docx-preview/xlsx get the content across, but their rendering is
+docx-preview/xlsx/pdf.js get the content across, but their rendering is
 approximate — real layout/formatting fidelity, and any editing at all,
 needs an actual Office-compatible engine, the same conclusion Nextcloud's
 own "Nextcloud Office" integration reached. That's a genuinely different
@@ -142,10 +142,18 @@ image and real RAM per open document, not a dependency bump. Kept strictly
 `internal/onlyoffice.Client.Enabled()` reports false and both its routes
 degrade gracefully (`/onlyoffice/status` reports `{enabled: false}`,
 `/onlyoffice-config` 404s) rather than erroring — the frontend then falls
-straight back to docx-preview/xlsx, exactly as if this whole feature didn't
-exist. This matters specifically because Denizen is open source: a
+straight back to docx-preview/xlsx/pdf.js, exactly as if this whole feature
+didn't exist. This matters specifically because Denizen is open source: a
 self-hoster who doesn't want a second heavy container isn't paying for one
 just because the code path exists.
+
+Covers Word/Excel/PowerPoint and, since Document Server ~7.3+, PDF
+(`onlyoffice.DocumentType`) — the frontend prefers OnlyOffice for `.pdf`
+too when it's enabled, falling back to pdf.js otherwise, the same pattern
+as docx/xlsx (`routes/file/[id]/+page.svelte`). Deliberately **not**
+images: OnlyOffice is a document-editing engine, not an image viewer, and
+never has been — that's not a gap this integration fills, images just stay
+on the plain `<img>` preview unconditionally.
 
 **Editing is real, not just viewing.** `EditorConfig.EditorConfig.Mode` is
 `"edit"` (`internal/handler/onlyoffice.go`), and the config carries a

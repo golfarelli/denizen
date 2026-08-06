@@ -70,9 +70,14 @@ func (c *Client) CallbackURL(itemID string) string {
 	return c.documentBaseURL + "/api/v1/items/" + itemID + "/onlyoffice-callback"
 }
 
-// DocumentType maps a file extension to the three editor families
-// OnlyOffice has — required by EditorConfig.DocumentType, which picks the
-// editor UI/toolset shown, distinct from the file's own format.
+// DocumentType maps a file extension to one of OnlyOffice's editor
+// families — required by EditorConfig.DocumentType, which picks the editor
+// UI/toolset shown, distinct from the file's own format. Notably absent:
+// images. OnlyOffice is a document-editing engine (word processing,
+// spreadsheets, presentations, and — since Document Server ~7.3+ — PDF);
+// it has never had an image viewer, so images stay on the plain <img>
+// preview (routes/file/[id]/+page.svelte) regardless of whether OnlyOffice
+// is configured.
 func DocumentType(ext string) (string, bool) {
 	switch ext {
 	case "docx":
@@ -81,6 +86,8 @@ func DocumentType(ext string) (string, bool) {
 		return "cell", true
 	case "pptx":
 		return "slide", true
+	case "pdf":
+		return "pdf", true
 	default:
 		return "", false
 	}
