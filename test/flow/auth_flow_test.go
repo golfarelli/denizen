@@ -31,6 +31,13 @@ type testServer struct {
 }
 
 func newTestServer(t *testing.T) *testServer {
+	return newTestServerWithConfig(t, nil)
+}
+
+// newTestServerWithConfig is newTestServer plus a hook to override fields
+// on top of the same base config — for tests of behavior gated by config
+// that isn't on by default (e.g. OnlyOffice — see onlyoffice_flow_test.go).
+func newTestServerWithConfig(t *testing.T, configure func(*config.Config)) *testServer {
 	t.Helper()
 
 	cfg := config.Load()
@@ -38,6 +45,9 @@ func newTestServer(t *testing.T) *testServer {
 	cfg.JWTSecret = "flow-test-secret"
 	cfg.AccessTokenTTL = time.Minute
 	cfg.RefreshTokenTTL = time.Hour
+	if configure != nil {
+		configure(&cfg)
+	}
 
 	a, err := app.New(cfg)
 	if err != nil {

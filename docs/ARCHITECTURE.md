@@ -117,6 +117,65 @@ escaping to keep a malicious spreadsheet's cell contents from becoming
 markup, where Svelte's normal text interpolation (a plain string, escaped
 like any other untrusted text) needs no such trust at all.
 
+### Optional: OnlyOffice for real Office fidelity (and, eventually, editing)
+
+docx-preview/xlsx get the content across, but their rendering is
+approximate — real layout/formatting fidelity, and any editing at all,
+needs an actual Office-compatible engine, the same conclusion Nextcloud's
+own "Nextcloud Office" integration reached. That's a genuinely different
+scale of thing from a JS library: a whole second server
+(`docker-compose.onlyoffice.yml`, an
+[OnlyOffice Document Server](https://github.com/ONLYOFFICE/DocumentServer)
+container) running its own rendering engine — hundreds of MB to 1GB+ of
+image and real RAM per open document, not a dependency bump. Kept strictly
+**optional**: unconfigured (`DENIZEN_ONLYOFFICE_URL` unset, the default),
+`internal/onlyoffice.Client.Enabled()` reports false and both its routes
+degrade gracefully (`/onlyoffice/status` reports `{enabled: false}`,
+`/onlyoffice-config` 404s) rather than erroring — the frontend then falls
+straight back to docx-preview/xlsx, exactly as if this whole feature didn't
+exist. This matters specifically because Denizen is open source: a
+self-hoster who doesn't want a second heavy container isn't paying for one
+just because the code path exists.
+
+**This is phase 1: viewing, not editing.** `EditorConfig.EditorConfig.Mode`
+is hardcoded to `"view"` (`internal/handler/onlyoffice.go`) — no
+`callbackUrl` is wired up, and there's no server-side handling yet for the
+Document Server's save-back POST. Editing is real, substantial follow-up
+work (session/lock semantics, validating and applying the callback, a UI
+affordance for "editing" vs "viewing"), deliberately not bundled into this
+first pass.
+
+**How it fits together** (OnlyOffice's own config-and-callback model, not
+strictly the Microsoft WOPI protocol Collabora Online uses, but the same
+shape): the frontend calls `GET /items/{id}/onlyoffice-config`
+(`internal/handler/onlyoffice.go`), which returns a JSON config —
+document URL, file type, permissions, a JWT signature over the whole
+thing — that gets handed to `DocsAPI.DocEditor`, a script loaded directly
+from the Document Server itself (`lib/OnlyOfficeViewer.svelte`), not
+bundled by Denizen (it has to match whatever server version is actually
+running). Two URLs matter here, commonly *not* the same address:
+
+- `DENIZEN_ONLYOFFICE_URL` — where a **browser** reaches the Document
+  Server, to load its editor script and iframe.
+- `DENIZEN_ONLYOFFICE_DOCUMENT_BASE_URL` — where the **Document Server
+  itself** reaches Denizen, to fetch the file's actual bytes. On the
+  reference compose overlay these are two different addresses (a
+  published host port vs. the other container's name on their shared
+  Docker network) — there's no way to safely infer one from the other, so
+  both are explicit config, not derived from an incoming request's Host
+  header the way that might work for a simpler single-address setup.
+
+The document-fetch URL itself rides on the *same* content-token mechanism
+`<video>` uses (`internal/token.ContentClaims` — see "File preview"
+above) — the Document Server is fetching a file over plain HTTP with no
+way to attach Denizen's own bearer token, exactly the problem that
+mechanism already solves, so this reuses it rather than inventing a
+second one. The whole config object is signed with
+`DENIZEN_ONLYOFFICE_JWT_SECRET` (`internal/onlyoffice.Client.Sign`) —
+OnlyOffice's own security model expects this once `JWT_ENABLED=true` is
+set Document-Server-side (the reference overlay always sets it), so an
+unsigned config would just be rejected.
+
 ## Deployment: a single container
 
 The Go binary embeds the built SvelteKit static assets (`go:embed`) and serves
@@ -213,6 +272,10 @@ Sketch of the main endpoints:
   accepts either the normal bearer token or a short-lived `?token=` content
   token minted by `POST /items/{id}/content-token` — see "File preview"
   above for why `<video>` needs the latter).
+- **OnlyOffice** (optional — see "File preview" above) — `GET
+  /onlyoffice/status`, `GET /items/{id}/onlyoffice-config`. Both report
+  "disabled"/404 rather than erroring when no Document Server is
+  configured.
 - **Uploads** — resumable, chunked, via the [tus protocol](https://tus.io/) at
   `/uploads` (see below).
 - **Shares** — `POST /items/{id}/shares`, `GET /shares`, `DELETE

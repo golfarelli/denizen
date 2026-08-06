@@ -38,6 +38,27 @@ type Config struct {
 	// internal/service.ItemService.PurgeExpiredTrash.
 	TrashPurgeInterval time.Duration
 	TrashRetention     time.Duration
+	// OnlyOfficeURL, if set, is the base URL of an OnlyOffice Document
+	// Server that unlocks real in-browser Word/Excel/PowerPoint editing
+	// (see internal/onlyoffice) — a genuinely heavy separate service, so
+	// it's entirely optional: unset (the default) means the client-side
+	// preview (docx-preview/xlsx) is all that's available, exactly as
+	// before this existed. Denizen itself never bundles or requires it.
+	OnlyOfficeURL string
+	// OnlyOfficeJWTSecret signs the editor config and validates the
+	// Document Server's save-back callback — required by OnlyOffice's own
+	// security model whenever OnlyOfficeURL is set (an unsigned config is
+	// something the Document Server will refuse by default in any sane
+	// deployment).
+	OnlyOfficeJWTSecret string
+	// OnlyOfficeDocumentBaseURL is how the *Document Server itself* (not a
+	// browser) reaches Denizen to fetch a file's bytes — typically a
+	// same-Docker-network address like http://denizen:8080, different from
+	// whatever public URL browsers use. Required whenever OnlyOfficeURL is
+	// set; there's no way to safely guess it (a request's own Host header
+	// reflects the browser's address, not necessarily one the Document
+	// Server container can resolve at all).
+	OnlyOfficeDocumentBaseURL string
 }
 
 // Load builds a Config from environment variables, falling back to defaults
@@ -58,6 +79,10 @@ func Load() Config {
 		UploadGCAfter:      getEnvDuration("DENIZEN_UPLOAD_GC_AFTER", 24*time.Hour),
 		TrashPurgeInterval: getEnvDuration("DENIZEN_TRASH_PURGE_INTERVAL", time.Hour),
 		TrashRetention:     getEnvDuration("DENIZEN_TRASH_RETENTION", 30*24*time.Hour),
+
+		OnlyOfficeURL:             getEnv("DENIZEN_ONLYOFFICE_URL", ""),
+		OnlyOfficeJWTSecret:       getEnv("DENIZEN_ONLYOFFICE_JWT_SECRET", ""),
+		OnlyOfficeDocumentBaseURL: getEnv("DENIZEN_ONLYOFFICE_DOCUMENT_BASE_URL", ""),
 	}
 }
 

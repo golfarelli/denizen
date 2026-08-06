@@ -26,7 +26,8 @@
 	// below (xlsx, via SheetJS's bundled legacy parser) can actually read
 	// its legacy sibling — .doc has no viewer here, only .xls does.
 
-	type PreviewKind = 'image' | 'pdf' | 'docx' | 'xlsx' | 'text' | 'video' | 'unsupported';
+	type PreviewKind = 'image' | 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'text' | 'video' | 'unsupported';
+	type OnlyOfficeStatus = { enabled: boolean; api_js_url?: string };
 
 	let item = $state<Item | null>(null);
 	let loading = $state(true);
@@ -36,9 +37,14 @@
 	// pdf/docx/xlsx all just want the whole file as a Blob and do their own
 	// parsing from there (unlike image/video, none of them can take a
 	// direct src) — one shared holder instead of three near-identical ones.
+	// Never populated for docx/xlsx when OnlyOffice is handling them instead
+	// (see onMount) — it does its own fetching, server-side.
 	let officeBlob = $state<Blob | null>(null);
 	let textContent = $state('');
 	let videoUrl = $state(''); // a real URL (content-token query param), not a blob: one — see getContentToken
+	// null until checked; only checked at all for docx/xlsx/pptx, since
+	// nothing else cares. See onMount and OnlyOfficeViewer.svelte.
+	let onlyOffice = $state<OnlyOfficeStatus | null>(null);
 
 	// Set by the file list when navigating here (routes/+page.svelte) so
 	// "Back" returns to the folder the user actually came from, not always
@@ -58,6 +64,7 @@
 		if (mime.startsWith('video/')) return 'video';
 		if (ext === 'docx') return 'docx';
 		if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
+		if (ext === 'pptx') return 'pptx'; // only ever previewable via OnlyOffice — no client-side viewer for it
 		if (mime.startsWith('text/') || TEXT_EXTENSIONS.has(ext)) return 'text';
 		return 'unsupported';
 	}
@@ -83,6 +90,28 @@
 				const minted = await api.getContentToken(id);
 				videoUrl = `/api/v1/items/${id}/content?token=${encodeURIComponent(minted.token)}`;
 				return;
+			}
+
+			if (kind === 'docx' || kind === 'xlsx' || kind === 'pptx') {
+				// Real fidelity + editing (view-only for now — see
+				// OnlyOfficeViewer's own comment) if a Document Server is
+				// configured, checked before deciding whether to fetch
+				// anything here at all — OnlyOffice does its own fetching,
+				// server-side, from the URL its config points at.
+				onlyOffice = await api.getOnlyOfficeStatus();
+				if (onlyOffice.enabled) {
+					loading = false;
+					return;
+				}
+				if (kind === 'pptx') {
+					// No client-side fallback exists for PowerPoint — this
+					// was only ever previewable through OnlyOffice.
+					kind = 'unsupported';
+					loading = false;
+					return;
+				}
+				// docx/xlsx fall through to the blob-fetch path below —
+				// same client-side viewers as before OnlyOffice existed.
 			}
 
 			// <img> can't carry the Authorization header content needs (same
@@ -164,14 +193,16 @@
 				<PdfViewer blob={officeBlob} />
 			{/await}
 		{/if}
-	{:else if kind === 'docx'}
-		{#if officeBlob}
+	{:else if kind === 'docx' || kind === 'xlsx' || kind === 'pptx'}
+		{#if onlyOffice?.enabled}
+			{#await import('$lib/OnlyOfficeViewer.svelte') then { default: OnlyOfficeViewer }}
+				<OnlyOfficeViewer itemId={item.id} apiJsUrl={onlyOffice.api_js_url ?? ''} />
+			{/await}
+		{:else if kind === 'docx' && officeBlob}
 			{#await import('$lib/DocxViewer.svelte') then { default: DocxViewer }}
 				<DocxViewer blob={officeBlob} />
 			{/await}
-		{/if}
-	{:else if kind === 'xlsx'}
-		{#if officeBlob}
+		{:else if kind === 'xlsx' && officeBlob}
 			{#await import('$lib/XlsxViewer.svelte') then { default: XlsxViewer }}
 				<XlsxViewer blob={officeBlob} />
 			{/await}

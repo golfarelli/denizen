@@ -175,6 +175,16 @@ export const api = {
 	getContentToken: (id: string) =>
 		req<{ token: string; expires_at: number }>(`/api/v1/items/${id}/content-token`, jsonInit({})),
 
+	// Reports "disabled" rather than erroring when no OnlyOffice Document
+	// Server is configured (internal/handler/onlyoffice.go) — always safe
+	// to call, whether or not the feature is in use on this deployment.
+	getOnlyOfficeStatus: () => req<{ enabled: boolean; api_js_url?: string }>('/api/v1/onlyoffice/status'),
+
+	// The full signed editor config DocsAPI.DocEditor expects — see
+	// internal/onlyoffice.EditorConfig. Typed loosely here (this app never
+	// reads into it, just hands it straight to the editor script).
+	getOnlyOfficeConfig: (id: string) => req<Record<string, unknown>>(`/api/v1/items/${id}/onlyoffice-config`),
+
 	createShare: (itemId: string, requiresAuth: boolean, expiresAt: number | null) =>
 		req<Share>(`/api/v1/items/${itemId}/shares`, jsonInit({ requires_auth: requiresAuth, expires_at: expiresAt })),
 
