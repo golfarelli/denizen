@@ -80,6 +80,30 @@
 		};
 	});
 
+	// Mobile-only floating action button (see app.css's .fab) — replaces
+	// the always-visible Upload/Scan/New folder row on a phone-width
+	// screen. A separate open/close state and effect from the row action
+	// menu above (openMenuFor) since it's not per-item and the two can be
+	// open independently of each other, though in practice a click
+	// anywhere closes whichever one is open.
+	let fabMenuOpen = $state(false);
+
+	$effect(() => {
+		if (!fabMenuOpen) return;
+		function handlePointerDown() {
+			fabMenuOpen = false;
+		}
+		function handleKeydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') fabMenuOpen = false;
+		}
+		window.addEventListener('click', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('click', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
+
 	// A local tracking key for the upload progress panel below — doesn't
 	// need to be globally unique or unguessable, just distinct within this
 	// tab's own `uploads` array, so crypto.randomUUID() would be overkill
@@ -344,7 +368,7 @@
 		</svg>
 		<input type="search" placeholder="Search this folder…" bind:value={searchQuery} aria-label="Search files" />
 	</div>
-	<div style="display:flex; gap: var(--space-2)">
+	<div class="toolbar-actions">
 		<button class="btn" onclick={() => fileInput.click()}>+ Upload</button>
 		<button class="btn" onclick={() => (scanOpen = true)}>📷 Scan</button>
 		<button class="btn btn-primary" onclick={handleNewFolder}>+ New folder</button>
@@ -504,6 +528,69 @@
 		</div>
 	{/if}
 </div>
+
+<button
+	class="fab"
+	aria-label="Add"
+	aria-haspopup="true"
+	aria-expanded={fabMenuOpen}
+	onclick={(e) => {
+		e.stopPropagation();
+		fabMenuOpen = !fabMenuOpen;
+	}}
+>
+	<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+		<path d="M12 5v14M5 12h14" stroke-linecap="round" />
+	</svg>
+</button>
+{#if fabMenuOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_interactive_supports_focus -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div class="dropdown-menu fab-menu" onclick={(e) => e.stopPropagation()} role="menu">
+		<button
+			role="menuitem"
+			onclick={() => {
+				fabMenuOpen = false;
+				fileInput.click();
+			}}
+		>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+				<path d="M12 15V4M8 8l4-4 4 4M5 20h14" stroke-linecap="round" stroke-linejoin="round" />
+			</svg>
+			Upload
+		</button>
+		<button
+			role="menuitem"
+			onclick={() => {
+				fabMenuOpen = false;
+				scanOpen = true;
+			}}
+		>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+				<path d="M8 7l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3Z" stroke-linejoin="round" />
+				<circle cx="12" cy="13.5" r="3.2" />
+			</svg>
+			Scan
+		</button>
+		<button
+			role="menuitem"
+			onclick={() => {
+				fabMenuOpen = false;
+				handleNewFolder();
+			}}
+		>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+				<path
+					d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
+					stroke-linejoin="round"
+				/>
+				<path d="M12 11v4M10 13h4" stroke-linecap="round" />
+			</svg>
+			New folder
+		</button>
+	</div>
+{/if}
 
 <ShareDialog bind:item={sharingItem} />
 <MoveDialog bind:item={movingItem} onMoved={() => load(currentFolderId)} />

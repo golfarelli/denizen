@@ -426,17 +426,13 @@ main.fullscreen {
 	color: var(--color-accent);
 }
 
+/* No outer border/card and no per-row divider lines — Drive's own list
+   has neither, relying on consistent row height/padding and the hover
+   highlight alone to read as "a list" instead of a bordered box full of
+   ruled-off rows. */
 .item-list {
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius);
-	/* No overflow: hidden here on purpose — it used to clip the corners of
-	   the first/last row's square background to match this container's
-	   rounded border, but it also clipped anything that overflows a row's
-	   own box on purpose, like the kebab action menu's dropdown, which is
-	   especially visible on a short list where the dropdown has nowhere to
-	   extend into but past the list's own bottom edge. Rounding the
-	   first/last row's own corners below gets the same visual result
-	   without clipping content that's supposed to escape the row. */
+	display: flex;
+	flex-direction: column;
 }
 
 /* Grid, not flex: the mobile breakpoint below reflows this into two rows
@@ -451,34 +447,23 @@ main.fullscreen {
 	grid-template-areas: 'icon name modified size menu';
 	align-items: center;
 	column-gap: var(--space-3);
-	padding: var(--space-3) var(--space-4);
-	border-bottom: 1px solid var(--color-border);
+	padding: var(--space-4);
+	border-radius: var(--radius);
 	background: var(--color-bg);
 	position: relative;
-	transition:
-		background 0.12s ease,
-		box-shadow 0.12s ease;
+	transition: background 0.12s ease;
 }
 
-.item-row:first-child {
-	border-top-left-radius: var(--radius);
-	border-top-right-radius: var(--radius);
-}
-
-.item-row:last-child {
-	border-bottom: none;
-	border-bottom-left-radius: var(--radius);
-	border-bottom-right-radius: var(--radius);
+/* A hairline between rows, not around the list — fully dividerless read as
+   too little separation once there's no outer card border either. Skips
+   the last row so it doesn't sit flush against whatever follows the
+   list. */
+.item-row:not(:last-child) {
+	border-bottom: 1px solid var(--color-border);
 }
 
 .item-row:hover {
 	background: var(--color-surface);
-	/* A row lifting slightly on hover, not the whole list — real elevation
-	   would need actual card gaps between rows (a bigger structural change
-	   than this pass is after), so this is z-index'd above its neighbors'
-	   flat borders to read as "raised" without one. */
-	box-shadow: var(--shadow-sm);
-	z-index: 1;
 }
 
 /* For rows that don't fit the file browser's 5-column shape (icon / name /
@@ -590,6 +575,11 @@ main.fullscreen {
 	margin-bottom: var(--space-4);
 	gap: var(--space-3);
 	flex-wrap: wrap;
+}
+
+.toolbar-actions {
+	display: flex;
+	gap: var(--space-2);
 }
 
 /* Filters the current folder's own listing client-side (see
@@ -796,6 +786,47 @@ dialog::backdrop {
 	padding-top: calc(var(--space-2) + 2px);
 }
 
+/* Mobile only (see the media query below) — Drive's own floating "+"
+   replaces a permanently-visible row of Upload/Scan/New folder buttons,
+   which on a phone-width screen was a whole extra row eaten out of the
+   file list's own vertical space for actions that aren't needed most of
+   the time. Fixed to the viewport, not the page, so it stays reachable
+   regardless of scroll position. */
+.fab {
+	display: none;
+	position: fixed;
+	right: var(--space-4);
+	bottom: var(--space-4);
+	width: 3.5rem;
+	height: 3.5rem;
+	border-radius: 50%;
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+	border: none;
+	box-shadow: var(--shadow-md);
+	align-items: center;
+	justify-content: center;
+	z-index: 30;
+	cursor: pointer;
+}
+
+.fab:hover {
+	filter: brightness(1.08);
+}
+
+/* Reuses .dropdown-menu's own button styling (same class, applied
+   alongside this one) but not its positioning — that one anchors to a
+   position:relative wrapper above itself (a row's own .row-menu); this
+   one anchors to the viewport, above the fixed FAB that opens it, since
+   there's no scrolling wrapper to anchor to at the bottom of the screen. */
+.fab-menu {
+	position: fixed;
+	top: auto;
+	right: var(--space-4);
+	bottom: calc(3.5rem + var(--space-4) + var(--space-2));
+	z-index: 30;
+}
+
 /* Mobile: two lines per row (name, then modified+size as a muted subtitle
    underneath) instead of the desktop's separate columns — Drive's own
    mobile app shows exactly this shape, and it's strictly better than this
@@ -843,6 +874,16 @@ dialog::backdrop {
 
 	.toolbar {
 		flex-wrap: wrap;
+	}
+
+	/* The FAB (.fab, styled above) takes over Upload/Scan/New folder on
+	   mobile — see its own comment for why. */
+	.toolbar-actions {
+		display: none;
+	}
+
+	.fab {
+		display: flex;
 	}
 
 	/* .item-row-flex rows (trash/shares/admin/move-picker — see its own
