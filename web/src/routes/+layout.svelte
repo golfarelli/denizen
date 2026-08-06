@@ -8,6 +8,7 @@
 	import { api } from '$lib/api';
 	import { me, refreshMe, clearMe } from '$lib/me';
 	import { registerServiceWorker } from '$lib/pwa';
+	import { fullscreen } from '$lib/fullscreen';
 
 	let { children } = $props();
 
@@ -50,7 +51,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if $auth}
+{#if $auth && !$fullscreen}
 	<header class="topbar">
 		<a class="brand" href="/">Denizen</a>
 		<nav style="display:flex; gap: var(--space-3); align-items:center">
@@ -64,6 +65,6 @@
 	</header>
 {/if}
 
-<main class:with-topbar={!!$auth}>
+<main class:with-topbar={!!$auth && !$fullscreen} class:fullscreen={$fullscreen}>
 	{@render children()}
 </main>
