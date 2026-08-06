@@ -139,7 +139,7 @@
 	{:else}
 		<div class="item-list">
 			{#each users as user (user.id)}
-				<div class="item-row">
+				<div class="item-row item-row-flex">
 					<span class="item-name" style="cursor:default; flex:1">
 						{user.username}{user.is_admin ? ' 👑' : ''}{user.disabled ? ' (disabled)' : ''}
 					</span>

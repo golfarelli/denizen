@@ -104,7 +104,7 @@
 		{:else}
 			<div class="item-list">
 				{#each folders as folder (folder.id)}
-					<div class="item-row">
+					<div class="item-row item-row-flex">
 						<span class="item-icon"><FileIcon type="folder" name={folder.name} /></span>
 						<button class="item-name" onclick={() => openFolder(folder)}>{folder.name}</button>
 					</div>

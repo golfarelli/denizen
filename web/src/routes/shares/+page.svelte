@@ -76,7 +76,7 @@
 {:else}
 	<div class="item-list">
 		{#each shares as share (share.id)}
-			<div class="item-row">
+			<div class="item-row item-row-flex">
 				<span class="item-name" style="cursor: default">
 					{share.itemMissing ? '(item no longer available)' : share.itemName}
 				</span>
