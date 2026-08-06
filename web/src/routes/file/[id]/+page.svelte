@@ -2,7 +2,12 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { api, ApiError, type Item } from '$lib/api';
-	import PdfViewer from '$lib/PdfViewer.svelte';
+	// Dynamically imported below (`{#await import(...)}`), not statically
+	// here: pdf.js + docx-preview + xlsx together are a genuinely heavy
+	// ~290KB (gzipped) payload, and a static import would bundle all three
+	// into this route's chunk regardless of which one file type someone
+	// actually opens — wasted download even for something as small as a
+	// text file or an image.
 
 	// Extensions treated as text even when the server's mime_type guess
 	// (Go's mime.TypeByExtension, or whatever the browser reported as
@@ -14,15 +19,26 @@
 		'html', 'htm', 'css', 'js', 'ts', 'ini', 'conf', 'toml', 'sh', 'go', 'py'
 	]);
 
-	type PreviewKind = 'image' | 'pdf' | 'text' | 'unsupported';
+	// Keyed by extension, not mime_type: both are OOXML zip-based formats
+	// with mime types Go's own guesser (mime.TypeByExtension) doesn't
+	// reliably know, and the legacy binary predecessors (.doc, .xls) need
+	// telling apart from these anyway since only one of the two libraries
+	// below (xlsx, via SheetJS's bundled legacy parser) can actually read
+	// its legacy sibling — .doc has no viewer here, only .xls does.
+
+	type PreviewKind = 'image' | 'pdf' | 'docx' | 'xlsx' | 'text' | 'video' | 'unsupported';
 
 	let item = $state<Item | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let kind = $state<PreviewKind>('unsupported');
 	let objectUrl = $state(''); // image previews only — see PdfViewer for why pdf doesn't use one
-	let pdfBlob = $state<Blob | null>(null);
+	// pdf/docx/xlsx all just want the whole file as a Blob and do their own
+	// parsing from there (unlike image/video, none of them can take a
+	// direct src) — one shared holder instead of three near-identical ones.
+	let officeBlob = $state<Blob | null>(null);
 	let textContent = $state('');
+	let videoUrl = $state(''); // a real URL (content-token query param), not a blob: one — see getContentToken
 
 	// Set by the file list when navigating here (routes/+page.svelte) so
 	// "Back" returns to the folder the user actually came from, not always
@@ -39,6 +55,9 @@
 		const ext = candidate.name.split('.').pop()?.toLowerCase() ?? '';
 		if (mime.startsWith('image/')) return 'image';
 		if (mime === 'application/pdf') return 'pdf';
+		if (mime.startsWith('video/')) return 'video';
+		if (ext === 'docx') return 'docx';
+		if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
 		if (mime.startsWith('text/') || TEXT_EXTENSIONS.has(ext)) return 'text';
 		return 'unsupported';
 	}
@@ -55,17 +74,28 @@
 
 			if (kind === 'unsupported') return; // no bytes to fetch — nothing to preview
 
+			if (kind === 'video') {
+				// A real <video src>, not a blob: URL: unlike an image/PDF, a
+				// video benefits from actual HTTP Range streaming (starts
+				// immediately, seeks without downloading the whole file
+				// first) — only a direct element src gets that, so this
+				// mints a short-lived token instead of fetching bytes here.
+				const minted = await api.getContentToken(id);
+				videoUrl = `/api/v1/items/${id}/content?token=${encodeURIComponent(minted.token)}`;
+				return;
+			}
+
 			// <img> can't carry the Authorization header content needs (same
 			// constraint as download — see api.downloadContent's own
 			// comment), so the bytes are fetched here and handed to the
-			// viewer as a blob: URL / in-memory text / raw Blob (pdf —
-			// PdfViewer does its own arrayBuffer() read) instead of a direct
-			// src.
+			// viewer as a blob: URL / in-memory text / raw Blob (pdf/docx/
+			// xlsx — each viewer does its own reading from there) instead of
+			// a direct src.
 			const blob = await api.downloadContent(id);
 			if (kind === 'text') {
 				textContent = await blob.text();
-			} else if (kind === 'pdf') {
-				pdfBlob = blob;
+			} else if (kind === 'pdf' || kind === 'docx' || kind === 'xlsx') {
+				officeBlob = blob;
 			} else {
 				objectUrl = URL.createObjectURL(blob);
 			}
@@ -83,14 +113,15 @@
 	async function handleDownload() {
 		if (!item) return;
 		try {
-			// Reuse whatever's already been fetched for the preview (an
-			// object URL for images, a raw Blob for pdf) rather than
-			// fetching the same bytes twice; text/unsupported previews
-			// never fetched either, so get real bytes here for those.
-			let url = objectUrl;
+			// Reuse whatever's already been fetched/minted for the preview
+			// (an object URL for images, the content-token URL for video, a
+			// raw Blob for pdf/docx/xlsx) rather than fetching the same
+			// bytes twice or minting a second token; text/unsupported
+			// previews never got either, so get real bytes here for those.
+			let url = objectUrl || videoUrl;
 			let revoke = false;
 			if (!url) {
-				const blob = pdfBlob ?? (await api.downloadContent(item.id));
+				const blob = officeBlob ?? (await api.downloadContent(item.id));
 				url = URL.createObjectURL(blob);
 				revoke = true;
 			}
@@ -128,11 +159,30 @@
 			<img src={objectUrl} alt={item.name} />
 		</div>
 	{:else if kind === 'pdf'}
-		{#if pdfBlob}
-			<PdfViewer blob={pdfBlob} />
+		{#if officeBlob}
+			{#await import('$lib/PdfViewer.svelte') then { default: PdfViewer }}
+				<PdfViewer blob={officeBlob} />
+			{/await}
+		{/if}
+	{:else if kind === 'docx'}
+		{#if officeBlob}
+			{#await import('$lib/DocxViewer.svelte') then { default: DocxViewer }}
+				<DocxViewer blob={officeBlob} />
+			{/await}
+		{/if}
+	{:else if kind === 'xlsx'}
+		{#if officeBlob}
+			{#await import('$lib/XlsxViewer.svelte') then { default: XlsxViewer }}
+				<XlsxViewer blob={officeBlob} />
+			{/await}
 		{/if}
 	{:else if kind === 'text'}
 		<pre class="preview-text">{textContent}</pre>
+	{:else if kind === 'video'}
+		<div class="preview-frame">
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video src={videoUrl} controls></video>
+		</div>
 	{:else}
 		<div class="empty-state">
 			Preview isn't available for this file type yet.<br />

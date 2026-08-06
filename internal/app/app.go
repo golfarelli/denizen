@@ -58,7 +58,7 @@ func New(cfg config.Config) (*App, error) {
 	userService := service.NewUserService(users)
 
 	authHandler := handler.NewAuthHandler(authService, cfg.InviteTTL)
-	itemHandler := handler.NewItemHandler(itemService)
+	itemHandler := handler.NewItemHandler(itemService, tokens)
 	shareHandler := handler.NewShareHandler(shareService, tokens)
 	userHandler := handler.NewUserHandler(userService)
 

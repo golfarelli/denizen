@@ -3,23 +3,35 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/golfarelli/denizen/internal/apperr"
 	"github.com/golfarelli/denizen/internal/httpio"
 	"github.com/golfarelli/denizen/internal/middleware"
 	"github.com/golfarelli/denizen/internal/model"
 	"github.com/golfarelli/denizen/internal/service"
+	"github.com/golfarelli/denizen/internal/token"
 )
 
 // ItemHandler exposes /api/v1/items* and /api/v1/trash*. Every route here
-// is expected to run behind middleware.RequireAuth.
+// is expected to run behind middleware.RequireAuth, except .../content —
+// see middleware.RequireAuthOrContentToken and ContentToken below.
 type ItemHandler struct {
-	items *service.ItemService
+	items  *service.ItemService
+	tokens *token.Issuer // only for ContentToken
 }
 
-func NewItemHandler(items *service.ItemService) *ItemHandler {
-	return &ItemHandler{items: items}
+func NewItemHandler(items *service.ItemService, tokens *token.Issuer) *ItemHandler {
+	return &ItemHandler{items: items, tokens: tokens}
 }
+
+// contentTokenTTL is generous relative to the access token's own default
+// (15 minutes) on purpose: it's scoped to exactly one item's content (see
+// middleware.RequireAuthOrContentToken), so the blast radius of a leaked
+// one is far narrower — and cutting a video's playback short mid-watch
+// because the token it's streaming through expired would be a worse
+// tradeoff than that narrow extra exposure window.
+const contentTokenTTL = time.Hour
 
 type itemResponse struct {
 	ID        string  `json:"id"`
@@ -132,6 +144,37 @@ func (h *ItemHandler) Content(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	serveFileContent(res, req, item, path)
+}
+
+type contentTokenResponse struct {
+	Token     string `json:"token"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+// ContentToken handles POST /api/v1/items/{id}/content-token — mints a
+// short-lived token good only for GETting this one item's content via a
+// query parameter (?token=...), for <video>/<audio> elements that can't
+// attach the Authorization header this app's own fetch() calls use
+// instead (see lib/api.ts's downloadContent, used by everything else).
+func (h *ItemHandler) ContentToken(res http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	// Same ownership check every other item route already goes through —
+	// confirms the item exists and actually belongs to the caller before
+	// minting anything for it.
+	if _, err := h.items.Get(req.Context(), ownerID(req), id); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+
+	raw, err := h.tokens.NewContentToken(ownerID(req), id, contentTokenTTL)
+	if err != nil {
+		httpio.WriteError(res, apperr.Internal)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, contentTokenResponse{
+		Token:     raw,
+		ExpiresAt: time.Now().Add(contentTokenTTL).Unix(),
+	})
 }
 
 type moveRequest struct {

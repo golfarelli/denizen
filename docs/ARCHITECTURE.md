@@ -52,36 +52,70 @@ setup, and nothing mocked — the browser-side counterpart to the backend's
 own flow tests. See CONTRIBUTING.md's Testing section.
 
 **File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
-here instead of only ever offering a download, for the types the browser can
-render: images, PDFs, and text (`text/*`, plus a small hardcoded extension
+here instead of only ever offering a download, for images, PDFs, video,
+Word/Excel documents, and text (`text/*`, plus a small hardcoded extension
 list — `.md`, `.json`, `.log`, etc. — for cases Go's `mime.TypeByExtension`
-doesn't reliably know about). Anything else falls back to a "preview not
-available" message with a Download button, the same way Google Drive itself
-degrades for a type it can't render. `<img>` can't carry the `Authorization`
-header the content endpoint needs, so the bytes are fetched once as a blob
-(same constraint, same fix, as the download button) and handed to the
-viewer as a `blob:` URL (images) or in-memory text — not streamed via
-`Range` requests the way a direct `<img src>` could. That's a deliberate
-scope cut, not an oversight: fine for images/text, but it's exactly the
-tradeoff that would need revisiting for audio/video preview, where seeking
-through a multi-hundred-MB file without downloading all of it first
-actually matters — out of scope for now (see "Goals for the first release"
-in the README).
+doesn't reliably know about). Anything else (PowerPoint, legacy `.doc`,
+audio, ...) falls back to a "preview not available" message with a
+Download button, the same way Google Drive itself degrades for a type it
+can't render. Every heavy viewer (pdf.js, docx-preview, xlsx) is loaded via
+a dynamic `import()`, not a static one at the top of the file — together
+they're a genuinely large ~290KB (gzipped) payload, and bundling all three
+into this route unconditionally would mean paying for it even to open a
+text file or an image.
 
-PDFs specifically render through **pdf.js** (`lib/PdfViewer.svelte`), not
-an `<iframe src="blob:...">` — that was the first approach, and it does
-work on desktop, but silently shows a blank pane on Android Chrome (real
-hardware, confirmed — the browser's own inline PDF viewer just doesn't
-reliably activate for a blob: URL embedded in an iframe on that platform).
-pdf.js sidesteps the platform's native PDF support entirely by parsing the
-file itself and rendering every page to its own `<canvas>` — slower and a
-real dependency (unlike the hand-rolled PDF *writer* the camera scanner
-uses, see "Mobile: Android PWA" below — generating a simple image-per-page
-PDF is a small, bounded problem; parsing arbitrary PDF byte streams for
-rendering is not, squarely the "genuinely complex infrastructure" category
-CONTRIBUTING.md already carves exceptions for, same reasoning as `tusd`),
-but consistent across every browser instead of depending on each one's own
-plugin behavior.
+Two different ways of getting bytes into a viewer, chosen per format:
+
+- **Images, PDF, Word, Excel, text**: `<img>`/pdf.js/docx-preview/xlsx all
+  either can't carry the `Authorization` header the content endpoint needs
+  (`<img>`) or just want the whole file up front to parse anyway (the other
+  three), so the bytes are fetched once as a blob (same constraint, same
+  fix, as the download button) and handed over as a `blob:` URL, a `Blob`,
+  or in-memory text — not streamed via `Range` requests.
+- **Video**: a real `<video src>` instead, backed by a short-lived
+  *content token* (`internal/token.ContentClaims`, minted by `POST
+  .../content-token`, checked by
+  `middleware.RequireAuthOrContentToken`) passed in the URL's query string
+  rather than a header — the one case among these where downloading the
+  whole file before showing anything would be a real, felt cost (starts
+  playing immediately and seeks around without downloading all of it
+  first, the same as Drive's own video preview, instead of a multi-hundred-
+  MB wait up front). The token is checked against the item id in the URL
+  it's presented on, so even a leaked one is useless for anything but that
+  one file, for at most an hour (`contentTokenTTL`,
+  `internal/handler/item.go`) — deliberately more generous than the access
+  token's own default 15-minute TTL, since cutting a video short mid-watch
+  would be a worse tradeoff than that narrow extra exposure window.
+
+PDFs render through **pdf.js** (`lib/PdfViewer.svelte`), not an `<iframe
+src="blob:...">` — that was the first approach, and it does work on
+desktop, but silently shows a blank pane on Android Chrome (real hardware,
+confirmed — the browser's own inline PDF viewer just doesn't reliably
+activate for a blob: URL embedded in an iframe on that platform). pdf.js
+sidesteps the platform's native PDF support entirely by parsing the file
+itself and rendering every page to its own `<canvas>` — consistent across
+every browser instead of depending on each one's own plugin behavior.
+
+Word/Excel render through **docx-preview** and **xlsx** (SheetJS)
+respectively (`lib/DocxViewer.svelte`, `lib/XlsxViewer.svelte`) — real
+dependencies, not hand-rolled, unlike the PDF *writer* the camera scanner
+uses (see "Mobile: Android PWA" below — generating a simple image-per-page
+PDF is a small, bounded problem; parsing arbitrary Office/PDF byte streams
+for rendering is not, squarely the "genuinely complex infrastructure"
+category CONTRIBUTING.md already carves exceptions for, same reasoning as
+`tusd`). No PowerPoint viewer and no legacy binary `.doc` — docx-preview
+only reads the modern OOXML format; `xlsx`'s bundled legacy parser does
+cover old-style `.xls`, so that one's supported alongside `.xlsx`.
+`xlsx`'s own npm package has two open CVEs SheetJS never backported a fix
+for there (they publish patched releases only from their own CDN now) — installed
+from `cdn.sheetjs.com` directly instead of the npm registry for that reason
+(see `web/package.json`). The spreadsheet itself renders as a plain HTML
+`<table>` built from `sheet_to_json`'s raw cell values through Svelte's own
+`{expression}` interpolation, deliberately not SheetJS's own
+`sheet_to_html` + `{@html}` — the latter would mean trusting that helper's
+escaping to keep a malicious spreadsheet's cell contents from becoming
+markup, where Svelte's normal text interpolation (a plain string, escaped
+like any other untrusted text) needs no such trust at all.
 
 ## Deployment: a single container
 
@@ -175,7 +209,10 @@ Sketch of the main endpoints:
   recursive for folders — never a hard link, see `ItemService.Copy`).
 - **Trash** — `GET /trash`, `POST /items/{id}/restore`, `DELETE /trash/{id}`
   (permanent).
-- **Content** — `GET /items/{id}/content` (streamed, supports `Range`).
+- **Content** — `GET /items/{id}/content` (streamed, supports `Range`;
+  accepts either the normal bearer token or a short-lived `?token=` content
+  token minted by `POST /items/{id}/content-token` — see "File preview"
+  above for why `<video>` needs the latter).
 - **Uploads** — resumable, chunked, via the [tus protocol](https://tus.io/) at
   `/uploads` (see below).
 - **Shares** — `POST /items/{id}/shares`, `GET /shares`, `DELETE

@@ -28,13 +28,18 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.HandleFunc("POST /api/v1/auth/logout", auth.Logout)
 
 	requireAuth := middleware.RequireAuth(tokens)
+	requireAuthOrContentToken := middleware.RequireAuthOrContentToken(tokens)
 
 	mux.Handle("POST /api/v1/invites", requireAuth(middleware.RequireAdmin(http.HandlerFunc(auth.CreateInvite))))
 
 	mux.Handle("POST /api/v1/items", requireAuth(http.HandlerFunc(items.Create)))
 	mux.Handle("GET /api/v1/items", requireAuth(http.HandlerFunc(items.List)))
 	mux.Handle("GET /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Get)))
-	mux.Handle("GET /api/v1/items/{id}/content", requireAuth(http.HandlerFunc(items.Content)))
+	// The only route on a content token as well as a normal bearer token —
+	// see middleware.RequireAuthOrContentToken and ContentToken's own doc
+	// comment for why <video>/<audio> need this and nothing else does.
+	mux.Handle("GET /api/v1/items/{id}/content", requireAuthOrContentToken(http.HandlerFunc(items.Content)))
+	mux.Handle("POST /api/v1/items/{id}/content-token", requireAuth(http.HandlerFunc(items.ContentToken)))
 	mux.Handle("PATCH /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Move)))
 	mux.Handle("DELETE /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Delete)))
 	mux.Handle("POST /api/v1/items/{id}/restore", requireAuth(http.HandlerFunc(items.Restore)))
