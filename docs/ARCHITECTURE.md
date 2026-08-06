@@ -120,6 +120,22 @@ full-text buttons on trash, two more `.item-size` spans and a button on
 shares) and would otherwise squeeze the name down to nothing on a narrow
 screen exactly the way the original all-Unicode-icon kebab did.
 
+A later pass, prompted by Fabio comparing a Drive screenshot directly
+against Denizen's own file list, dropped `.item-list`'s outer bordered
+card in favor of rows sitting straight on the page background (Drive's own
+list has no such box either), and replaced the row-menu's own permanent
+Upload/Scan/New folder button row with a `.fab` — a fixed floating "+"
+button (`routes/+page.svelte`) that only renders below the mobile
+breakpoint, opening a small menu (`.fab-menu`, reusing `.dropdown-menu`'s
+own button styling but `position: fixed` to the viewport rather than
+anchored to a relative wrapper, since there's nothing to anchor to at the
+bottom of the screen) instead of eating a permanent row of vertical space
+a phone can't spare. First cut also dropped the hairline between rows
+entirely; Fabio asked for at least one back, so `.item-row:not(:last-child)`
+keeps a single 1px divider between rows (skipping the last one so it
+doesn't sit flush against whatever follows the list) without reintroducing
+the outer card border.
+
 **File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
 here instead of only ever offering a download, for images, PDFs, video,
 Word/Excel documents, and text (`text/*`, plus a small hardcoded extension
