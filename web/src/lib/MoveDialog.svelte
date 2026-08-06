@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError, type Item } from '$lib/api';
+	import FileIcon from '$lib/FileIcon.svelte';
 
 	interface Crumb {
 		id: string | null;
@@ -104,7 +105,7 @@
 			<div class="item-list">
 				{#each folders as folder (folder.id)}
 					<div class="item-row">
-						<span class="item-icon">📁</span>
+						<span class="item-icon"><FileIcon type="folder" name={folder.name} /></span>
 						<button class="item-name" onclick={() => openFolder(folder)}>{folder.name}</button>
 					</div>
 				{/each}

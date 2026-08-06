@@ -7,6 +7,7 @@
 	import ShareDialog from '$lib/ShareDialog.svelte';
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import ScanDialog from '$lib/ScanDialog.svelte';
+	import FileIcon from '$lib/FileIcon.svelte';
 
 	interface Crumb {
 		id: string | null;
@@ -31,6 +32,17 @@
 	let sharingItem = $state<Item | null>(null);
 	let movingItem = $state<Item | null>(null);
 	let scanOpen = $state(false);
+	// Filters the *current folder's own* listing only — a real search
+	// across the whole tree would need a backend endpoint (and a decision
+	// about how deep/fast that should be) this app doesn't have yet, so
+	// this stays a client-side, current-folder-only filter rather than
+	// pretending to be more than that.
+	let searchQuery = $state('');
+	let visibleItems = $derived(
+		searchQuery.trim()
+			? items.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+			: items
+	);
 
 	// Which row's action menu is open, by item id — null means none. Only
 	// one at a time, mirroring how a real menu behaves (opening another
@@ -116,6 +128,7 @@
 
 	$effect(() => {
 		if ($auth) load(currentFolderId);
+		searchQuery = ''; // a filter scoped to the folder you were just in shouldn't silently apply to the one you navigate to next
 	});
 
 	function openFolder(id: string) {
@@ -312,6 +325,13 @@
 
 <div class="toolbar">
 	<h1 style="margin:0">Files</h1>
+	<div class="search-box">
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+			<circle cx="11" cy="11" r="6" />
+			<path d="m20 20-3.5-3.5" stroke-linecap="round" />
+		</svg>
+		<input type="search" placeholder="Cerca in questa cartella…" bind:value={searchQuery} aria-label="Cerca file" />
+	</div>
 	<div style="display:flex; gap: var(--space-2)">
 		<button class="btn" onclick={() => fileInput.click()}>+ Upload</button>
 		<button class="btn" onclick={() => (scanOpen = true)}>📷 Scan</button>
@@ -365,11 +385,15 @@
 		<p>Loading…</p>
 	{:else if items.length === 0}
 		<div class="empty-state">This folder is empty. Drop files here, or use "+ Upload".</div>
+	{:else if visibleItems.length === 0}
+		<div class="empty-state">No files match "{searchQuery}" in this folder.</div>
 	{:else}
 		<div class="item-list">
-			{#each items as item (item.id)}
+			{#each visibleItems as item (item.id)}
 			<div class="item-row">
-				<span class="item-icon">{item.type === 'folder' ? '📁' : '📄'}</span>
+				<span class="item-icon">
+					<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
+				</span>
 				<button
 					class="item-name"
 					onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}

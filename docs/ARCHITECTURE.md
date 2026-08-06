@@ -51,6 +51,35 @@ binary and a real, disposable SQLite database — not `npm run dev`'s proxy
 setup, and nothing mocked — the browser-side counterpart to the backend's
 own flow tests. See CONTRIBUTING.md's Testing section.
 
+**App shell: a Drive/Nextcloud-shaped sidebar layout**
+(`routes/+layout.svelte`) — a persistent left column (brand, Home/My
+shares/Trash/Admin nav, a storage-usage bar built from `$me`'s
+`quota_bytes`/`storage_used_bytes`) plus a slim topbar (search lives
+per-page instead, see below), replacing an earlier plain full-width topbar.
+Below a 900px media-query breakpoint (`app.css`) the sidebar becomes a
+slide-in drawer instead of a fixed column — `lib/sidebar.ts`'s
+`sidebarOpen` store, toggled by a hamburger button that only renders past
+that breakpoint, closed automatically on every navigation (a plain
+`$effect` on `$page.url.pathname`, so it also catches redirects the layout
+itself triggers, like the auth guard, not just clicks on a drawer link).
+Independent of, and composes cleanly with, the file preview page's own
+`lib/fullscreen.ts` store — fullscreen hides this entire shell (sidebar
+included), checked first in the layout's template.
+
+File/folder rows across the app (the file browser, trash, the move-folder
+picker) get a colored icon per type via `lib/FileIcon.svelte` — a plain
+document silhouette recolored per category (blue for Word, green for
+Excel, red for PDF, etc.), with a short baked-in text label for the
+categories where that's the clearest cue and a small picture/play glyph
+instead for images/video. Deliberately not an attempt to reproduce any
+real application's actual logo — hand-drawing brand marks is far more
+effort than this pass called for, trademark concerns aside.
+
+The file browser's search box (`routes/+page.svelte`) filters the
+*current folder's own* listing client-side by name — not a real recursive
+search across the whole tree, which would need a backend endpoint this app
+doesn't have yet.
+
 **File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
 here instead of only ever offering a download, for images, PDFs, video,
 Word/Excel documents, and text (`text/*`, plus a small hardcoded extension
