@@ -29,6 +29,9 @@ type onlyOfficeConfigResp struct {
 		} `json:"permissions"`
 	} `json:"document"`
 	DocumentType string `json:"documentType"`
+	Type         string `json:"type"`
+	Width        string `json:"width"`
+	Height       string `json:"height"`
 	Token        string `json:"token"`
 }
 
@@ -109,6 +112,12 @@ func TestOnlyOfficeFlow_EnabledReportsStatusAndSignedConfig(t *testing.T) {
 	if cfg.Document.Permissions.Edit {
 		t.Error("Permissions.Edit = true — phase 1 is view-only, editing isn't wired up yet")
 	}
+	if cfg.Type != "desktop" {
+		t.Errorf("Type = %q, want %q (no ?type= sent, so the default)", cfg.Type, "desktop")
+	}
+	if cfg.Width != "100%" || cfg.Height != "100%" {
+		t.Errorf("Width/Height = %q/%q, want \"100%%\"/\"100%%\" — otherwise the editor iframe won't fill its container", cfg.Width, cfg.Height)
+	}
 	if !strings.HasPrefix(cfg.Document.URL, "http://denizen.example.internal/api/v1/items/"+uploaded.ID+"/content?token=") {
 		t.Errorf("Document.URL = %q, want it built from the configured internal base URL with a content token", cfg.Document.URL)
 	}
@@ -147,6 +156,36 @@ func TestOnlyOfficeFlow_EnabledReportsStatusAndSignedConfig(t *testing.T) {
 	doc, ok := claims["document"].(map[string]interface{})
 	if !ok || doc["title"] != "Quarterly Report.docx" {
 		t.Errorf("signed token's own claims = %+v, want document.title = %q", claims, "Quarterly Report.docx")
+	}
+}
+
+func TestOnlyOfficeFlow_EditorTypeFollowsQueryParam(t *testing.T) {
+	ts := newTestServerWithConfig(t, withOnlyOffice("http://onlyoffice.example.internal", "", "http://denizen.example.internal"))
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	uploaded := uploadFile(t, ts, fabio, nil, "notes.docx", []byte("notes"))
+
+	// The client (OnlyOfficeViewer.svelte) is what actually decides this,
+	// based on its own viewport — the server's only job is to trust and
+	// sign whatever valid value it's asked for, or fall back to a sane
+	// default for anything else.
+	mobileRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config?type=mobile", fabio, nil)
+	mobileCfg := decodeJSON[onlyOfficeConfigResp](t, mobileRes)
+	if mobileCfg.Type != "mobile" {
+		t.Errorf("Type with ?type=mobile = %q, want %q", mobileCfg.Type, "mobile")
+	}
+
+	// An invalid value doesn't error the whole request — it just isn't
+	// trusted, falling back to "desktop" the same as no ?type= at all.
+	bogusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config?type=not-a-real-type", fabio, nil)
+	bogusCfg := decodeJSON[onlyOfficeConfigResp](t, bogusRes)
+	if bogusCfg.Type != "desktop" {
+		t.Errorf("Type with an invalid ?type= = %q, want the %q fallback", bogusCfg.Type, "desktop")
 	}
 }
 

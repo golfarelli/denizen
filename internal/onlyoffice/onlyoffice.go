@@ -72,13 +72,34 @@ func DocumentType(ext string) (string, bool) {
 	}
 }
 
+// ValidEditorType reports whether t is one of OnlyOffice's own accepted
+// values for EditorConfig.Type — anything else (including empty/absent,
+// the common case of a caller not sending ?type= at all) falls back to
+// "desktop" rather than erroring; a caller getting this wrong shouldn't
+// break document access, just pick the least-surprising default.
+func ValidEditorType(t string) bool {
+	return t == "desktop" || t == "mobile" || t == "embedded"
+}
+
 // EditorConfig is the JSON object OnlyOffice's DocsAPI.DocEditor expects —
 // see https://api.onlyoffice.com/docs/docs-api/get-started/config/.
 type EditorConfig struct {
 	Document     DocumentConfig `json:"document"`
 	DocumentType string         `json:"documentType"`
 	EditorConfig EditorSettings `json:"editorConfig"`
-	Type         string         `json:"type"`
+	// Type picks OnlyOffice's own UI: "desktop" is the full ribbon
+	// interface (real toolbar buttons, sized for a mouse) — squeezed into
+	// a phone-width viewport it renders tiny and cramped, confirmed live.
+	// "mobile" is the touch-sized alternative purpose-built for this,
+	// which the client requests via ?type= on the config endpoint (see
+	// ItemHandler's caller — handler/onlyoffice.go) based on its own
+	// viewport width, not decided here.
+	Type string `json:"type"`
+	// Width/Height as percentages make the mounted iframe actually fill
+	// its container — without these, DocsAPI.DocEditor doesn't reliably
+	// stretch to fit the parent element's own size.
+	Width  string `json:"width,omitempty"`
+	Height string `json:"height,omitempty"`
 	// Token is populated by Sign, never set directly — it's a signature
 	// *over* the rest of this struct, so it has to be computed after
 	// everything else is final.
