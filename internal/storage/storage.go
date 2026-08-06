@@ -134,6 +134,31 @@ func (s *Store) CopyFile(src, dst string) error {
 	return nil
 }
 
+// WriteFile writes r to path, creating any missing parent directories, and
+// returns the number of bytes written. Unlike CopyFile (which duplicates
+// bytes already sitting on this filesystem), this is for bytes that don't
+// exist as a file here yet — e.g. streamed straight from an HTTP response,
+// like the edited document ReplaceContent (internal/service) fetches from
+// the OnlyOffice Document Server after a save callback.
+func (s *Store) WriteFile(path string, r io.Reader) (int64, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return 0, err
+	}
+	out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return 0, err
+	}
+	defer out.Close()
+
+	n, err := io.Copy(out, r)
+	if err != nil {
+		out.Close()
+		os.Remove(path) // don't leave a partial file behind
+		return 0, err
+	}
+	return n, nil
+}
+
 // FreeBytes reports the actual free space on the filesystem backing the
 // data directory — a safety net checked independently of the logical
 // per-user quota (users.quota_bytes), since quotas assigned to different

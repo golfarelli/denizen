@@ -116,6 +116,16 @@ func (r *ItemRepository) UpdateNameParent(ctx context.Context, id, name string, 
 	return err
 }
 
+// UpdateContent updates a file item's content metadata after its bytes on
+// disk were replaced in place — name and parent are untouched, unlike
+// UpdateNameParent (see internal/service.ReplaceContent, used by the
+// OnlyOffice save callback).
+func (r *ItemRepository) UpdateContent(ctx context.Context, id string, sizeBytes int64, checksum string, updatedAt int64) error {
+	sql := `UPDATE items SET size_bytes = ?, checksum = ?, updated_at = ? WHERE id = ?`
+	_, err := r.cn.ExecContext(ctx, sql, sizeBytes, checksum, updatedAt, id)
+	return err
+}
+
 // SoftDelete moves a single item into the trash (in the database sense —
 // deleted_at is set; the actual file move happens in the service layer,
 // which is also responsible for calling this for every item in a trashed

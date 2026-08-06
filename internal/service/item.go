@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -384,6 +385,81 @@ func (s *ItemService) FinalizeUpload(ctx context.Context, ownerID string, parent
 	if err := s.users.IncrementStorageUsed(ctx, ownerID, sizeBytes); err != nil {
 		return nil, err
 	}
+	return item, nil
+}
+
+// ReplaceContent overwrites an existing file item's bytes in place —
+// name, location, and id are untouched, only content (size, checksum,
+// updated_at) and the owner's storage_used_bytes counter move. Used by the
+// OnlyOffice save callback (internal/handler/onlyoffice.go) once the
+// Document Server reports a document is ready to save; r is the response
+// body of a GET against the URL that callback provides.
+func (s *ItemService) ReplaceContent(ctx context.Context, ownerID, id string, r io.Reader) (*model.Item, error) {
+	item, err := s.Get(ctx, ownerID, id)
+	if err != nil {
+		return nil, err
+	}
+	if item.Type != model.ItemTypeFile {
+		return nil, apperr.Validation("not a file")
+	}
+
+	username, err := s.username(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	targetPath, err := s.pathOf(ctx, item, username)
+	if err != nil {
+		return nil, err
+	}
+
+	// Staged first, same as FinalizeUpload above and for the same reason
+	// (storage.Store.StagingRoot's own doc comment): the final move is then
+	// a cheap, atomic rename rather than a copy, and a failed/truncated
+	// download from the Document Server never touches the file that's live
+	// on disk until the rename below actually happens.
+	if err := s.storage.CreateFolder(s.storage.StagingRoot()); err != nil {
+		return nil, err
+	}
+	stagePath := filepath.Join(s.storage.StagingRoot(), idgen.New())
+	written, err := s.storage.WriteFile(stagePath, r)
+	if err != nil {
+		return nil, err
+	}
+
+	// The definitive quota check (see CheckQuota's own doc comment) against
+	// the size *delta*, not the new total — a shrinking edit should never
+	// be blocked by a quota that's already fully used.
+	if err := s.CheckQuota(ctx, ownerID, written-item.SizeBytes); err != nil {
+		_ = s.storage.Remove(stagePath)
+		return nil, err
+	}
+
+	checksum, err := s.storage.Checksum(stagePath)
+	if err != nil {
+		_ = s.storage.Remove(stagePath)
+		return nil, err
+	}
+
+	// os.Rename (storage.Store.Rename) replaces an existing destination
+	// atomically on the same filesystem — no separate remove-then-move
+	// window where targetPath briefly doesn't exist for anyone reading it
+	// concurrently.
+	if err := s.storage.Rename(stagePath, targetPath); err != nil {
+		_ = s.storage.Remove(stagePath)
+		return nil, err
+	}
+
+	now := s.now().Unix()
+	if err := s.items.UpdateContent(ctx, id, written, checksum, now); err != nil {
+		return nil, err
+	}
+	if err := s.users.IncrementStorageUsed(ctx, ownerID, written-item.SizeBytes); err != nil {
+		return nil, err
+	}
+
+	item.SizeBytes = written
+	item.Checksum = &checksum
+	item.UpdatedAt = now
 	return item, nil
 }
 

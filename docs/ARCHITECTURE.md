@@ -127,7 +127,7 @@ escaping to keep a malicious spreadsheet's cell contents from becoming
 markup, where Svelte's normal text interpolation (a plain string, escaped
 like any other untrusted text) needs no such trust at all.
 
-### Optional: OnlyOffice for real Office fidelity (and, eventually, editing)
+### Optional: OnlyOffice for real Office fidelity and editing
 
 docx-preview/xlsx get the content across, but their rendering is
 approximate — real layout/formatting fidelity, and any editing at all,
@@ -147,13 +147,26 @@ exist. This matters specifically because Denizen is open source: a
 self-hoster who doesn't want a second heavy container isn't paying for one
 just because the code path exists.
 
-**This is phase 1: viewing, not editing.** `EditorConfig.EditorConfig.Mode`
-is hardcoded to `"view"` (`internal/handler/onlyoffice.go`) — no
-`callbackUrl` is wired up, and there's no server-side handling yet for the
-Document Server's save-back POST. Editing is real, substantial follow-up
-work (session/lock semantics, validating and applying the callback, a UI
-affordance for "editing" vs "viewing"), deliberately not bundled into this
-first pass.
+**Editing is real, not just viewing.** `EditorConfig.EditorConfig.Mode` is
+`"edit"` (`internal/handler/onlyoffice.go`), and the config carries a
+`callbackUrl` (`internal/onlyoffice.Client.CallbackURL`) the Document
+Server POSTs to once a user's done editing. `POST
+/items/{id}/onlyoffice-callback` (`OnlyOfficeHandler.Callback`) handles
+that — mounted with no `RequireAuth` (there's no logged-in user on this
+server-to-server path), authenticated instead by verifying a JWT signed
+with the same shared secret used to sign the editor config itself
+(`onlyoffice.Client.VerifyCallback`, checked against either an
+`Authorization: Bearer` header or, for older Document Server versions, a
+`token` field in the callback body). On status `2`/`6` ("ready to
+save"/"force save"), it GETs the edited document from the URL the callback
+provides — the Document Server's own storage, not a URL Denizen minted —
+and writes it over the item's content (`ItemService.ReplaceContent`): staged
+into the same tus staging area uploads use, then an atomic rename over the
+existing file, size/checksum/`updated_at` and the owner's
+`storage_used_bytes` updated to match. No collaborative-editing session/lock
+semantics beyond what the Document Server itself provides — multiple people
+editing the same file concurrently follows OnlyOffice's own conflict
+handling, not anything Denizen adds.
 
 **How it fits together** (OnlyOffice's own config-and-callback model, not
 strictly the Microsoft WOPI protocol Collabora Online uses, but the same
@@ -285,7 +298,10 @@ Sketch of the main endpoints:
 - **OnlyOffice** (optional — see "File preview" above) — `GET
   /onlyoffice/status`, `GET /items/{id}/onlyoffice-config`. Both report
   "disabled"/404 rather than erroring when no Document Server is
-  configured.
+  configured. Plus `POST /items/{id}/onlyoffice-callback`, the Document
+  Server's own save notification — the one route in this list with no
+  `RequireAuth` (see this section's "Editing is real" paragraph above for
+  why, and how it's authenticated instead).
 - **Uploads** — resumable, chunked, via the [tus protocol](https://tus.io/) at
   `/uploads` (see below).
 - **Shares** — `POST /items/{id}/shares`, `GET /shares`, `DELETE

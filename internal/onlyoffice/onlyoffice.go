@@ -7,14 +7,18 @@
 // by a caller that checks it first — see internal/handler/onlyoffice.go),
 // so the whole feature compiles down to nothing when unconfigured.
 //
-// This is phase 1 (docs/ARCHITECTURE.md's "OnlyOffice integration"): open
-// a document for viewing. Editing (mode: "edit", the save-back callback,
-// and validating it) is deliberately not built yet — a real second phase,
-// not a corner cut here.
+// Phase 2 (docs/ARCHITECTURE.md's "OnlyOffice integration"): real editing.
+// The Document Server is given mode: "edit" and a callbackUrl; when the
+// user's done, it POSTs back a save notification (see VerifyCallback and
+// handler/onlyoffice.go's Callback) rather than Denizen polling for
+// changes.
 package onlyoffice
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -54,6 +58,16 @@ func (c *Client) APIJSURL() string {
 // a Docker network (see Config's own field doc comment).
 func (c *Client) DocumentURL(itemID, contentToken string) string {
 	return c.documentBaseURL + "/api/v1/items/" + itemID + "/content?token=" + contentToken
+}
+
+// CallbackURL builds the address the Document Server POSTs a save
+// notification to (see Callback in handler/onlyoffice.go) — same
+// documentBaseURL as DocumentURL, for the same reason: it's the Document
+// Server reaching Denizen, not a browser, so it needs whatever address
+// actually routes between the two (often not the address a browser reached
+// Denizen on — see Config's own field doc comment).
+func (c *Client) CallbackURL(itemID string) string {
+	return c.documentBaseURL + "/api/v1/items/" + itemID + "/onlyoffice-callback"
 }
 
 // DocumentType maps a file extension to the three editor families
@@ -121,8 +135,15 @@ type Permissions struct {
 }
 
 type EditorSettings struct {
-	Mode string   `json:"mode"` // "view" — always, for now; see package doc
-	User UserInfo `json:"user"`
+	Mode string `json:"mode"` // "edit" — see package doc
+	// CallbackURL is where the Document Server POSTs a save notification
+	// once the user's done editing (see Callback in handler/onlyoffice.go)
+	// — omitted entirely for a document type that isn't actually editable
+	// (there's none, currently every DocumentType this package recognizes
+	// is editable, but the omitempty keeps this honest if that ever
+	// changes).
+	CallbackURL string   `json:"callbackUrl,omitempty"`
+	User        UserInfo `json:"user"`
 }
 
 type UserInfo struct {
@@ -157,4 +178,45 @@ func (c *Client) Sign(cfg EditorConfig) (string, error) {
 	}
 
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(c.jwtSecret)
+}
+
+// VerifyCallback authenticates a save-notification POST from the Document
+// Server (see handler/onlyoffice.go's Callback) — there's no logged-in
+// user on this server-to-server path, so instead of a session/content
+// token this checks for a JWT signed with the same shared secret used to
+// sign the editor config in the first place (Sign above). Per OnlyOffice's
+// own JWT behavior, that token normally arrives as an `Authorization:
+// Bearer` header, but some deployments/versions instead (or additionally)
+// put it in the callback body's own "token" field, so both are checked.
+// Only the signature is verified, not the claims against body — a valid
+// signature already proves the caller knows the shared secret, which is
+// exactly what a Denizen deployment and its own Document Server (and no
+// one else) are configured with.
+func (c *Client) VerifyCallback(authHeader string, body []byte) error {
+	if len(c.jwtSecret) == 0 {
+		// No secret configured: the deployer opted out of JWT verification
+		// (matches Sign's own "" when unconfigured) — nothing to check.
+		return nil
+	}
+
+	raw := strings.TrimPrefix(authHeader, "Bearer ")
+	if raw == "" {
+		var withToken struct {
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(body, &withToken); err == nil {
+			raw = withToken.Token
+		}
+	}
+	if raw == "" {
+		return errors.New("onlyoffice: callback missing authorization token")
+	}
+
+	_, err := jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("onlyoffice: unexpected callback signing method %v", t.Header["alg"])
+		}
+		return c.jwtSecret, nil
+	})
+	return err
 }
