@@ -439,10 +439,18 @@ main.fullscreen {
 	   without clipping content that's supposed to escape the row. */
 }
 
+/* Grid, not flex: the mobile breakpoint below reflows this into two rows
+   (name on its own line, modified+size stacked as a subtitle under it —
+   the same shape Drive's own mobile app rows use, rather than this app's
+   old approach of just hiding those columns once they didn't fit) without
+   touching the markup's element order, which a flex-wrap approach can't
+   do cleanly once icon and row-menu both need to span both lines. */
 .item-row {
-	display: flex;
+	display: grid;
+	grid-template-columns: auto 1fr auto auto auto;
+	grid-template-areas: 'icon name modified size menu';
 	align-items: center;
-	gap: var(--space-3);
+	column-gap: var(--space-3);
 	padding: var(--space-3) var(--space-4);
 	border-bottom: 1px solid var(--color-border);
 	background: var(--color-bg);
@@ -473,7 +481,23 @@ main.fullscreen {
 	z-index: 1;
 }
 
+/* For rows that don't fit the file browser's 5-column shape (icon / name /
+   modified / size / row-menu) — trash's own rows are just icon, name, and
+   two plain action buttons, with no modified/size cells to place, which
+   would otherwise leave two of .item-row's named grid columns empty
+   without actually collapsing their column-gap. A plain flex row sidesteps
+   that: .item-name's own flex: 1 (see below) still applies unchanged. */
+.item-row-flex {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
 .item-name {
+	grid-area: name;
+	/* Also usable under .item-row-flex (a plain flex row, not this grid) —
+	   flex and grid-area don't conflict, each is a no-op under the other's
+	   layout mode, so one rule covers both. */
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
@@ -493,11 +517,13 @@ main.fullscreen {
 }
 
 .item-icon {
+	grid-area: icon;
 	display: flex;
 	flex-shrink: 0;
 }
 
 .item-size {
+	grid-area: size;
 	color: var(--color-text-muted);
 	font-size: 0.85rem;
 	min-width: 5rem;
@@ -505,6 +531,7 @@ main.fullscreen {
 }
 
 .item-modified {
+	grid-area: modified;
 	color: var(--color-text-muted);
 	font-size: 0.85rem;
 	min-width: 7rem;
@@ -512,13 +539,20 @@ main.fullscreen {
 	flex-shrink: 0;
 }
 
-/* Mirrors .item-row's own column layout (icon / name / modified / size /
-   row-menu) so headers line up with the cells below them — Drive's and
-   Nextcloud's own file lists both have this row, this one didn't before. */
+.row-menu {
+	grid-area: menu;
+}
+
+/* Mirrors .item-row's own column layout so headers line up with the cells
+   below them — Drive's and Nextcloud's own file lists both have this row,
+   this one didn't before. Same grid-template as .item-row (and the same
+   mobile override below), just with text labels instead of real cells. */
 .item-list-header {
-	display: flex;
+	display: grid;
+	grid-template-columns: auto 1fr auto auto auto;
+	grid-template-areas: 'icon name modified size menu';
 	align-items: center;
-	gap: var(--space-3);
+	column-gap: var(--space-3);
 	padding: 0 var(--space-4) var(--space-2);
 	color: var(--color-text-muted);
 	font-size: 0.8rem;
@@ -527,15 +561,25 @@ main.fullscreen {
 }
 
 .item-list-header .item-icon {
-	width: 1.35rem;
+	grid-area: icon;
+	width: 1.75rem;
 }
 
 .item-list-header .item-name-header {
-	flex: 1;
+	grid-area: name;
 	min-width: 0;
 }
 
+.item-list-header .item-modified {
+	grid-area: modified;
+}
+
+.item-list-header .item-size {
+	grid-area: size;
+}
+
 .item-list-header .row-menu {
+	grid-area: menu;
 	width: 2.25rem;
 }
 
@@ -673,10 +717,10 @@ dialog::backdrop {
    absolutely-positioned panel anchored to this wrapper, not the native
    Popover API: positioning a popover next to its trigger needs CSS anchor
    positioning, whose mobile browser support isn't reliable enough yet for
-   a menu whose whole point is to work well on mobile. */
+   a menu whose whole point is to work well on mobile. (grid-area: menu
+   itself is set alongside .item-row's other cells, above.) */
 .row-menu {
 	position: relative;
-	flex-shrink: 0;
 }
 
 .icon-btn {
@@ -685,6 +729,21 @@ dialog::backdrop {
 	justify-content: center;
 	padding: var(--space-2);
 	line-height: 1;
+}
+
+/* The row kebab specifically goes borderless/flat — Drive's own row menu
+   trigger is just an icon, no visible button box, until you actually
+   interact with it. .icon-btn elsewhere (the upload panel's dismiss
+   button, ScanDialog's page-remove button) keeps .btn's normal bordered
+   look, so this is scoped to .row-menu rather than a blanket override. */
+.row-menu .icon-btn {
+	border-color: transparent;
+	background: none;
+}
+
+.row-menu .icon-btn:hover {
+	background: var(--color-border);
+	border-color: transparent;
 }
 
 .dropdown-menu {
@@ -737,37 +796,59 @@ dialog::backdrop {
 	padding-top: calc(var(--space-2) + 2px);
 }
 
-/* Mobile: the item name is the scarce space, so the secondary columns go
-   first — the kebab menu already carries every action, so there's no row
-   of buttons left to fight for room the way there was before. Modified
-   goes before Size: Drive/Nextcloud both treat size as the less useful of
-   the two on a small screen. */
+/* Mobile: two lines per row (name, then modified+size as a muted subtitle
+   underneath) instead of the desktop's separate columns — Drive's own
+   mobile app shows exactly this shape, and it's strictly better than this
+   app's previous approach of just display:none-ing the columns that
+   didn't fit, which silently lost that information on a phone instead of
+   reflowing it. Icon and the row-menu both span the full two-row height
+   (repeating their area name down both grid-template-areas rows) so they
+   stay vertically centered against the row as a whole, not just its first
+   line. No markup changes needed for this — grid-area placement doesn't
+   care about DOM source order. */
 @media (max-width: 640px) {
-	.item-modified {
-		display: none;
-	}
-
-	.item-list-header .item-modified {
-		display: none;
-	}
-}
-
-@media (max-width: 480px) {
-	.item-size {
-		display: none;
-	}
-
 	.item-list-header {
 		display: none;
 	}
 
 	.item-row {
-		padding: var(--space-3);
-		gap: var(--space-2);
+		grid-template-columns: auto 1fr auto auto;
+		grid-template-areas:
+			'icon name  name  menu'
+			'icon modified size menu';
+		row-gap: 2px;
+		padding: var(--space-2) var(--space-3);
+	}
+
+	.item-name {
+		align-self: end;
+	}
+
+	.item-modified,
+	.item-size {
+		align-self: start;
+		min-width: 0;
+		text-align: left;
+		font-size: 0.78rem;
 	}
 
 	.toolbar {
 		flex-wrap: wrap;
+	}
+
+	/* .item-row-flex rows (trash/shares/admin/move-picker — see its own
+	   comment above) aren't a fixed 5-column shape, so they can't reuse the
+	   grid reflow above: some carry two full-text buttons ("Restore",
+	   "Delete forever") that would otherwise squeeze the name down to
+	   nothing on a narrow screen. Wrapping instead — name on its own full
+	   line, then whatever buttons/fields follow flow below it — keeps the
+	   name actually readable instead of silently crushing it. */
+	.item-row-flex {
+		flex-wrap: wrap;
+	}
+
+	.item-row-flex .item-name {
+		flex-basis: 100%;
 	}
 }
 

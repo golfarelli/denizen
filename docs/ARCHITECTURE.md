@@ -67,11 +67,13 @@ Independent of, and composes cleanly with, the file preview page's own
 included), checked first in the layout's template.
 
 File/folder rows across the app (the file browser, trash, the move-folder
-picker) get a colored icon per type via `lib/FileIcon.svelte` — a plain
-document silhouette recolored per category (blue for Word, green for
-Excel, red for PDF, etc.), with a short baked-in text label for the
-categories where that's the clearest cue and a small picture/play glyph
-instead for images/video. Deliberately not an attempt to reproduce any
+picker) get a colored icon per type via `lib/FileIcon.svelte`. Files render
+as a rounded-square color chip per category (blue for Word, green for
+Excel, red for PDF, etc.) with a short baked-in text label for the
+categories where that's the clearest cue, or a small picture/play glyph
+instead for images/video; folders stay a flat colored silhouette with no
+chip, the same distinction Drive itself draws between a document-type
+badge and a container shape. Deliberately not an attempt to reproduce any
 real application's actual logo — hand-drawing brand marks is far more
 effort than this pass called for, trademark concerns aside.
 
@@ -81,8 +83,7 @@ search across the whole tree, which would need a backend endpoint this app
 doesn't have yet.
 
 The file browser's own list (`routes/+page.svelte`) also picked up a
-column header row (Name/Modified/Size, mirroring `.item-row`'s own flex
-layout so cells line up under it) and a real "Modified" column
+column header row (Name/Modified/Size) and a real "Modified" column
 (`item.updated_at`, formatted via the browser's own locale rather than a
 hardcoded one — the same `toLocaleDateString()` approach Drive/Nextcloud's
 own date columns take), and its row action menu's items (Download/Rename/
@@ -92,6 +93,32 @@ glyph (the row menu's own "⋮" trigger, included) depends on the browser
 having a font that covers it, which a stripped-down headless Chromium
 (exactly what CI/E2E runs against) doesn't reliably have — confirmed by
 screenshotting one that rendered fully blank before the fix.
+
+`.item-row` is CSS Grid (`grid-template-areas: 'icon name modified size
+menu'`), not flex, specifically so the mobile breakpoint can reflow it into
+two lines — name on its own line, modified+size stacked as a muted
+subtitle underneath it, the shape Drive's own mobile app uses — by
+redefining `grid-template-areas` into two rows without touching the
+markup's element order at all (grid placement doesn't care about DOM
+order, unlike flex-wrap). This replaced an earlier approach that just
+`display: none`'d the modified/size columns once they didn't fit, which
+silently lost that information on a phone instead of reflowing it.
+Icon and the row-menu both span both rows (their area name repeats down
+both `grid-template-areas` rows) so they stay vertically centered against
+the row as a whole.
+
+Not every `.item-row` is this 5-column shape, though — trash, shares,
+admin, and the move-folder picker all reuse `.item-row` for a simpler
+icon+name+buttons row that doesn't have modified/size cells to place.
+Those get an `.item-row-flex` modifier class instead, falling back to a
+plain flex row (`.item-name`'s own `flex: 1` still applies — grid-area and
+flex are simply no-ops under each other's layout mode, so one rule serves
+both) rather than leaving two of the grid's named columns permanently
+empty. Its own mobile breakpoint wraps the row instead of reflowing it
+into named areas, since what follows the name varies per page (a couple of
+full-text buttons on trash, two more `.item-size` spans and a button on
+shares) and would otherwise squeeze the name down to nothing on a narrow
+screen exactly the way the original all-Unicode-icon kebab did.
 
 **File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
 here instead of only ever offering a download, for images, PDFs, video,

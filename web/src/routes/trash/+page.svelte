@@ -62,7 +62,7 @@
 {:else}
 	<div class="item-list">
 		{#each items as item (item.id)}
-			<div class="item-row">
+			<div class="item-row item-row-flex">
 				<span class="item-icon">
 					<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
 				</span>

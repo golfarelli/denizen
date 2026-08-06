@@ -2,12 +2,17 @@
 	// A small set of colored, generic file/folder glyphs — deliberately not
 	// an attempt to reproduce any real application's actual logo (leaving
 	// trademark concerns aside, hand-drawing a dozen brand marks is far more
-	// effort than a graphic touch-up calls for). Each category is a plain
-	// document silhouette in a distinct color, with either a short 2-4
-	// letter label baked into the SVG (word/excel/powerpoint/pdf/text/
-	// archive, where a label is genuinely the clearest cue) or a small glyph
-	// instead (image/video, where a picture/play icon reads faster than
-	// text would).
+	// effort than a graphic touch-up calls for).
+	//
+	// Files render as a rounded-square color chip (Drive's own mobile app
+	// icon shape — see the file-browser row comparison this was modeled
+	// after) with either a short 2-4 letter label in the middle
+	// (word/excel/powerpoint/pdf/text/archive, where a label is genuinely
+	// the clearest cue) or a small glyph instead (image/video, where a
+	// picture/play icon reads faster than text would). Folders stay a flat
+	// colored silhouette with no chip background, matching how Drive
+	// itself draws the two differently — a folder is a container shape,
+	// not a document type badge.
 	let { type, name, mimeType }: { type: 'file' | 'folder'; name: string; mimeType?: string } = $props();
 
 	const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic', 'avif']);
@@ -100,39 +105,62 @@
 </script>
 
 {#if kind === 'folder'}
-	<svg viewBox="0 0 24 24" class="file-icon" aria-hidden="true">
+	<svg viewBox="0 0 24 24" class="file-icon file-icon-folder" aria-hidden="true">
 		<path fill={color} d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" />
 	</svg>
 {:else}
-	<svg viewBox="0 0 24 24" class="file-icon" aria-hidden="true">
-		<!-- Page silhouette with a corner cut to read as "a folded page"
-		     rather than a plain rectangle. -->
-		<path fill={color} d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6Z" />
-		<path fill="#fff" fill-opacity="0.35" d="M14 2v5a1 1 0 0 0 1 1h5Z" />
+	<span class="file-icon-chip" style:background={color} aria-hidden="true">
 		{#if kind === 'image'}
-			<circle cx="9" cy="10.5" r="1.3" fill="#fff" />
-			<path fill="#fff" d="M5 18.5 8.2 14l2.6 2.8L14.5 12l4.5 6.5H5Z" />
+			<svg viewBox="0 0 24 24" class="file-icon-glyph">
+				<circle cx="8.5" cy="9.5" r="1.6" fill="#fff" />
+				<path fill="#fff" d="M4 18.5 8 13l3 3.2L15.5 11l4.5 7.5H4Z" />
+			</svg>
 		{:else if kind === 'video'}
-			<path fill="#fff" d="M10 8.6v6.8a.6.6 0 0 0 .93.5l5.4-3.4a.6.6 0 0 0 0-1.02l-5.4-3.4a.6.6 0 0 0-.93.52Z" />
+			<svg viewBox="0 0 24 24" class="file-icon-glyph">
+				<path fill="#fff" d="M9 8v8a.9.9 0 0 0 1.36.77l6.5-4a.9.9 0 0 0 0-1.54l-6.5-4A.9.9 0 0 0 9 8Z" />
+			</svg>
 		{:else if label}
-			<text
-				x="12"
-				y="18"
-				text-anchor="middle"
-				font-size="6.5"
-				font-weight="700"
-				fill="#fff"
-				font-family="system-ui, sans-serif">{label}</text
-			>
+			<span class="file-icon-label">{label}</span>
+		{:else}
+			<svg viewBox="0 0 24 24" class="file-icon-glyph">
+				<path
+					fill="#fff"
+					fill-opacity="0.9"
+					d="M6 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5H6Z"
+				/>
+			</svg>
 		{/if}
-	</svg>
+	</span>
 {/if}
 
 <style>
 	.file-icon {
-		width: 1.35rem;
-		height: 1.35rem;
+		width: 1.75rem;
+		height: 1.75rem;
 		flex-shrink: 0;
 		display: block;
+	}
+
+	.file-icon-chip {
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 6px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.file-icon-label {
+		color: #fff;
+		font-size: 0.55rem;
+		font-weight: 700;
+		font-family: system-ui, sans-serif;
+		letter-spacing: 0.02em;
+	}
+
+	.file-icon-glyph {
+		width: 65%;
+		height: 65%;
 	}
 </style>
