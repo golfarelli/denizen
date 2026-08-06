@@ -10,6 +10,7 @@ import (
 	"github.com/golfarelli/denizen/internal/config"
 	"github.com/golfarelli/denizen/internal/db"
 	"github.com/golfarelli/denizen/internal/handler"
+	"github.com/golfarelli/denizen/internal/onlyoffice"
 	"github.com/golfarelli/denizen/internal/repository"
 	"github.com/golfarelli/denizen/internal/router"
 	"github.com/golfarelli/denizen/internal/service"
@@ -61,6 +62,11 @@ func New(cfg config.Config) (*App, error) {
 	itemHandler := handler.NewItemHandler(itemService, tokens)
 	shareHandler := handler.NewShareHandler(shareService, tokens)
 	userHandler := handler.NewUserHandler(userService)
+	// oo.Enabled() is false whenever cfg.OnlyOfficeURL is unset (the
+	// default) — see onlyoffice.Client's own doc comment — so this is
+	// always safe to construct and wire in, feature-flagged or not.
+	oo := onlyoffice.New(cfg.OnlyOfficeURL, cfg.OnlyOfficeJWTSecret, cfg.OnlyOfficeDocumentBaseURL)
+	onlyOfficeHandler := handler.NewOnlyOfficeHandler(itemService, oo, tokens)
 
 	uploadHandler, err := upload.NewHandler(store.StagingRoot(), itemService, cfg.MaxUploadSizeBytes)
 	if err != nil {
@@ -68,7 +74,7 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	mux, err := router.New(authHandler, itemHandler, shareHandler, userHandler, uploadHandler, tokens)
+	mux, err := router.New(authHandler, itemHandler, shareHandler, userHandler, onlyOfficeHandler, uploadHandler, tokens)
 	if err != nil {
 		cn.Close()
 		return nil, err

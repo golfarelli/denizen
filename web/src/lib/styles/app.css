@@ -572,3 +572,13 @@ dialog::backdrop {
 	border: 1px solid var(--color-border);
 	padding: var(--space-1) var(--space-2);
 }
+
+.onlyoffice-container {
+	/* DocsAPI.DocEditor mounts an iframe that fills this element — it needs
+	   a real height to render into, not just "however tall its content
+	   ends up being" the way the other viewers above can get away with. */
+	height: 85vh;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	overflow: hidden;
+}

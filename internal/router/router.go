@@ -19,7 +19,7 @@ import (
 // /api/v1/users additionally require an admin (middleware.RequireAdmin).
 // The /api/v1/auth/* routes, the public /s/{token} routes (for whoever
 // opens a share link), and the frontend itself require neither.
-func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, users *handler.UserHandler, uploads http.Handler, tokens *token.Issuer) (http.Handler, error) {
+func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, users *handler.UserHandler, onlyOffice *handler.OnlyOfficeHandler, uploads http.Handler, tokens *token.Issuer) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/register", auth.Register)
@@ -51,6 +51,12 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.Handle("POST /api/v1/items/{id}/shares", requireAuth(http.HandlerFunc(shares.Create)))
 	mux.Handle("GET /api/v1/shares", requireAuth(http.HandlerFunc(shares.ListMine)))
 	mux.Handle("DELETE /api/v1/shares/{id}", requireAuth(http.HandlerFunc(shares.Revoke)))
+
+	// Both routes report "disabled" rather than 404/error when no Document
+	// Server is configured — see OnlyOfficeHandler's own doc comment — so
+	// these are always safe to mount, whether or not the feature is used.
+	mux.Handle("GET /api/v1/onlyoffice/status", requireAuth(http.HandlerFunc(onlyOffice.Status)))
+	mux.Handle("GET /api/v1/items/{id}/onlyoffice-config", requireAuth(http.HandlerFunc(onlyOffice.Config)))
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(users.Me)))
 	mux.Handle("GET /api/v1/users", requireAuth(middleware.RequireAdmin(http.HandlerFunc(users.List))))
