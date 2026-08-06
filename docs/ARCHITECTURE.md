@@ -398,11 +398,19 @@ Sketch of the main endpoints:
 - **Uploads** — resumable, chunked, via the [tus protocol](https://tus.io/) at
   `/uploads` (see below).
 - **Shares** — `POST /items/{id}/shares`, `GET /shares`, `DELETE
-  /shares/{id}`, and public (no-auth) `GET /s/{token}` / `GET
-  /s/{token}/content`. Revocation and listing are keyed by the share's own
-  `id`, not its token — a deliberate deviation from an earlier draft of this
-  sketch, made once the token-hashing decision (see the database schema
-  section) meant the raw token can't be shown again after creation to key
+  /shares/{id}`, and public (no-auth) `GET /s/{token}/meta` / `GET
+  /s/{token}/content`. Note: `/s/{token}` itself (no suffix) is
+  *deliberately not* one of ShareHandler's own routes — that's the URL
+  `POST .../shares` hands back and the one a visitor actually opens, and it
+  has to reach the frontend's own `/s/[token]` landing page (routes/s/
+  [token]/+page.svelte), not this raw JSON metadata endpoint. See "Public
+  share links" below for the whole story — this used to be one and the
+  same path, which meant opening a share link showed a visitor a JSON blob
+  instead of Denizen's own UI. Revocation and listing are keyed by the
+  share's own `id`, not its token — a deliberate deviation from an earlier
+  draft of this sketch, made once the token-hashing decision (see the
+  database schema section) meant the raw token can't be shown again after
+  creation to key
   anything by.
 - **Users** (admin) — `GET /users`, `PATCH /users/{id}`
   (`quota_bytes`, `disabled`). Unlike items' PATCH (a full replacement, see
@@ -473,6 +481,36 @@ share's own `id` rather than the token itself (see the API sketch above).
 `requires_auth` only asks "is this visitor logged in to *some* Denizen
 account", not "do they own anything" — consistent with link-based sharing
 rather than per-user ACLs.
+
+**The landing page** (`routes/s/[token]/+page.svelte`) is what a visitor
+actually sees at the bare `/s/{token}` URL — Denizen's own chrome-free
+page (`lib/fullscreen.ts`, set regardless of `$auth`, the same as the
+private file preview page: a visitor here may not have an account at all,
+so the sidebar's My shares/Trash/Admin links would be actively wrong to
+show), not the raw `GET /s/{token}/meta` JSON that URL used to serve
+directly before this existed. It fetches that JSON itself (via
+`api.getShareMeta`, which — unlike the `login`/`register`/`logout` calls
+that go through a deliberately credential-free `publicReq` — still goes
+through the normal `apiFetch`, so a visitor who *does* happen to be logged
+in gets their access token attached automatically, which is what actually
+satisfies a `requires_auth` share for them) and renders a name/size/icon
+card with a Download button (a plain blob fetch + `<a download>`, same
+pattern as the private file browser's own download; images additionally
+get fetched and shown inline, since "here's a photo" is a common enough
+share to be worth the one extra request). A `requires_auth` share an
+anonymous visitor hits shows a "Log in" prompt instead of erroring — the
+metadata fetch's 401 is what triggers that state — linking to
+`/login?then=<this page's own path>`, so `routes/login/+page.svelte`
+lands them back here (not just `/`) once they've actually logged in;
+`then` is validated as a same-app path (must start with a single `/`) to
+rule out a scheme-relative `//evil.com` open-redirect. A revoked/expired/
+unknown token all look identical from a visitor's side (a plain "this
+link is no longer available", matching `ShareService.Resolve`'s own
+never-distinguish-them design, mirrored in the frontend rather than
+re-litigated there) — see `+layout.svelte`'s route guard for how `/s/`
+paths are exempted from the app-wide "no session → bounce to /login"
+check that would otherwise undermine all of this for a logged-out
+visitor before the page ever got a chance to render.
 
 ## Quotas
 

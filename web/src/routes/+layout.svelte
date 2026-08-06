@@ -17,11 +17,21 @@
 
 	const PUBLIC_ROUTES = ['/login', '/register'];
 
+	// /s/[token] (a share landing page) is public too, but not a fixed
+	// path like the two above — it's a whole dynamic segment, so it needs
+	// its own check rather than a plain PUBLIC_ROUTES.includes(). A
+	// requires_auth share still gets gated, just by that page itself (its
+	// own needsLogin state, from a 401 on the metadata fetch) rather than
+	// this blanket guard bouncing every visitor to /login before the page
+	// even gets a chance to show what's actually being shared.
+	function isPublicRoute(pathname: string): boolean {
+		return PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/s/');
+	}
+
 	// Route guard for this SPA: no server-side hook can do this (ssr is off
 	// — see +layout.ts), so it happens client-side, on every navigation.
 	$effect(() => {
-		const isPublicRoute = PUBLIC_ROUTES.includes($page.url.pathname);
-		if (!$auth && !isPublicRoute) {
+		if (!$auth && !isPublicRoute($page.url.pathname)) {
 			goto('/login');
 		}
 	});

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { setAuth } from '$lib/auth';
@@ -8,6 +9,18 @@
 	let error = $state('');
 	let loading = $state(false);
 
+	// Lands back wherever the visitor actually came from — mainly
+	// routes/s/[token]/+page.svelte sending someone here for a
+	// requires_auth share it can't show them yet (see its own needsLogin
+	// state). Only ever a same-app path: anything not starting with a
+	// single "/" (a scheme-relative "//evil.com" included) is rejected
+	// rather than trusted as a redirect target.
+	function redirectTarget(): string {
+		const then = $page.url.searchParams.get('then');
+		if (then && then.startsWith('/') && !then.startsWith('//')) return then;
+		return '/';
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
@@ -15,7 +28,7 @@
 		try {
 			const tokens = await api.login(username, password);
 			setAuth({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token });
-			await goto('/');
+			await goto(redirectTarget());
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'Something went wrong.';
 		} finally {

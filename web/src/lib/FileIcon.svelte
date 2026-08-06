@@ -13,7 +13,17 @@
 	// colored silhouette with no chip background, matching how Drive
 	// itself draws the two differently — a folder is a container shape,
 	// not a document type badge.
-	let { type, name, mimeType }: { type: 'file' | 'folder'; name: string; mimeType?: string } = $props();
+	// size defaults to this component's normal list-row size; callers that
+	// need it bigger (currently just routes/s/[token]/+page.svelte's share
+	// landing card, where it's the one focal element on an otherwise
+	// mostly empty page) pass a larger CSS length instead of fighting this
+	// component's own scoped styles from outside.
+	let {
+		type,
+		name,
+		mimeType,
+		size = '1.75rem'
+	}: { type: 'file' | 'folder'; name: string; mimeType?: string; size?: string } = $props();
 
 	const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic', 'avif']);
 	const VIDEO_EXT = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v']);
@@ -105,11 +115,11 @@
 </script>
 
 {#if kind === 'folder'}
-	<svg viewBox="0 0 24 24" class="file-icon file-icon-folder" aria-hidden="true">
+	<svg viewBox="0 0 24 24" class="file-icon file-icon-folder" style:--file-icon-size={size} aria-hidden="true">
 		<path fill={color} d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" />
 	</svg>
 {:else}
-	<span class="file-icon-chip" style:background={color} aria-hidden="true">
+	<span class="file-icon-chip" style:background={color} style:--file-icon-size={size} aria-hidden="true">
 		{#if kind === 'image'}
 			<svg viewBox="0 0 24 24" class="file-icon-glyph">
 				<circle cx="8.5" cy="9.5" r="1.6" fill="#fff" />
@@ -135,16 +145,19 @@
 
 <style>
 	.file-icon {
-		width: 1.75rem;
-		height: 1.75rem;
+		width: var(--file-icon-size, 1.75rem);
+		height: var(--file-icon-size, 1.75rem);
 		flex-shrink: 0;
 		display: block;
 	}
 
 	.file-icon-chip {
-		width: 1.75rem;
-		height: 1.75rem;
-		border-radius: 6px;
+		width: var(--file-icon-size, 1.75rem);
+		height: var(--file-icon-size, 1.75rem);
+		/* Scales with the chip instead of a fixed 6px, which read as
+		   barely-rounded once the size prop pushes this well past its
+		   normal list-row footprint. */
+		border-radius: calc(var(--file-icon-size, 1.75rem) * 0.21);
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -153,7 +166,7 @@
 
 	.file-icon-label {
 		color: #fff;
-		font-size: 0.55rem;
+		font-size: calc(var(--file-icon-size, 1.75rem) * 0.31);
 		font-weight: 700;
 		font-family: system-ui, sans-serif;
 		letter-spacing: 0.02em;

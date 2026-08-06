@@ -69,8 +69,14 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 
 	// Public: no RequireAuth wrapper. Whoever opens a share link may not
 	// have (or need) a Denizen account at all — see ShareService.Resolve
-	// for how requires_auth is still honored per-share.
-	mux.HandleFunc("GET /s/{token}", shares.PublicMetadata)
+	// for how requires_auth is still honored per-share. Deliberately NOT
+	// "GET /s/{token}" for the metadata route — that exact path is what a
+	// visitor actually opens in a browser (it's the URL ShareHandler.Create
+	// hands back), and it needs to reach the SPA's own /s/[token] landing
+	// page (routes/s/[token]/+page.svelte), not this raw JSON endpoint.
+	// Bare "/s/{token}" is intentionally left unregistered here so it falls
+	// through to the catch-all frontend handler below.
+	mux.HandleFunc("GET /s/{token}/meta", shares.PublicMetadata)
 	mux.HandleFunc("GET /s/{token}/content", shares.PublicContent)
 
 	// tusd routes every verb (POST/PATCH/HEAD/GET/DELETE) itself once past
