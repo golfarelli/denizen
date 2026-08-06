@@ -807,6 +807,15 @@ dialog::backdrop {
    line. No markup changes needed for this — grid-area placement doesn't
    care about DOM source order. */
 @media (max-width: 640px) {
+	/* Drive/Nextcloud both run their mobile lists close to the screen
+	   edge — main.with-topbar's normal var(--space-6) (24px) side padding
+	   reads as a lot of wasted width once the viewport itself is only
+	   ~390px, nearly a quarter of it given up to margins on a screen
+	   that's already tight on room. */
+	main.with-topbar {
+		padding: var(--space-4) var(--space-3);
+	}
+
 	.item-list-header {
 		display: none;
 	}
