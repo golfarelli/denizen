@@ -144,7 +144,7 @@
 						></div>
 					</div>
 					<span class="storage-label">
-						{formatGB($me.storage_used_bytes)} GB di {formatGB($me.quota_bytes)} GB
+						{formatGB($me.storage_used_bytes)} GB of {formatGB($me.quota_bytes)} GB
 					</span>
 				</div>
 			{/if}
@@ -157,13 +157,13 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				Esci
+				Log out
 			</button>
 		</aside>
 
 		<div class="app-main">
 			<header class="topbar">
-				<button class="hamburger" aria-label="Apri il menu" onclick={() => sidebarOpen.set(!$sidebarOpen)}>
+				<button class="hamburger" aria-label="Open menu" onclick={() => sidebarOpen.set(!$sidebarOpen)}>
 					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
 					</svg>

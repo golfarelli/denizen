@@ -504,6 +504,41 @@ main.fullscreen {
 	text-align: right;
 }
 
+.item-modified {
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	min-width: 7rem;
+	text-align: right;
+	flex-shrink: 0;
+}
+
+/* Mirrors .item-row's own column layout (icon / name / modified / size /
+   row-menu) so headers line up with the cells below them — Drive's and
+   Nextcloud's own file lists both have this row, this one didn't before. */
+.item-list-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: 0 var(--space-4) var(--space-2);
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.item-list-header .item-icon {
+	width: 1.35rem;
+}
+
+.item-list-header .item-name-header {
+	flex: 1;
+	min-width: 0;
+}
+
+.item-list-header .row-menu {
+	width: 2.25rem;
+}
+
 .toolbar {
 	display: flex;
 	justify-content: space-between;
@@ -645,8 +680,10 @@ dialog::backdrop {
 }
 
 .icon-btn {
-	padding: var(--space-1) var(--space-3);
-	font-size: 1.1rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
 	line-height: 1;
 }
 
@@ -682,19 +719,45 @@ dialog::backdrop {
 	cursor: pointer;
 }
 
+.dropdown-menu button svg {
+	flex-shrink: 0;
+}
+
 .dropdown-menu button:hover {
 	background: var(--color-surface);
 }
 
+/* Separated from the actions above it, same as Drive's and Nextcloud's own
+   row menus — a destructive action sitting flush against "Make a copy"
+   invites a misclick in a way a visible break doesn't. */
 .dropdown-menu button.danger {
 	color: var(--color-danger);
+	border-top: 1px solid var(--color-border);
+	margin-top: 2px;
+	padding-top: calc(var(--space-2) + 2px);
 }
 
-/* Mobile: the item name is the scarce space, so the size column goes first
-   — the kebab menu already carries every action, so there's no row of
-   buttons left to fight for room the way there was before. */
+/* Mobile: the item name is the scarce space, so the secondary columns go
+   first — the kebab menu already carries every action, so there's no row
+   of buttons left to fight for room the way there was before. Modified
+   goes before Size: Drive/Nextcloud both treat size as the less useful of
+   the two on a small screen. */
+@media (max-width: 640px) {
+	.item-modified {
+		display: none;
+	}
+
+	.item-list-header .item-modified {
+		display: none;
+	}
+}
+
 @media (max-width: 480px) {
 	.item-size {
+		display: none;
+	}
+
+	.item-list-header {
 		display: none;
 	}
 

@@ -80,6 +80,19 @@ The file browser's search box (`routes/+page.svelte`) filters the
 search across the whole tree, which would need a backend endpoint this app
 doesn't have yet.
 
+The file browser's own list (`routes/+page.svelte`) also picked up a
+column header row (Name/Modified/Size, mirroring `.item-row`'s own flex
+layout so cells line up under it) and a real "Modified" column
+(`item.updated_at`, formatted via the browser's own locale rather than a
+hardcoded one — the same `toLocaleDateString()` approach Drive/Nextcloud's
+own date columns take), and its row action menu's items (Download/Rename/
+Move/Make a copy/Share/Delete) each got a real inline SVG icon in place of
+a leading Unicode character. That swap wasn't purely cosmetic: a Unicode
+glyph (the row menu's own "⋮" trigger, included) depends on the browser
+having a font that covers it, which a stripped-down headless Chromium
+(exactly what CI/E2E runs against) doesn't reliably have — confirmed by
+screenshotting one that rendered fully blank before the fix.
+
 **File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
 here instead of only ever offering a download, for images, PDFs, video,
 Word/Excel documents, and text (`text/*`, plus a small hardcoded extension
