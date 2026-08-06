@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { api, ApiError, type Item } from '$lib/api';
+	import { fullscreen } from '$lib/fullscreen';
 	// Dynamically imported below (`{#await import(...)}`), not statically
 	// here: pdf.js + docx-preview + xlsx together are a genuinely heavy
 	// ~290KB (gzipped) payload, and a static import would bundle all three
@@ -70,6 +71,14 @@
 	}
 
 	onMount(async () => {
+		// This page's viewers (OnlyOffice above all, but really any of them
+		// on a phone) benefit far more from real screen space than Denizen's
+		// own nav chrome being visible while looking at a file does — see
+		// lib/fullscreen.ts and routes/+layout.svelte. Set synchronously
+		// (before the first await below) so the chrome disappears the moment
+		// this page mounts, not after the fetch resolves.
+		fullscreen.set(true);
+
 		// Always present at runtime for a matched /file/[id] route — the type
 		// only allows undefined because SvelteKit's params type is shared
 		// with routes that don't have this segment at all.
@@ -137,6 +146,7 @@
 
 	onDestroy(() => {
 		if (objectUrl) URL.revokeObjectURL(objectUrl);
+		fullscreen.set(false);
 	});
 
 	async function handleDownload() {
@@ -169,55 +179,63 @@
 	<title>{item?.name ?? 'File'} · Denizen</title>
 </svelte:head>
 
-<nav class="breadcrumb">
-	<a href={backHref}>← Back</a>
-</nav>
+<div class="preview-page">
+	<!-- Deliberately outside the loading/error/item branches below and kept
+	     to one slim row: this is the only nav left once fullscreen hides the
+	     app's own topbar (see onMount above), so Back needs to stay reachable
+	     even while the file is still loading or failed to load, not just once
+	     item is populated. -->
+	<header class="preview-header">
+		<a href={backHref} class="preview-back" aria-label="Back">←</a>
+		<span class="preview-title">{item?.name ?? 'Loading…'}</span>
+		{#if item}
+			<button class="btn" onclick={handleDownload}>Download</button>
+		{/if}
+	</header>
 
-{#if loading}
-	<p>Loading…</p>
-{:else if error}
-	<p class="error-text">{error}</p>
-{:else if item}
-	<div class="toolbar">
-		<h1 style="margin:0; word-break: break-word">{item.name}</h1>
-		<button class="btn" onclick={handleDownload}>Download</button>
+	<div class="preview-content">
+		{#if loading}
+			<p>Loading…</p>
+		{:else if error}
+			<p class="error-text">{error}</p>
+		{:else if item}
+			{#if kind === 'image'}
+				<div class="preview-frame">
+					<img src={objectUrl} alt={item.name} />
+				</div>
+			{:else if kind === 'pdf'}
+				{#if officeBlob}
+					{#await import('$lib/PdfViewer.svelte') then { default: PdfViewer }}
+						<PdfViewer blob={officeBlob} />
+					{/await}
+				{/if}
+			{:else if kind === 'docx' || kind === 'xlsx' || kind === 'pptx'}
+				{#if onlyOffice?.enabled}
+					{#await import('$lib/OnlyOfficeViewer.svelte') then { default: OnlyOfficeViewer }}
+						<OnlyOfficeViewer itemId={item.id} apiJsUrl={onlyOffice.api_js_url ?? ''} />
+					{/await}
+				{:else if kind === 'docx' && officeBlob}
+					{#await import('$lib/DocxViewer.svelte') then { default: DocxViewer }}
+						<DocxViewer blob={officeBlob} />
+					{/await}
+				{:else if kind === 'xlsx' && officeBlob}
+					{#await import('$lib/XlsxViewer.svelte') then { default: XlsxViewer }}
+						<XlsxViewer blob={officeBlob} />
+					{/await}
+				{/if}
+			{:else if kind === 'text'}
+				<pre class="preview-text">{textContent}</pre>
+			{:else if kind === 'video'}
+				<div class="preview-frame">
+					<!-- svelte-ignore a11y_media_has_caption -->
+					<video src={videoUrl} controls></video>
+				</div>
+			{:else}
+				<div class="empty-state">
+					Preview isn't available for this file type yet.<br />
+					Use Download above to open it.
+				</div>
+			{/if}
+		{/if}
 	</div>
-
-	{#if kind === 'image'}
-		<div class="preview-frame">
-			<img src={objectUrl} alt={item.name} />
-		</div>
-	{:else if kind === 'pdf'}
-		{#if officeBlob}
-			{#await import('$lib/PdfViewer.svelte') then { default: PdfViewer }}
-				<PdfViewer blob={officeBlob} />
-			{/await}
-		{/if}
-	{:else if kind === 'docx' || kind === 'xlsx' || kind === 'pptx'}
-		{#if onlyOffice?.enabled}
-			{#await import('$lib/OnlyOfficeViewer.svelte') then { default: OnlyOfficeViewer }}
-				<OnlyOfficeViewer itemId={item.id} apiJsUrl={onlyOffice.api_js_url ?? ''} />
-			{/await}
-		{:else if kind === 'docx' && officeBlob}
-			{#await import('$lib/DocxViewer.svelte') then { default: DocxViewer }}
-				<DocxViewer blob={officeBlob} />
-			{/await}
-		{:else if kind === 'xlsx' && officeBlob}
-			{#await import('$lib/XlsxViewer.svelte') then { default: XlsxViewer }}
-				<XlsxViewer blob={officeBlob} />
-			{/await}
-		{/if}
-	{:else if kind === 'text'}
-		<pre class="preview-text">{textContent}</pre>
-	{:else if kind === 'video'}
-		<div class="preview-frame">
-			<!-- svelte-ignore a11y_media_has_caption -->
-			<video src={videoUrl} controls></video>
-		</div>
-	{:else}
-		<div class="empty-state">
-			Preview isn't available for this file type yet.<br />
-			Use Download above to open it.
-		</div>
-	{/if}
-{/if}
+</div>

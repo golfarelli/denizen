@@ -149,9 +149,15 @@ test('opening a text file shows its content, and back returns to the same folder
 	const expectedText = readFileSync(TEXT_PATH, 'utf8');
 	await expect(page.locator('.preview-text')).toHaveText(expectedText);
 
-	await page.getByRole('link', { name: '← Back' }).click();
+	// The whole point of fullscreen mode (lib/fullscreen.ts): the app's own
+	// nav chrome gets out of the way while looking at a file, and comes
+	// back the moment you leave.
+	await expect(page.locator('.topbar')).toBeHidden();
+
+	await page.getByRole('link', { name: 'Back' }).click();
 	await expect(page).toHaveURL(/folder=/);
 	await expect(page.locator('.breadcrumb').getByText(folderName)).toBeVisible();
+	await expect(page.locator('.topbar')).toBeVisible();
 });
 
 test('a file type without preview support falls back to a download prompt', async ({ page }) => {

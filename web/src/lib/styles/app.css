@@ -168,6 +168,24 @@ main.with-topbar {
 	padding: var(--space-6);
 }
 
+/* Set by routes/+layout.svelte from lib/fullscreen.ts — the app's own nav
+   bar and this main's usual centered/padded reading width both give way
+   entirely to whatever the page wants the full viewport for (currently
+   just the file preview page's viewers, OnlyOffice most of all — its own
+   editor benefits far more from real screen space than this app's chrome
+   being visible while looking at a file does). 100dvh over 100vh: the
+   dynamic viewport unit accounts for a mobile browser's address bar
+   showing/hiding, where a plain 100vh would leave a gap or clip content
+   depending on its state at load time. */
+main.fullscreen {
+	max-width: none;
+	margin: 0;
+	padding: 0;
+	height: 100dvh;
+	display: flex;
+	flex-direction: column;
+}
+
 .auth-page {
 	min-height: 100vh;
 	display: flex;
@@ -477,6 +495,52 @@ dialog::backdrop {
 	background: rgba(0, 0, 0, 0.75);
 }
 
+/* /file/[id] — scoped to that route alone (unlike .breadcrumb/.toolbar
+   above, which routes/+page.svelte and MoveDialog.svelte also use). Fills
+   main.fullscreen: a fixed-height header row plus a content area that takes
+   whatever's left, so the viewer classes below can go from the old
+   vh-based heights (a guess at how much of the viewport the app's own
+   chrome was leaving free) to a real height: 100% of that content area. */
+.preview-page {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.preview-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
+	border-bottom: 1px solid var(--color-border);
+	flex: none;
+}
+
+.preview-back {
+	color: inherit;
+	text-decoration: none;
+	font-size: 1.2rem;
+	line-height: 1;
+	flex: none;
+}
+
+.preview-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.preview-content {
+	flex: 1;
+	min-height: 0;
+	padding: var(--space-3);
+	display: flex;
+	flex-direction: column;
+}
+
 .preview-frame {
 	display: flex;
 	align-items: center;
@@ -485,13 +549,14 @@ dialog::backdrop {
 	border-radius: var(--radius);
 	background: var(--color-surface);
 	overflow: hidden;
-	min-height: 40vh;
+	flex: 1;
+	min-height: 0;
 }
 
 .preview-frame img,
 .preview-frame video {
 	max-width: 100%;
-	max-height: 80vh;
+	max-height: 100%;
 	display: block;
 }
 
@@ -500,7 +565,7 @@ dialog::backdrop {
 	flex-direction: column;
 	align-items: center;
 	gap: var(--space-3);
-	max-height: 85vh;
+	height: 100%;
 	overflow-y: auto;
 	padding: var(--space-3);
 	border: 1px solid var(--color-border);
@@ -519,7 +584,7 @@ dialog::backdrop {
 	border-radius: var(--radius);
 	background: var(--color-surface);
 	padding: var(--space-4);
-	max-height: 80vh;
+	height: 100%;
 	overflow: auto;
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -528,7 +593,7 @@ dialog::backdrop {
 }
 
 .docx-container {
-	max-height: 85vh;
+	height: 100%;
 	overflow: auto;
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
@@ -547,15 +612,21 @@ dialog::backdrop {
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
+/* .xlsx-tabs and .xlsx-table-wrap are XlsxViewer's own root-level elements
+   (no wrapper — Svelte allows multiple root nodes), so both land as direct
+   flex children of .preview-content above: the tabs row takes its natural
+   height, the table wrapper takes whatever's left. */
 .xlsx-tabs {
 	display: flex;
 	flex-wrap: wrap;
 	gap: var(--space-2);
 	margin-bottom: var(--space-3);
+	flex: none;
 }
 
 .xlsx-table-wrap {
-	max-height: 80vh;
+	flex: 1;
+	min-height: 0;
 	max-width: 100%;
 	overflow: auto;
 	border: 1px solid var(--color-border);
@@ -577,7 +648,7 @@ dialog::backdrop {
 	/* DocsAPI.DocEditor mounts an iframe that fills this element — it needs
 	   a real height to render into, not just "however tall its content
 	   ends up being" the way the other viewers above can get away with. */
-	height: 85vh;
+	height: 100%;
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
 	overflow: hidden;
