@@ -1,16 +1,18 @@
-// Package token issues and verifies Denizen's two kinds of credential: a
-// short-lived JWT access token, and opaque bearer tokens (refresh tokens,
-// share links) — both built the same way, since both need to be revocable
-// and both are looked up by presenting the token itself.
+// Package token issues and verifies Denizen's credentials: two self-
+// contained, short-lived JWTs (an access token, and a narrower content
+// token scoped to one item's content — see ContentClaims), and opaque
+// bearer tokens (refresh tokens, share links) looked up by presenting the
+// token itself.
 //
-// The JWT and the opaque tokens are deliberately different shapes: the
-// access token is self-contained (any handler can verify it without a DB
-// round trip) and short-lived, so there's little value in tracking it for
-// revocation. Opaque tokens are long-lived and *must* be revocable (logout,
-// rotation, a stolen device, revoking a share link), so each is a random
-// value whose hash — never the raw value — is what's actually stored (in
-// `refresh_tokens`/`shares`); a database leak alone doesn't let anyone
-// replay a session or a "should have been revoked" share.
+// The JWTs and the opaque tokens are deliberately different shapes: both
+// JWTs are short-lived enough (minutes, not weeks) that there's little
+// value in tracking them for revocation — any handler can verify one
+// without a DB round trip. Opaque tokens are long-lived and *must* be
+// revocable (logout, rotation, a stolen device, revoking a share link), so
+// each is a random value whose hash — never the raw value — is what's
+// actually stored (in `refresh_tokens`/`shares`); a database leak alone
+// doesn't let anyone replay a session or a "should have been revoked"
+// share.
 package token
 
 import (
@@ -65,6 +67,52 @@ func (i *Issuer) NewAccessToken(userID string, isAdmin bool, ttl time.Duration) 
 // returns its claims.
 func (i *Issuer) ParseAccessToken(raw string) (*Claims, error) {
 	claims := &Claims{}
+	_, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return i.secret, nil
+	})
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+	return claims, nil
+}
+
+// ContentClaims is the payload of a content token — narrower than an
+// access token on purpose: good only for GETting one specific item's
+// content, not for calling any other endpoint, since RequireAuthOrContentToken
+// (internal/middleware) checks ItemID against the URL it's presented on.
+type ContentClaims struct {
+	UserID string `json:"sub"`
+	ItemID string `json:"item_id"`
+	jwt.RegisteredClaims
+}
+
+// NewContentToken issues a signed, short-lived token good only for GETting
+// itemID's content — for <video>/<audio> elements, which (unlike this
+// app's own fetch() calls) can't attach a custom Authorization header, so
+// this rides along in the URL's query string instead. Self-contained JWT
+// like the access token, not an opaque+stored one like a refresh token or
+// share: it's short-lived enough that revocability isn't worth a DB round
+// trip on every content request.
+func (i *Issuer) NewContentToken(userID, itemID string, ttl time.Duration) (string, error) {
+	now := time.Now()
+	claims := ContentClaims{
+		UserID: userID,
+		ItemID: itemID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(i.secret)
+}
+
+// ParseContentToken verifies the signature and expiry of a content token
+// and returns its claims.
+func (i *Issuer) ParseContentToken(raw string) (*ContentClaims, error) {
+	claims := &ContentClaims{}
 	_, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken

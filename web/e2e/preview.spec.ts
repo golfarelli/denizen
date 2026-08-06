@@ -5,6 +5,9 @@ import { readFileSync } from 'fs';
 const PHOTO_PATH = path.join(import.meta.dirname, 'fixtures', 'sample-photo.jpg');
 const PDF_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.pdf');
 const TEXT_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.txt');
+const VIDEO_PATH = path.join(import.meta.dirname, 'fixtures', 'sample-video.webm');
+const DOCX_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.docx');
+const XLSX_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.xlsx');
 
 test('opening an image file shows an inline preview', async ({ page }) => {
 	await page.goto('/');
@@ -54,6 +57,75 @@ test('opening a PDF renders it inline via canvas', async ({ page }) => {
 		return false;
 	});
 	expect(hasContent).toBe(true);
+});
+
+test('opening a video streams it via a content-token URL, not a full blob download', async ({ page }) => {
+	await page.goto('/');
+	await page.locator('input[type="file"]').setInputFiles(VIDEO_PATH);
+
+	const row = page.locator('.item-row', { hasText: 'sample-video.webm' });
+	await expect(row).toBeVisible({ timeout: 15_000 });
+	await row.getByRole('button', { name: 'sample-video.webm', exact: true }).click();
+
+	await expect(page).toHaveURL(/\/file\/.+/);
+	const video = page.locator('.preview-frame video');
+	await expect(video).toBeVisible();
+
+	// A real, direct element src carrying a short-lived content token — not
+	// a blob: URL — is the whole point (see api.ts's getContentToken):
+	// only a direct src, not a pre-fetched blob, gets real HTTP Range
+	// streaming from the browser's own <video> implementation.
+	const src = await video.getAttribute('src');
+	expect(src).toMatch(/^\/api\/v1\/items\/.+\/content\?token=/);
+
+	// And it actually decoded real media over that URL — not just an
+	// element with a plausible-looking src that silently failed to load.
+	await expect
+		.poll(async () => video.evaluate((el: HTMLVideoElement) => el.readyState))
+		.toBeGreaterThanOrEqual(1); // HAVE_METADATA — duration/dimensions are known
+	await expect
+		.poll(async () => video.evaluate((el: HTMLVideoElement) => el.videoWidth))
+		.toBeGreaterThan(0);
+});
+
+test('opening a Word document renders its real text content', async ({ page }) => {
+	await page.goto('/');
+	await page.locator('input[type="file"]').setInputFiles(DOCX_PATH);
+
+	const row = page.locator('.item-row', { hasText: 'sample.docx' });
+	await expect(row).toBeVisible({ timeout: 15_000 });
+	await row.getByRole('button', { name: 'sample.docx', exact: true }).click();
+
+	await expect(page).toHaveURL(/\/file\/.+/);
+	// The real assertion: actual document text made it into the rendered
+	// DOM, not just that a container element appeared — docx-preview
+	// parses the .docx (a zip of XML) and rebuilds it as HTML, so this only
+	// passes if that whole pipeline actually ran.
+	await expect(page.locator('.docx-container')).toContainText('Fixture Word document');
+	await expect(page.locator('.docx-container')).toContainText('Used by preview E2E tests.');
+});
+
+test('opening a spreadsheet renders real cell values and switches sheets', async ({ page }) => {
+	await page.goto('/');
+	await page.locator('input[type="file"]').setInputFiles(XLSX_PATH);
+
+	const row = page.locator('.item-row', { hasText: 'sample.xlsx' });
+	await expect(row).toBeVisible({ timeout: 15_000 });
+	await row.getByRole('button', { name: 'sample.xlsx', exact: true }).click();
+
+	await expect(page).toHaveURL(/\/file\/.+/);
+	// Real parsed cell values from the fixture's first sheet ("Results"),
+	// not just an empty table shell.
+	const table = page.locator('.xlsx-table');
+	await expect(table).toContainText('Alice');
+	await expect(table).toContainText('92');
+	await expect(table).toContainText('Bob');
+
+	// Switching sheets actually re-reads the workbook rather than always
+	// showing the first one.
+	await page.getByRole('button', { name: 'Notes', exact: true }).click();
+	await expect(table).toContainText('Second sheet');
+	await expect(table).not.toContainText('Alice');
 });
 
 test('opening a text file shows its content, and back returns to the same folder', async ({ page }) => {

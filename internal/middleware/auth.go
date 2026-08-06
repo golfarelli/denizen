@@ -35,6 +35,42 @@ func RequireAuth(issuer *token.Issuer) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireAuthOrContentToken accepts either a normal "Authorization: Bearer
+// <access token>" header (exactly like RequireAuth) or a content token via
+// the ?token= query parameter — used only by the content-serving route,
+// for <video>/<audio> elements that (unlike this app's own fetch() calls)
+// can't attach a custom header. A content token is checked against the
+// item id in the URL it's presented on, so even a leaked one is useless
+// for anything but that one file. Whichever form is presented,
+// ClaimsFromContext sees the same shape either way — the wrapped handler
+// doesn't need to know or care which one was used.
+func RequireAuthOrContentToken(issuer *token.Issuer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+			if claims, ok := parseBearer(issuer, req); ok {
+				ctx := context.WithValue(req.Context(), claimsContextKey, claims)
+				next.ServeHTTP(res, req.WithContext(ctx))
+				return
+			}
+
+			raw := req.URL.Query().Get("token")
+			if raw == "" {
+				httpio.WriteError(res, apperr.Unauthorized)
+				return
+			}
+			contentClaims, err := issuer.ParseContentToken(raw)
+			if err != nil || contentClaims.ItemID != req.PathValue("id") {
+				httpio.WriteError(res, apperr.Unauthorized)
+				return
+			}
+
+			claims := &token.Claims{UserID: contentClaims.UserID}
+			ctx := context.WithValue(req.Context(), claimsContextKey, claims)
+			next.ServeHTTP(res, req.WithContext(ctx))
+		})
+	}
+}
+
 // RequireAdmin rejects any request whose claims (already attached by
 // RequireAuth, which must run first in the chain) don't belong to an admin.
 // Nothing else about the request is resource-specific — an admin may act on

@@ -165,6 +165,16 @@ export const api = {
 		return res.blob();
 	},
 
+	// <video>/<audio> can't attach the Authorization header either (same
+	// reason downloadContent above fetches bytes itself) — but unlike an
+	// image or a PDF, a video benefits from real HTTP Range streaming
+	// (instant start, seeking without downloading the whole file first),
+	// which only a direct element src gets, not a blob: URL. This mints a
+	// token scoped to exactly this item that rides along in that src's
+	// query string instead of a header — see internal/token.ContentClaims.
+	getContentToken: (id: string) =>
+		req<{ token: string; expires_at: number }>(`/api/v1/items/${id}/content-token`, jsonInit({})),
+
 	createShare: (itemId: string, requiresAuth: boolean, expiresAt: number | null) =>
 		req<Share>(`/api/v1/items/${itemId}/shares`, jsonInit({ requires_auth: requiresAuth, expires_at: expiresAt })),
 
