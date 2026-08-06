@@ -220,6 +220,41 @@ func TestOnlyOfficeFlow_RejectsUnsupportedExtension(t *testing.T) {
 	}
 }
 
+// TestOnlyOfficeFlow_PDF covers the extension OnlyOffice's PDF support
+// added (onlyoffice.DocumentType) — everything else about the config
+// (signing, permissions, callback URL) is already exercised generically by
+// TestOnlyOfficeFlow_EnabledReportsStatusAndSignedConfig for docx, so this
+// only checks what's actually different for a PDF: the DocumentType value
+// itself. Deliberately doesn't cover images — OnlyOffice has no image
+// support at all, see onlyoffice.DocumentType's own doc comment.
+func TestOnlyOfficeFlow_PDF(t *testing.T) {
+	ts := newTestServerWithConfig(t, withOnlyOffice("http://onlyoffice.example.internal", "", "http://denizen.example.internal"))
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	uploaded := uploadFile(t, ts, fabio, nil, "Contract.pdf", []byte("%PDF-1.4 pretend bytes"))
+	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", fabio, nil)
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("config for .pdf: got status %d, body: %s", res.StatusCode, body)
+	}
+	cfg := decodeJSON[onlyOfficeConfigResp](t, res)
+	if cfg.DocumentType != "pdf" {
+		t.Errorf("DocumentType = %q, want %q", cfg.DocumentType, "pdf")
+	}
+	if cfg.Document.FileType != "pdf" {
+		t.Errorf("Document.FileType = %q, want %q", cfg.Document.FileType, "pdf")
+	}
+	if !cfg.Document.Permissions.Edit {
+		t.Error("Permissions.Edit = false for a PDF, want true — same edit-enabled config as every other supported type")
+	}
+}
+
 func TestOnlyOfficeFlow_EnforcesOwnership(t *testing.T) {
 	ts := newTestServerWithConfig(t, withOnlyOffice("http://onlyoffice.example.internal", "", "http://denizen.example.internal"))
 	ctx := t.Context()

@@ -14,7 +14,7 @@ your own personal cloud storage, running on your own hardware.
 > via the OS share sheet, and a camera-based document scanner that saves
 > captures as a multi-page PDF, same as Google Drive's own scan flow.
 > Installability and the share target both need HTTPS (or `localhost`) to
-> work at all — see "Running with Docker" below. Word/Excel/PowerPoint
+> work at all — see "Running with Docker" below. Word/Excel/PowerPoint/PDF
 > documents can also open with genuine, high-fidelity rendering **and real
 > editing** via an optional OnlyOffice Document Server integration — a real
 > second container, entirely opt-in, see `docker-compose.onlyoffice.yml`.
@@ -108,7 +108,7 @@ a secure context (HTTPS or `localhost`), so reaching Denizen over plain HTTP
 via a LAN IP, as in a minimal home-server setup, means those two features
 are silently unavailable — the rest of the app is unaffected either way.
 
-### Optional: high-fidelity Word/Excel/PowerPoint viewing
+### Optional: high-fidelity Word/Excel/PowerPoint/PDF editing
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.onlyoffice.yml up -d --build
@@ -117,10 +117,13 @@ docker compose -f docker-compose.yml -f docker-compose.onlyoffice.yml up -d --bu
 Adds a real [OnlyOffice Document Server](https://github.com/ONLYOFFICE/DocumentServer)
 — genuinely heavy (its own container, its own real Office-compatible
 rendering engine), so it's an entirely separate, opt-in overlay rather than
-part of the default single-container setup. Without it, Word/Excel still
-preview client-side (docx-preview/xlsx) with lower fidelity and no
-PowerPoint support at all. See `docker-compose.onlyoffice.yml`'s own
-comments for the environment variables both sides need to agree on. Real
+part of the default single-container setup. Without it, Word/Excel/PDF
+still preview client-side (docx-preview/xlsx/pdf.js) with lower fidelity,
+no editing, and no PowerPoint support at all. Not images, though, with or
+without OnlyOffice — it's a document engine, not an image viewer, so those
+always use the plain in-browser preview. See
+`docker-compose.onlyoffice.yml`'s own comments for the environment
+variables both sides need to agree on. Real
 editing, saved back to Denizen's own storage — see `docs/ARCHITECTURE.md`
 for how the save callback is authenticated and applied.
 
