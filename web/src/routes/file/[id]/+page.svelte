@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { api, ApiError, type Item } from '$lib/api';
+	import PdfViewer from '$lib/PdfViewer.svelte';
 
 	// Extensions treated as text even when the server's mime_type guess
 	// (Go's mime.TypeByExtension, or whatever the browser reported as
@@ -19,7 +20,8 @@
 	let loading = $state(true);
 	let error = $state('');
 	let kind = $state<PreviewKind>('unsupported');
-	let objectUrl = $state('');
+	let objectUrl = $state(''); // image previews only — see PdfViewer for why pdf doesn't use one
+	let pdfBlob = $state<Blob | null>(null);
 	let textContent = $state('');
 
 	// Set by the file list when navigating here (routes/+page.svelte) so
@@ -53,13 +55,17 @@
 
 			if (kind === 'unsupported') return; // no bytes to fetch — nothing to preview
 
-			// <img>/<iframe> can't carry the Authorization header content
-			// needs (same constraint as download — see api.downloadContent's
-			// own comment), so the bytes are fetched here and handed to the
-			// viewer as a blob: URL / in-memory text instead of a direct src.
+			// <img> can't carry the Authorization header content needs (same
+			// constraint as download — see api.downloadContent's own
+			// comment), so the bytes are fetched here and handed to the
+			// viewer as a blob: URL / in-memory text / raw Blob (pdf —
+			// PdfViewer does its own arrayBuffer() read) instead of a direct
+			// src.
 			const blob = await api.downloadContent(id);
 			if (kind === 'text') {
 				textContent = await blob.text();
+			} else if (kind === 'pdf') {
+				pdfBlob = blob;
 			} else {
 				objectUrl = URL.createObjectURL(blob);
 			}
@@ -77,14 +83,14 @@
 	async function handleDownload() {
 		if (!item) return;
 		try {
-			// Reuse the object URL already fetched for image/pdf previews
-			// (a blob: URL is a perfectly valid <a href>/download target on
-			// its own) rather than fetching the same bytes twice; text/
-			// unsupported previews never fetched one, so get real bytes here.
+			// Reuse whatever's already been fetched for the preview (an
+			// object URL for images, a raw Blob for pdf) rather than
+			// fetching the same bytes twice; text/unsupported previews
+			// never fetched either, so get real bytes here for those.
 			let url = objectUrl;
 			let revoke = false;
 			if (!url) {
-				const blob = await api.downloadContent(item.id);
+				const blob = pdfBlob ?? (await api.downloadContent(item.id));
 				url = URL.createObjectURL(blob);
 				revoke = true;
 			}
@@ -122,7 +128,9 @@
 			<img src={objectUrl} alt={item.name} />
 		</div>
 	{:else if kind === 'pdf'}
-		<iframe class="preview-frame preview-pdf" src={objectUrl} title={item.name}></iframe>
+		{#if pdfBlob}
+			<PdfViewer blob={pdfBlob} />
+		{/if}
 	{:else if kind === 'text'}
 		<pre class="preview-text">{textContent}</pre>
 	{:else}
