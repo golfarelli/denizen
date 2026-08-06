@@ -118,6 +118,15 @@ export interface Share {
 	url?: string;
 }
 
+// What GET /s/{token}/meta returns — deliberately less than Item, since
+// whoever's asking may not have (or need) a Denizen account at all. See
+// routes/s/[token]/+page.svelte, the only caller.
+export interface PublicShareItem {
+	name: string;
+	type: 'file' | 'folder';
+	size_bytes: number;
+}
+
 export const api = {
 	login: (username: string, password: string) =>
 		publicReq<TokenPair>('/api/v1/auth/login', jsonInit({ username, password })),
@@ -197,6 +206,22 @@ export const api = {
 	listShares: () => req<Share[]>('/api/v1/shares'),
 
 	revokeShare: (id: string) => req<void>(`/api/v1/shares/${id}`, { method: 'DELETE' }),
+
+	// The public /s/{token}/* routes back routes/s/[token]/+page.svelte,
+	// reachable with no Denizen account at all — but still going through
+	// req()/apiFetch (not a bare fetch) rather than publicReq, so a visitor
+	// who *does* happen to be logged in gets their Authorization header
+	// attached automatically, which is what actually satisfies a
+	// requires_auth share for them (see internal/service/share.go's
+	// Resolve — "authenticated" there just means *some* valid access
+	// token, not ownership of anything).
+	getShareMeta: (token: string) => req<PublicShareItem>(`/s/${token}/meta`),
+
+	downloadSharedContent: async (token: string): Promise<Blob> => {
+		const res = await apiFetch(`/s/${token}/content`);
+		if (!res.ok) throw await parseError(res);
+		return res.blob();
+	},
 
 	// Admin-only — enforced server-side by middleware.RequireAdmin; a
 	// non-admin calling these just gets a 403 back, same as any other route.

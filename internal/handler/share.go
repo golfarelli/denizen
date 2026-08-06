@@ -69,6 +69,10 @@ func (h *ShareHandler) Create(res http.ResponseWriter, req *http.Request) {
 
 	out := toShareResponse(item)
 	out.Token = &raw
+	// The SPA landing page's own URL (routes/s/[token]/+page.svelte), not
+	// PublicMetadata's raw JSON endpoint — see router.New for how the two
+	// stay separate paths despite this one being the one visitors actually
+	// open.
 	url := "/s/" + raw
 	out.URL = &url
 	httpio.WriteJSON(res, http.StatusCreated, out)
@@ -105,10 +109,13 @@ type publicItemResponse struct {
 	SizeBytes int64  `json:"size_bytes"`
 }
 
-// PublicMetadata handles GET /s/{token} — deliberately returns far less
-// than the authenticated item endpoints (just enough for a share landing
-// page to render something), since the visitor isn't necessarily anyone
-// with an account.
+// PublicMetadata handles GET /s/{token}/meta — called by the frontend's
+// own /s/[token] landing page (web/src/routes/s/[token]/+page.svelte), not
+// something a visitor opens directly (that's the bare /s/{token} URL
+// ShareHandler.Create hands back, which reaches the SPA instead — see
+// router.New). Deliberately returns far less than the authenticated item
+// endpoints (just enough for that landing page to render something), since
+// the visitor isn't necessarily anyone with an account.
 func (h *ShareHandler) PublicMetadata(res http.ResponseWriter, req *http.Request) {
 	item, err := h.shares.Resolve(req.Context(), req.PathValue("token"), middleware.IsAuthenticated(h.tokens, req))
 	if err != nil {

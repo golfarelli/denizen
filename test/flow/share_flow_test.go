@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,10 +49,26 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 		t.Fatalf("share response missing token/url: %+v", share)
 	}
 
-	// --- a visitor with no account can read the metadata and download it -------
-	metaRes, err := http.Get(ts.URL + "/s/" + share.Token)
+	// --- the bare share URL (what a visitor actually opens) reaches the SPA,
+	// not this raw JSON endpoint — the whole reason /meta exists as a
+	// separate path. A regression here would mean a visitor's browser gets
+	// a JSON blob instead of Denizen's own landing page, exactly the bug
+	// this split was built to fix.
+	bareRes, err := http.Get(ts.URL + share.URL)
 	if err != nil {
-		t.Fatalf("GET /s/token: %v", err)
+		t.Fatalf("GET %s: %v", share.URL, err)
+	}
+	if bareRes.StatusCode != http.StatusOK {
+		t.Fatalf("bare share URL: got status %d, want %d (the SPA's index.html)", bareRes.StatusCode, http.StatusOK)
+	}
+	if ct := bareRes.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("bare share URL Content-Type = %q, want text/html (index.html) — got JSON here means the frontend route regressed", ct)
+	}
+
+	// --- a visitor with no account can read the metadata and download it -------
+	metaRes, err := http.Get(ts.URL + "/s/" + share.Token + "/meta")
+	if err != nil {
+		t.Fatalf("GET /s/token/meta: %v", err)
 	}
 	if metaRes.StatusCode != http.StatusOK {
 		t.Fatalf("public metadata: got status %d", metaRes.StatusCode)
@@ -84,7 +101,7 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 	}
 
 	// --- an unknown token looks exactly like a wrong/expired one: 404 -----------
-	unknownRes, err := http.Get(ts.URL + "/s/not-a-real-token")
+	unknownRes, err := http.Get(ts.URL + "/s/not-a-real-token/meta")
 	if err != nil {
 		t.Fatalf("GET /s/unknown: %v", err)
 	}
@@ -107,9 +124,9 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 	if revokeRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("revoke share: got status %d", revokeRes.StatusCode)
 	}
-	afterRevokeRes, err := http.Get(ts.URL + "/s/" + share.Token)
+	afterRevokeRes, err := http.Get(ts.URL + "/s/" + share.Token + "/meta")
 	if err != nil {
-		t.Fatalf("GET /s/token after revoke: %v", err)
+		t.Fatalf("GET /s/token/meta after revoke: %v", err)
 	}
 	if afterRevokeRes.StatusCode != http.StatusNotFound {
 		t.Errorf("revoked share: got status %d, want %d", afterRevokeRes.StatusCode, http.StatusNotFound)
@@ -130,9 +147,9 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 	// --- requires_auth: an anonymous visitor is turned away, a logged-in one isn't
 	protectedShare := createShare(t, ts, fabio, item.ID, true, nil)
 
-	anonRes, err := http.Get(ts.URL + "/s/" + protectedShare.Token)
+	anonRes, err := http.Get(ts.URL + "/s/" + protectedShare.Token + "/meta")
 	if err != nil {
-		t.Fatalf("GET /s/token anonymously: %v", err)
+		t.Fatalf("GET /s/token/meta anonymously: %v", err)
 	}
 	if anonRes.StatusCode != http.StatusUnauthorized {
 		t.Errorf("anonymous visitor on a requires_auth share: got status %d, want %d", anonRes.StatusCode, http.StatusUnauthorized)
@@ -144,14 +161,14 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 	}
 	mario := registerAndLogin(t, ts, secondCode, "mario", "another-strong-password")
 
-	req, err := http.NewRequest(http.MethodGet, ts.URL+"/s/"+protectedShare.Token, nil)
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/s/"+protectedShare.Token+"/meta", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+mario.accessToken)
 	authedRes, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET /s/token as mario: %v", err)
+		t.Fatalf("GET /s/token/meta as mario: %v", err)
 	}
 	if authedRes.StatusCode != http.StatusOK {
 		t.Errorf("mario (logged in, not the owner) on a requires_auth share: got status %d, want %d — being logged in to *some* account is all requires_auth asks for",
@@ -161,9 +178,9 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 	// --- an already-expired share is indistinguishable from a nonexistent one ----
 	past := time.Now().Add(-time.Hour).Unix()
 	expiredShare := createShare(t, ts, fabio, item.ID, false, &past)
-	expiredRes, err := http.Get(ts.URL + "/s/" + expiredShare.Token)
+	expiredRes, err := http.Get(ts.URL + "/s/" + expiredShare.Token + "/meta")
 	if err != nil {
-		t.Fatalf("GET /s/token (expired): %v", err)
+		t.Fatalf("GET /s/token/meta (expired): %v", err)
 	}
 	if expiredRes.StatusCode != http.StatusNotFound {
 		t.Errorf("expired share: got status %d, want %d", expiredRes.StatusCode, http.StatusNotFound)
