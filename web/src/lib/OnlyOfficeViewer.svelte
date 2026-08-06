@@ -18,7 +18,14 @@
 
 	onMount(async () => {
 		try {
-			const config = await api.getOnlyOfficeConfig(itemId);
+			// OnlyOffice's "desktop" type (its own default) is the full
+			// ribbon UI — real toolbar buttons sized for a mouse — which
+			// renders tiny and cramped squeezed into a phone-width viewport
+			// (confirmed live, not theoretical). "mobile" is its own
+			// purpose-built alternative for exactly this. 768px is a common
+			// phone/tablet breakpoint, not tied to any particular device.
+			const editorType = window.innerWidth < 768 ? 'mobile' : 'desktop';
+			const config = await api.getOnlyOfficeConfig(itemId, editorType);
 			await loadScript(apiJsUrl);
 			// DocsAPI is a global the script above attaches to window — not
 			// a module this app imports, since it has to match whatever

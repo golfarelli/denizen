@@ -72,6 +72,17 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// The caller's own viewport decides this (see
+	// OnlyOfficeViewer.svelte) — the "desktop" ribbon UI, OnlyOffice's
+	// own default, renders tiny and cramped squeezed into a phone-width
+	// screen (confirmed live); "mobile" is its purpose-built alternative.
+	// Read here, not overridden client-side after the fact, because it
+	// has to be part of what Sign below actually signs.
+	editorType := req.URL.Query().Get("type")
+	if !onlyoffice.ValidEditorType(editorType) {
+		editorType = "desktop"
+	}
+
 	// The Document Server — not the browser — fetches this URL itself, so
 	// it rides on the same content-token mechanism <video> uses
 	// (internal/token.ContentClaims) rather than the Document Server ever
@@ -102,7 +113,9 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 			Mode: "view",
 			User: onlyoffice.UserInfo{ID: ownerID(req), Name: ownerID(req)},
 		},
-		Type: "desktop",
+		Type:   editorType,
+		Width:  "100%",
+		Height: "100%",
 	}
 
 	signed, err := h.oo.Sign(cfg)

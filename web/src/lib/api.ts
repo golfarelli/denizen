@@ -183,7 +183,13 @@ export const api = {
 	// The full signed editor config DocsAPI.DocEditor expects — see
 	// internal/onlyoffice.EditorConfig. Typed loosely here (this app never
 	// reads into it, just hands it straight to the editor script).
-	getOnlyOfficeConfig: (id: string) => req<Record<string, unknown>>(`/api/v1/items/${id}/onlyoffice-config`),
+	// editorType picks OnlyOffice's own "desktop" (full ribbon UI) vs
+	// "mobile" (touch-sized) interface — has to be requested here, not
+	// decided by the caller after the fact, since it's part of what the
+	// server signs (see OnlyOfficeViewer.svelte, which is the one place
+	// that actually decides which one to ask for).
+	getOnlyOfficeConfig: (id: string, editorType: 'desktop' | 'mobile') =>
+		req<Record<string, unknown>>(`/api/v1/items/${id}/onlyoffice-config?type=${editorType}`),
 
 	createShare: (itemId: string, requiresAuth: boolean, expiresAt: number | null) =>
 		req<Share>(`/api/v1/items/${itemId}/shares`, jsonInit({ requires_auth: requiresAuth, expires_at: expiresAt })),
