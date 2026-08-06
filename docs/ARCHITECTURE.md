@@ -53,20 +53,35 @@ own flow tests. See CONTRIBUTING.md's Testing section.
 
 **File preview** (`routes/file/[id]/+page.svelte`) — tapping a file opens it
 here instead of only ever offering a download, for the types the browser can
-render natively: images, PDFs, and text (`text/*`, plus a small hardcoded
-extension list — `.md`, `.json`, `.log`, etc. — for cases Go's
-`mime.TypeByExtension` doesn't reliably know about). Anything else falls
-back to a "preview not available" message with a Download button, the same
-way Google Drive itself degrades for a type it can't render. `<img>`/
-`<iframe>` can't carry the `Authorization` header the content endpoint
-needs, so the bytes are fetched once as a blob (same constraint, same fix,
-as the download button) and handed to the viewer as a `blob:` URL or
-in-memory text — not streamed via `Range` requests the way a direct
-`<img src>` could. That's a deliberate scope cut, not an oversight: it's
-fine for images/PDFs/text, but it's exactly the tradeoff that would need
-revisiting for audio/video preview, where seeking through a multi-hundred-
-MB file without downloading all of it first actually matters — out of scope
-for now (see "Goals for the first release" in the README).
+render: images, PDFs, and text (`text/*`, plus a small hardcoded extension
+list — `.md`, `.json`, `.log`, etc. — for cases Go's `mime.TypeByExtension`
+doesn't reliably know about). Anything else falls back to a "preview not
+available" message with a Download button, the same way Google Drive itself
+degrades for a type it can't render. `<img>` can't carry the `Authorization`
+header the content endpoint needs, so the bytes are fetched once as a blob
+(same constraint, same fix, as the download button) and handed to the
+viewer as a `blob:` URL (images) or in-memory text — not streamed via
+`Range` requests the way a direct `<img src>` could. That's a deliberate
+scope cut, not an oversight: fine for images/text, but it's exactly the
+tradeoff that would need revisiting for audio/video preview, where seeking
+through a multi-hundred-MB file without downloading all of it first
+actually matters — out of scope for now (see "Goals for the first release"
+in the README).
+
+PDFs specifically render through **pdf.js** (`lib/PdfViewer.svelte`), not
+an `<iframe src="blob:...">` — that was the first approach, and it does
+work on desktop, but silently shows a blank pane on Android Chrome (real
+hardware, confirmed — the browser's own inline PDF viewer just doesn't
+reliably activate for a blob: URL embedded in an iframe on that platform).
+pdf.js sidesteps the platform's native PDF support entirely by parsing the
+file itself and rendering every page to its own `<canvas>` — slower and a
+real dependency (unlike the hand-rolled PDF *writer* the camera scanner
+uses, see "Mobile: Android PWA" below — generating a simple image-per-page
+PDF is a small, bounded problem; parsing arbitrary PDF byte streams for
+rendering is not, squarely the "genuinely complex infrastructure" category
+CONTRIBUTING.md already carves exceptions for, same reasoning as `tusd`),
+but consistent across every browser instead of depending on each one's own
+plugin behavior.
 
 ## Deployment: a single container
 

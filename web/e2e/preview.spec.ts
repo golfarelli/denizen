@@ -24,7 +24,7 @@ test('opening an image file shows an inline preview', async ({ page }) => {
 		.toBeGreaterThan(0);
 });
 
-test('opening a PDF shows it in an inline viewer', async ({ page }) => {
+test('opening a PDF renders it inline via canvas', async ({ page }) => {
 	await page.goto('/');
 	await page.locator('input[type="file"]').setInputFiles(PDF_PATH);
 
@@ -33,9 +33,27 @@ test('opening a PDF shows it in an inline viewer', async ({ page }) => {
 	await row.getByRole('button', { name: 'sample.pdf', exact: true }).click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
-	const frame = page.locator('iframe.preview-pdf');
-	await expect(frame).toBeVisible();
-	await expect(frame).toHaveAttribute('src', /^blob:/);
+	// pdf.js renders every page to its own <canvas> (see PdfViewer.svelte) —
+	// not an <iframe src="blob:...">, which doesn't reliably show anything
+	// on Android Chrome despite working fine in every desktop/E2E check,
+	// which is exactly what made this worth switching away from.
+	const canvas = page.locator('.pdf-pages canvas.pdf-page').first();
+	await expect(canvas).toBeVisible({ timeout: 10_000 });
+
+	// The real assertion: actual pixels were drawn, not just an empty
+	// canvas element sitting there — a blank-but-present canvas is exactly
+	// the failure mode a broken renderer would produce, and `toBeVisible`
+	// alone can't tell the two apart.
+	const hasContent = await canvas.evaluate((el: HTMLCanvasElement) => {
+		const ctx = el.getContext('2d');
+		if (!ctx) return false;
+		const { data } = ctx.getImageData(0, 0, el.width, el.height);
+		for (let i = 0; i < data.length; i += 4) {
+			if (data[i] !== 255 || data[i + 1] !== 255 || data[i + 2] !== 255) return true;
+		}
+		return false;
+	});
+	expect(hasContent).toBe(true);
 });
 
 test('opening a text file shows its content, and back returns to the same folder', async ({ page }) => {

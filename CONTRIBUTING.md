@@ -36,7 +36,11 @@ Prefer implementing something ourselves over adding a dependency when the logic
 involved is small — it keeps the project resilient to unmaintained or broken
 upstream packages. Exceptions go to genuinely complex infrastructure that would
 be substantial and risky to reimplement (e.g. the tus resumable-upload protocol,
-the SQLite driver, the JWT library) — those stay as dependencies.
+the SQLite driver, the JWT library, PDF *rendering* via pdf.js) — those stay as
+dependencies. The line isn't always obvious from the file format alone: this
+project's own PDF *writer* (`lib/pdf.ts`, used by the camera scanner) is hand-
+rolled, because emitting one full-page JPEG per page is a small, bounded
+problem — parsing and rendering an arbitrary PDF someone else produced is not.
 
 ## Naming conventions
 
