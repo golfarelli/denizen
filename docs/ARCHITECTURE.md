@@ -64,6 +64,16 @@ they're a genuinely large ~290KB (gzipped) payload, and bundling all three
 into this route unconditionally would mean paying for it even to open a
 text file or an image.
 
+The preview page also runs in **fullscreen mode**: on mount it flips a
+shared `lib/fullscreen.ts` store, which `+layout.svelte` uses to hide the
+app's own topbar and drop `<main>`'s centered reading width, and reverts on
+unmount. The page's own chrome collapses into one slim header row (back
+arrow, truncated title, download button) instead of a separate breadcrumb
+and toolbar, so every viewer below — OnlyOffice above all, which is
+otherwise cramped on a phone even at the right `type` (see below) — gets the
+real remaining viewport height (`main.fullscreen` sizes off `100dvh`, not
+`100vh`, so a mobile browser's address bar showing/hiding doesn't clip it).
+
 Two different ways of getting bytes into a viewer, chosen per format:
 
 - **Images, PDF, Word, Excel, text**: `<img>`/pdf.js/docx-preview/xlsx all
