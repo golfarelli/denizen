@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, ApiError, type Item } from '$lib/api';
+	import FileIcon from '$lib/FileIcon.svelte';
 
 	let items = $state<Item[]>([]);
 	let loading = $state(true);
@@ -62,7 +63,9 @@
 	<div class="item-list">
 		{#each items as item (item.id)}
 			<div class="item-row">
-				<span class="item-icon">{item.type === 'folder' ? '📁' : '📄'}</span>
+				<span class="item-icon">
+					<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
+				</span>
 				<span class="item-name" style="cursor: default">{item.name}</span>
 				<button class="btn" onclick={() => handleRestore(item)}>Restore</button>
 				<button class="btn" onclick={() => handleDeleteForever(item)}>Delete forever</button>

@@ -19,7 +19,11 @@ your own personal cloud storage, running on your own hardware.
 > editing** via an optional OnlyOffice Document Server integration — a real
 > second container, entirely opt-in, see `docker-compose.onlyoffice.yml`.
 > Both a Go backend test suite and a Playwright end-to-end suite drive a
-> real browser against the real binary.
+> real browser against the real binary. The UI itself now looks the part
+> too: a persistent sidebar (collapsing to a slide-in drawer on mobile),
+> colored per-type file icons, and a folder-scoped search box, closer to
+> the Drive/Nextcloud look this app is going for than the plain topbar it
+> started with.
 
 ## Why
 

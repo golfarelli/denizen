@@ -5,12 +5,17 @@
 
 :root {
 	--color-bg: #ffffff;
-	--color-surface: #f7f7fb;
-	--color-border: #e3e3ea;
+	--color-surface: #f7f8fa;
+	--color-sidebar-bg: #f1f3f6;
+	--color-border: #e1e3e8;
 	--color-text: #1b1b23;
-	--color-text-muted: #6b6b7a;
-	--color-accent: #5b5bd6;
+	--color-text-muted: #666b78;
+	/* A blue in the same family Drive/Nextcloud both land on — the visual
+	   language this whole pass is chasing — without matching either one's
+	   exact brand hex. */
+	--color-accent: #3b6fe0;
 	--color-accent-contrast: #ffffff;
+	--color-accent-soft: rgb(59 111 224 / 12%); /* active nav row / selected state background */
 	--color-danger: #d1435b;
 
 	--space-1: 0.25rem;
@@ -21,23 +26,32 @@
 	--space-8: 2rem;
 
 	--radius: 8px;
+	--radius-lg: 12px;
 	--font-sans:
 		system-ui,
 		-apple-system,
 		'Segoe UI',
 		Roboto,
 		sans-serif;
+
+	--sidebar-width: 248px;
+	--shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
+	--shadow-md: 0 6px 20px rgb(16 24 40 / 10%);
 }
 
 @media (prefers-color-scheme: dark) {
 	:root {
 		--color-bg: #17171d;
 		--color-surface: #1f1f27;
-		--color-border: #2e2e39;
+		--color-sidebar-bg: #1b1b22;
+		--color-border: #303038;
 		--color-text: #f1f1f5;
 		--color-text-muted: #9a9aab;
-		--color-accent: #8080e6;
-		--color-accent-contrast: #12121a;
+		--color-accent: #6d97ea;
+		--color-accent-contrast: #0f172a;
+		--color-accent-soft: rgb(109 151 234 / 16%);
+		--shadow-sm: 0 1px 2px rgb(0 0 0 / 25%);
+		--shadow-md: 0 6px 20px rgb(0 0 0 / 40%);
 	}
 }
 
@@ -143,34 +157,225 @@ input {
 	padding: var(--space-6);
 }
 
+/* App shell: a persistent left sidebar + main content column, the same
+   overall shape Google Drive and Nextcloud both use — the whole point of
+   this pass, replacing the plain full-width topbar this app had before.
+   Below --sidebar-breakpoint the sidebar becomes a slide-in drawer instead
+   (see .sidebar's own media query) rather than trying to keep a fixed-width
+   column on a phone screen. */
+.app-shell {
+	display: flex;
+	min-height: 100dvh;
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-weight: 600;
+	font-size: 1.1rem;
+	color: var(--color-text);
+	text-decoration: none;
+	padding: var(--space-4);
+}
+
+.brand svg {
+	flex-shrink: 0;
+}
+
+.sidebar {
+	width: var(--sidebar-width);
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--color-sidebar-bg);
+	border-right: 1px solid var(--color-border);
+}
+
+.sidebar-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: var(--space-2);
+	flex: 1;
+}
+
+.sidebar-nav a {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius);
+	color: var(--color-text);
+	text-decoration: none;
+	font-size: 0.95rem;
+}
+
+.sidebar-nav a svg {
+	flex-shrink: 0;
+	color: var(--color-text-muted);
+}
+
+.sidebar-nav a:hover {
+	background: var(--color-border);
+}
+
+.sidebar-nav a.active {
+	background: var(--color-accent-soft);
+	color: var(--color-accent);
+	font-weight: 600;
+}
+
+.sidebar-nav a.active svg {
+	color: var(--color-accent);
+}
+
+.storage-indicator {
+	padding: var(--space-4);
+	border-top: 1px solid var(--color-border);
+}
+
+.storage-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--color-border);
+	overflow: hidden;
+	margin-bottom: var(--space-2);
+}
+
+.storage-bar-fill {
+	height: 100%;
+	background: var(--color-accent);
+}
+
+.storage-bar-fill.storage-full {
+	background: var(--color-danger);
+}
+
+.storage-label {
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+}
+
+.sidebar-logout {
+	margin: 0 var(--space-4) var(--space-4);
+}
+
+.sidebar-backdrop {
+	display: none;
+}
+
+/* Everything to the right of the sidebar: the slim topbar plus whatever
+   the current route renders, stacked so the topbar stays put and the page
+   content scrolls under it. */
+.app-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
 .topbar {
 	position: sticky;
 	top: 0;
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	gap: var(--space-3);
 	padding: var(--space-3) var(--space-6);
 	border-bottom: 1px solid var(--color-border);
 	background: var(--color-bg);
 	z-index: 10;
 }
 
-.brand {
+.topbar-spacer {
+	flex: 1;
+}
+
+.user-chip {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
+}
+
+.user-avatar {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.8rem;
 	font-weight: 600;
-	font-size: 1.1rem;
+	flex-shrink: 0;
+}
+
+.hamburger {
+	display: none;
+	align-items: center;
+	border: none;
+	background: none;
 	color: var(--color-text);
-	text-decoration: none;
+	padding: var(--space-1) var(--space-2);
+	cursor: pointer;
+}
+
+.mobile-brand {
+	display: none;
+}
+
+/* Below this, the sidebar can't keep its own permanent column width without
+   crowding out the file list it's supposed to be secondary to — it becomes
+   an overlay drawer instead, same as Drive's and Nextcloud's own mobile
+   apps. */
+@media (max-width: 900px) {
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		height: 100dvh;
+		z-index: 50;
+		transform: translateX(-100%);
+		transition: transform 0.2s ease;
+		box-shadow: var(--shadow-md);
+	}
+
+	.sidebar.open {
+		transform: translateX(0);
+	}
+
+	.sidebar-backdrop.visible {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgb(0 0 0 / 40%);
+		z-index: 40;
+	}
+
+	.hamburger {
+		display: flex;
+	}
+
+	.mobile-brand {
+		display: flex;
+		padding: 0;
+	}
 }
 
 main.with-topbar {
 	max-width: 960px;
+	width: 100%;
 	margin: 0 auto;
 	padding: var(--space-6);
 }
 
-/* Set by routes/+layout.svelte from lib/fullscreen.ts — the app's own nav
-   bar and this main's usual centered/padded reading width both give way
-   entirely to whatever the page wants the full viewport for (currently
+/* Set by routes/+layout.svelte from lib/fullscreen.ts — the app's whole
+   shell (sidebar, topbar) and this main's usual centered/padded reading
+   width both give way entirely to whatever the page wants the full
+   viewport for (currently
    just the file preview page's viewers, OnlyOffice most of all — its own
    editor benefits far more from real screen space than this app's chrome
    being visible while looking at a file does). 100dvh over 100vh: the
@@ -241,6 +446,10 @@ main.fullscreen {
 	padding: var(--space-3) var(--space-4);
 	border-bottom: 1px solid var(--color-border);
 	background: var(--color-bg);
+	position: relative;
+	transition:
+		background 0.12s ease,
+		box-shadow 0.12s ease;
 }
 
 .item-row:first-child {
@@ -256,10 +465,20 @@ main.fullscreen {
 
 .item-row:hover {
 	background: var(--color-surface);
+	/* A row lifting slightly on hover, not the whole list — real elevation
+	   would need actual card gaps between rows (a bigger structural change
+	   than this pass is after), so this is z-index'd above its neighbors'
+	   flat borders to read as "raised" without one. */
+	box-shadow: var(--shadow-sm);
+	z-index: 1;
 }
 
 .item-name {
 	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	background: none;
 	border: none;
 	text-align: left;
@@ -274,9 +493,8 @@ main.fullscreen {
 }
 
 .item-icon {
-	width: 1.25rem;
-	text-align: center;
-	color: var(--color-text-muted);
+	display: flex;
+	flex-shrink: 0;
 }
 
 .item-size {
@@ -292,6 +510,40 @@ main.fullscreen {
 	align-items: center;
 	margin-bottom: var(--space-4);
 	gap: var(--space-3);
+	flex-wrap: wrap;
+}
+
+/* Filters the current folder's own listing client-side (see
+   routes/+page.svelte) — not a real recursive search across the whole
+   tree, which would need a backend endpoint this app doesn't have yet. */
+.search-box {
+	position: relative;
+	flex: 1;
+	min-width: 10rem;
+	max-width: 22rem;
+}
+
+.search-box svg {
+	position: absolute;
+	left: var(--space-3);
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--color-text-muted);
+	pointer-events: none;
+}
+
+.search-box input {
+	width: 100%;
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	border-radius: 999px;
+	padding: var(--space-2) var(--space-3) var(--space-2) 2.25rem;
+}
+
+.search-box input:focus {
+	outline: 2px solid var(--color-accent);
+	outline-offset: -1px;
+	background: var(--color-bg);
 }
 
 .empty-state {
