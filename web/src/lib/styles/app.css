@@ -611,6 +611,124 @@ main.fullscreen {
 	width: 2.25rem;
 }
 
+/* Column headers double as sort triggers — reset the <button> chrome back
+   to plain text so they read exactly like the old <span> labels, just with
+   a pointer cursor and a hover tint hinting they're clickable. */
+.sort-header {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	text-transform: inherit;
+	letter-spacing: inherit;
+	cursor: pointer;
+}
+
+.item-list-header .item-modified.sort-header,
+.item-list-header .item-size.sort-header {
+	justify-content: flex-end;
+}
+
+.sort-header:hover {
+	color: var(--color-text);
+}
+
+.sort-arrow {
+	flex-shrink: 0;
+	color: var(--color-accent);
+}
+
+/* List/grid toggle — same visual language as .icon-btn (borderless until
+   hovered/active) so it sits comfortably next to the search box instead of
+   reading as a heavier, more important control than it is. */
+.view-toggle {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.view-toggle-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
+	line-height: 1;
+	border-color: transparent;
+	background: none;
+	color: var(--color-text-muted);
+}
+
+.view-toggle-btn:hover {
+	background: var(--color-surface);
+	border-color: transparent;
+}
+
+.view-toggle-btn.active {
+	background: var(--color-surface);
+	border-color: var(--color-border);
+	color: var(--color-text);
+}
+
+/* Grid view — a wrap of square-ish cards instead of the list's rows. Each
+   tile keeps the same kebab menu as a list row (see routes/+page.svelte's
+   shared #snippet rowMenu), just repositioned to the tile's own top-right
+   corner since there's no dedicated menu column in this layout. */
+.item-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+	gap: var(--space-3);
+}
+
+.item-tile {
+	position: relative;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-bg);
+	transition: background 0.12s ease;
+}
+
+.item-tile:hover {
+	background: var(--color-surface);
+}
+
+.item-tile .row-menu {
+	position: absolute;
+	top: var(--space-1);
+	right: var(--space-1);
+}
+
+.item-tile-main {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	background: none;
+	border: none;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	padding: var(--space-5) var(--space-3) var(--space-3);
+}
+
+.item-tile-name {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.85rem;
+	text-align: center;
+}
+
+.item-tile-size {
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+}
+
 .toolbar {
 	display: flex;
 	justify-content: space-between;

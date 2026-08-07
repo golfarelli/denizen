@@ -9,6 +9,9 @@
 	import ScanDialog from '$lib/ScanDialog.svelte';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { copyShareLink } from '$lib/copyShareLink';
+	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
+	import { viewMode } from '$lib/viewMode';
+	import SortArrow from '$lib/SortArrow.svelte';
 
 	interface Crumb {
 		id: string | null;
@@ -39,10 +42,30 @@
 	// this stays a client-side, current-folder-only filter rather than
 	// pretending to be more than that.
 	let searchQuery = $state('');
+
+	// Not persisted (unlike $viewMode, see lib/viewMode.ts) — resets to
+	// name/ascending each visit, same as most desktop file managers do
+	// rather than remembering a sort that might not make sense next time.
+	let sortField = $state<SortField>('name');
+	let sortDirection = $state<SortDirection>('asc');
+
+	function toggleSort(field: SortField) {
+		if (sortField === field) {
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortField = field;
+			sortDirection = 'asc';
+		}
+	}
+
 	let visibleItems = $derived(
-		searchQuery.trim()
-			? items.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-			: items
+		sortItems(
+			searchQuery.trim()
+				? items.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+				: items,
+			sortField,
+			sortDirection
+		)
 	);
 
 	// Which row's action menu is open, by item id — null means none. Only
@@ -389,6 +412,33 @@
 		</svg>
 		<input type="search" placeholder="Search this folder…" bind:value={searchQuery} aria-label="Search files" />
 	</div>
+	<div class="view-toggle" role="group" aria-label="View">
+		<button
+			class="view-toggle-btn"
+			class:active={$viewMode === 'list'}
+			aria-label="List view"
+			aria-pressed={$viewMode === 'list'}
+			onclick={() => viewMode.set('list')}
+		>
+			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+				<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+			</svg>
+		</button>
+		<button
+			class="view-toggle-btn"
+			class:active={$viewMode === 'grid'}
+			aria-label="Grid view"
+			aria-pressed={$viewMode === 'grid'}
+			onclick={() => viewMode.set('grid')}
+		>
+			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+				<rect x="4" y="4" width="7" height="7" rx="1.5" />
+				<rect x="13" y="4" width="7" height="7" rx="1.5" />
+				<rect x="4" y="13" width="7" height="7" rx="1.5" />
+				<rect x="13" y="13" width="7" height="7" rx="1.5" />
+			</svg>
+		</button>
+	</div>
 	<div class="toolbar-actions">
 		<button class="btn" onclick={() => fileInput.click()}>+ Upload</button>
 		<button class="btn" onclick={() => (scanOpen = true)}>📷 Scan</button>
@@ -448,122 +498,155 @@
 	{:else if visibleItems.length === 0}
 		<div class="empty-state">No files match "{searchQuery}" in this folder.</div>
 	{:else}
-		<div class="item-list-header">
-			<span class="item-icon"></span>
-			<span class="item-name-header">Name</span>
-			<span class="item-modified">Modified</span>
-			<span class="item-size">Size</span>
-			<span class="row-menu"></span>
-		</div>
-		<div class="item-list">
-			{#each visibleItems as item (item.id)}
-			<div class="item-row">
-				<span class="item-icon">
-					<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
-				</span>
+		{#snippet rowMenu(item: Item)}
+			<div class="row-menu">
 				<button
-					class="item-name"
-					onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}
+					class="btn icon-btn"
+					aria-label="Actions for {item.name}"
+					aria-haspopup="true"
+					aria-expanded={openMenuFor === item.id}
+					onclick={(e) => toggleMenu(item.id, e)}
 				>
-					{item.name}
+					<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+						<circle cx="12" cy="5" r="1.6" fill="currentColor" />
+						<circle cx="12" cy="12" r="1.6" fill="currentColor" />
+						<circle cx="12" cy="19" r="1.6" fill="currentColor" />
+					</svg>
 				</button>
-				<span class="item-modified">{formatDate(item.updated_at)}</span>
-				<span class="item-size">{formatSize(item.size_bytes)}</span>
-				<div class="row-menu">
-					<button
-						class="btn icon-btn"
-						aria-label="Actions for {item.name}"
-						aria-haspopup="true"
-						aria-expanded={openMenuFor === item.id}
-						onclick={(e) => toggleMenu(item.id, e)}
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-							<circle cx="12" cy="5" r="1.6" fill="currentColor" />
-							<circle cx="12" cy="12" r="1.6" fill="currentColor" />
-							<circle cx="12" cy="19" r="1.6" fill="currentColor" />
-						</svg>
-					</button>
-					{#if openMenuFor === item.id}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div class="menu-backdrop" onclick={closeMenu}></div>
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<!-- svelte-ignore a11y_interactive_supports_focus -->
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
-							{#if item.type === 'file'}
-								<button role="menuitem" onclick={(e) => handleDownload(item, e)}>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-										<path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
-									</svg>
-									Download
-								</button>
-							{/if}
-							<button role="menuitem" onclick={(e) => handleRename(item, e)}>
+				{#if openMenuFor === item.id}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<div class="menu-backdrop" onclick={closeMenu}></div>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_interactive_supports_focus -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
+						{#if item.type === 'file'}
+							<button role="menuitem" onclick={(e) => handleDownload(item, e)}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<path
-										d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-									<path d="M13 6.5l4 4" stroke-linecap="round" />
+									<path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
 								</svg>
-								Rename
+								Download
 							</button>
-							<button role="menuitem" onclick={(e) => handleStartMove(item, e)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<path
-										d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-									<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
-								</svg>
-								Move
-							</button>
-							<button role="menuitem" onclick={(e) => handleCopy(item, e)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-									<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
-								</svg>
-								Make a copy
-							</button>
-							<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<circle cx="6" cy="12" r="2.2" />
-									<circle cx="17" cy="6" r="2.2" />
-									<circle cx="17" cy="18" r="2.2" />
-									<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
-								</svg>
-								Share
-							</button>
-							<button role="menuitem" onclick={(e) => handleCopyLink(item, e)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<path
-										d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-								Copy link
-							</button>
-							<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<path
-										d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-								Delete
-							</button>
-							<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
-						</div>
-					{/if}
-				</div>
+						{/if}
+						<button role="menuitem" onclick={(e) => handleRename(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+								<path d="M13 6.5l4 4" stroke-linecap="round" />
+							</svg>
+							Rename
+						</button>
+						<button role="menuitem" onclick={(e) => handleStartMove(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+								<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							Move
+						</button>
+						<button role="menuitem" onclick={(e) => handleCopy(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+								<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							Make a copy
+						</button>
+						<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<circle cx="6" cy="12" r="2.2" />
+								<circle cx="17" cy="6" r="2.2" />
+								<circle cx="17" cy="18" r="2.2" />
+								<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
+							</svg>
+							Share
+						</button>
+						<button role="menuitem" onclick={(e) => handleCopyLink(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Copy link
+						</button>
+						<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Delete
+						</button>
+						<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
+					</div>
+				{/if}
 			</div>
-			{/each}
-		</div>
+		{/snippet}
+
+		{#if $viewMode === 'list'}
+			<div class="item-list-header">
+				<span class="item-icon"></span>
+				<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
+					Name
+					{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
+				</button>
+				<button class="sort-header item-modified" onclick={() => toggleSort('modified')}>
+					Modified
+					{#if sortField === 'modified'}<SortArrow direction={sortDirection} />{/if}
+				</button>
+				<button class="sort-header item-size" onclick={() => toggleSort('size')}>
+					Size
+					{#if sortField === 'size'}<SortArrow direction={sortDirection} />{/if}
+				</button>
+				<span class="row-menu"></span>
+			</div>
+			<div class="item-list">
+				{#each visibleItems as item (item.id)}
+				<div class="item-row">
+					<span class="item-icon">
+						<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
+					</span>
+					<button
+						class="item-name"
+						onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}
+					>
+						{item.name}
+					</button>
+					<span class="item-modified">{formatDate(item.updated_at)}</span>
+					<span class="item-size">{formatSize(item.size_bytes)}</span>
+					{@render rowMenu(item)}
+				</div>
+				{/each}
+			</div>
+		{:else}
+			<div class="item-grid">
+				{#each visibleItems as item (item.id)}
+					<div class="item-tile">
+						{@render rowMenu(item)}
+						<button
+							class="item-tile-main"
+							onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}
+						>
+							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
+							<span class="item-tile-name">{item.name}</span>
+							{#if item.type === 'file'}
+								<span class="item-tile-size">{formatSize(item.size_bytes)}</span>
+							{/if}
+						</button>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
 

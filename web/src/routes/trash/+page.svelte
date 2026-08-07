@@ -3,10 +3,28 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
+	import SortArrow from '$lib/SortArrow.svelte';
 
 	let items = $state<Item[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+
+	// Same convention as routes/+page.svelte: resets to name/ascending each
+	// visit rather than persisting.
+	let sortField = $state<SortField>('name');
+	let sortDirection = $state<SortDirection>('asc');
+
+	function toggleSort(field: SortField) {
+		if (sortField === field) {
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortField = field;
+			sortDirection = 'asc';
+		}
+	}
+
+	let sortedItems = $derived(sortItems(items, sortField, sortDirection));
 
 	// Same pattern as routes/+page.svelte's own row action menu — see its
 	// own comment on why a plain hand-rolled outside-click/Escape close,
@@ -127,13 +145,22 @@
 {:else}
 	<div class="item-list-header">
 		<span class="item-icon"></span>
-		<span class="item-name-header">Name</span>
-		<span class="item-modified">Modified</span>
-		<span class="item-size">Size</span>
+		<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
+			Name
+			{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
+		</button>
+		<button class="sort-header item-modified" onclick={() => toggleSort('modified')}>
+			Modified
+			{#if sortField === 'modified'}<SortArrow direction={sortDirection} />{/if}
+		</button>
+		<button class="sort-header item-size" onclick={() => toggleSort('size')}>
+			Size
+			{#if sortField === 'size'}<SortArrow direction={sortDirection} />{/if}
+		</button>
 		<span class="row-menu"></span>
 	</div>
 	<div class="item-list">
-		{#each items as item (item.id)}
+		{#each sortedItems as item (item.id)}
 			<div class="item-row">
 				<span class="item-icon">
 					<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
