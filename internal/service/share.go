@@ -33,7 +33,7 @@ type CreateInput struct {
 
 // Create shares itemID, owned by ownerID. The returned raw token is shown
 // to the caller exactly once — only its hash is persisted (see
-// internal/db/schema.sql) — so it must be handed back in the response now;
+// internal/db/migrations/0001_initial_schema.sql) — so it must be handed back in the response now;
 // there is no way to retrieve it again later.
 func (s *ShareService) Create(ctx context.Context, ownerID string, in CreateInput) (share *model.Share, rawToken string, err error) {
 	// Get enforces ownership + "not currently trashed" — sharing a deleted

@@ -23,12 +23,13 @@ import (
 type ItemService struct {
 	items   *repository.ItemRepository
 	users   *repository.UserRepository
+	grants  *repository.UserShareRepository // direct per-user file shares — see GetIncludingTrashed
 	storage *storage.Store
 	now     func() time.Time // swappable in tests; defaults to time.Now
 }
 
-func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, store *storage.Store) *ItemService {
-	return &ItemService{items: items, users: users, storage: store, now: time.Now}
+func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, store *storage.Store) *ItemService {
+	return &ItemService{items: items, users: users, grants: grants, storage: store, now: time.Now}
 }
 
 // --- name/path helpers -----------------------------------------------------
@@ -155,7 +156,17 @@ func (s *ItemService) Get(ctx context.Context, ownerID, id string) (*model.Item,
 // ...) calls Get directly for its own precondition check, and those must
 // keep rejecting a trashed item — only the read-only item/content/
 // content-token handlers (internal/handler/item.go) use this one.
-func (s *ItemService) GetIncludingTrashed(ctx context.Context, ownerID, id string) (*model.Item, error) {
+//
+// Also the entry point for a direct per-user share's recipient (see
+// model.UserShare): if callerID isn't the owner, a grant on this exact
+// item is the only other way in — never into someone else's trash (a
+// grant recipient gets no restore/trash-preview capability, unlike the
+// owner, so a trashed target simply doesn't exist for them), and never
+// through a folder (grants are files-only for now — see model.UserShare's
+// own comment on why extending this to folders is a separate, bigger
+// piece of work: real navigation/breadcrumb support for browsing into
+// someone else's folder tree, not just a check removed here).
+func (s *ItemService) GetIncludingTrashed(ctx context.Context, callerID, id string) (*model.Item, error) {
 	item, err := s.items.GetByID(ctx, id)
 	if err != nil {
 		if err == repository.ErrNotFound {
@@ -163,7 +174,17 @@ func (s *ItemService) GetIncludingTrashed(ctx context.Context, ownerID, id strin
 		}
 		return nil, err
 	}
-	if item.OwnerID != ownerID {
+	if item.OwnerID == callerID {
+		return item, nil
+	}
+	if item.DeletedAt != nil {
+		return nil, apperr.NotFound
+	}
+	granted, err := s.grants.Exists(ctx, item.ID, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if !granted {
 		return nil, apperr.NotFound
 	}
 	return item, nil

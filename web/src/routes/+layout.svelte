@@ -126,6 +126,13 @@
 					</svg>
 					{$t('nav.myShares')}
 				</a>
+				<a href="/shared-with-me" class:active={$page.url.pathname === '/shared-with-me'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<circle cx="12" cy="8" r="3.2" />
+						<path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					{$t('nav.sharedWithMe')}
+				</a>
 				<a href="/trash" class:active={$page.url.pathname === '/trash'}>
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 						<path

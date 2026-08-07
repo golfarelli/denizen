@@ -49,6 +49,7 @@
 		if (!from) return '/';
 		if (from === 'trash') return '/trash';
 		if (from === 'shares') return '/shares';
+		if (from === 'shared-with-me') return '/shared-with-me';
 		return `/?folder=${encodeURIComponent(from)}`;
 	});
 
@@ -87,11 +88,21 @@
 				// Real fidelity + real editing if a Document Server is
 				// configured, checked before deciding whether to fetch
 				// anything here at all — OnlyOffice does its own fetching,
-				// server-side, from the URL its config points at.
-				onlyOffice = await api.getOnlyOfficeStatus();
-				if (onlyOffice.enabled) {
-					loading = false;
-					return;
+				// server-side, from the URL its config points at. Only
+				// attempted when this item is actually ours: the Config
+				// endpoint (internal/handler/onlyoffice.go) requires real
+				// ownership, not just view access via a direct share grant
+				// (same reasoning as the public share landing page's own
+				// OnlyOffice skip — see routes/s/[token]/+page.svelte) — a
+				// grant recipient falls straight through to the same
+				// client-side viewers a deployment with no Document Server
+				// configured at all already uses.
+				if (item.owned) {
+					onlyOffice = await api.getOnlyOfficeStatus();
+					if (onlyOffice.enabled) {
+						loading = false;
+						return;
+					}
 				}
 				if (kind === 'pptx') {
 					// No client-side fallback exists for PowerPoint — this
@@ -295,64 +306,66 @@
 							</svg>
 							{$t('common.download')}
 						</button>
-						<button role="menuitem" onclick={handleRename}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-								<path d="M13 6.5l4 4" stroke-linecap="round" />
-							</svg>
-							{$t('common.rename')}
-						</button>
-						<button role="menuitem" onclick={handleStartMove}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-								<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
-							</svg>
-							{$t('common.move')}
-						</button>
-						<button role="menuitem" onclick={handleCopy}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-								<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
-							</svg>
-							{$t('common.makeACopy')}
-						</button>
-						<button role="menuitem" onclick={handleStartShare}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<circle cx="6" cy="12" r="2.2" />
-								<circle cx="17" cy="6" r="2.2" />
-								<circle cx="17" cy="18" r="2.2" />
-								<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
-							</svg>
-							{$t('common.share')}
-						</button>
-						<button role="menuitem" onclick={handleCopyLink}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-							{$t('common.copyLink')}
-						</button>
-						<button role="menuitem" class="danger" onclick={handleDelete}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-							{$t('common.delete')}
-						</button>
+						{#if item.owned}
+							<button role="menuitem" onclick={handleRename}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+									<path d="M13 6.5l4 4" stroke-linecap="round" />
+								</svg>
+								{$t('common.rename')}
+							</button>
+							<button role="menuitem" onclick={handleStartMove}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+									<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
+								</svg>
+								{$t('common.move')}
+							</button>
+							<button role="menuitem" onclick={handleCopy}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+									<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
+								</svg>
+								{$t('common.makeACopy')}
+							</button>
+							<button role="menuitem" onclick={handleStartShare}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<circle cx="6" cy="12" r="2.2" />
+									<circle cx="17" cy="6" r="2.2" />
+									<circle cx="17" cy="18" r="2.2" />
+									<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
+								</svg>
+								{$t('common.share')}
+							</button>
+							<button role="menuitem" onclick={handleCopyLink}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+								{$t('common.copyLink')}
+							</button>
+							<button role="menuitem" class="danger" onclick={handleDelete}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+								{$t('common.delete')}
+							</button>
+						{/if}
 						<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 					</div>
 				{/if}

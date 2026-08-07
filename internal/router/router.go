@@ -19,7 +19,7 @@ import (
 // /api/v1/users additionally require an admin (middleware.RequireAdmin).
 // The /api/v1/auth/* routes, the public /s/{token} routes (for whoever
 // opens a share link), and the frontend itself require neither.
-func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, users *handler.UserHandler, onlyOffice *handler.OnlyOfficeHandler, uploads http.Handler, tokens *token.Issuer) (http.Handler, error) {
+func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.ShareHandler, userShares *handler.UserShareHandler, users *handler.UserHandler, onlyOffice *handler.OnlyOfficeHandler, uploads http.Handler, tokens *token.Issuer) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/register", auth.Register)
@@ -52,6 +52,17 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.Handle("GET /api/v1/shares", requireAuth(http.HandlerFunc(shares.ListMine)))
 	mux.Handle("DELETE /api/v1/shares/{id}", requireAuth(http.HandlerFunc(shares.Revoke)))
 
+	// Direct, per-user file shares (model.UserShare) — distinct from the
+	// token-based /shares* routes just above. ListForItem/Create are
+	// scoped by the item's own owner (enforced in UserShareService, same
+	// as everything else keyed by an item id); ListReceived is each
+	// caller's own "Shared with me" list, keyed by who they are, not by
+	// an item at all.
+	mux.Handle("POST /api/v1/items/{id}/user-shares", requireAuth(http.HandlerFunc(userShares.Create)))
+	mux.Handle("GET /api/v1/items/{id}/user-shares", requireAuth(http.HandlerFunc(userShares.ListForItem)))
+	mux.Handle("DELETE /api/v1/user-shares/{id}", requireAuth(http.HandlerFunc(userShares.Revoke)))
+	mux.Handle("GET /api/v1/shared-with-me", requireAuth(http.HandlerFunc(userShares.ListReceived)))
+
 	// Both routes report "disabled" rather than 404/error when no Document
 	// Server is configured — see OnlyOfficeHandler's own doc comment — so
 	// these are always safe to mount, whether or not the feature is used.
@@ -64,6 +75,11 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.HandleFunc("POST /api/v1/items/{id}/onlyoffice-callback", onlyOffice.Callback)
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(users.Me)))
+	// Unlike List/Update below, available to any authenticated user, not
+	// just an admin — see UserHandler.Directory's own doc comment on why
+	// (and how its response differs from List's admin-facing one) — it's
+	// the "pick a person" source for a direct file share.
+	mux.Handle("GET /api/v1/users/directory", requireAuth(http.HandlerFunc(users.Directory)))
 	mux.Handle("GET /api/v1/users", requireAuth(middleware.RequireAdmin(http.HandlerFunc(users.List))))
 	mux.Handle("PATCH /api/v1/users/{id}", requireAuth(middleware.RequireAdmin(http.HandlerFunc(users.Update))))
 
