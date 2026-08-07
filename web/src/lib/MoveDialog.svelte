@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api, ApiError, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import { t } from '$lib/i18n';
 
 	interface Crumb {
 		id: string | null;
@@ -23,7 +24,7 @@
 	$effect(() => {
 		if (item) {
 			currentFolderId = null;
-			breadcrumb = [{ id: null, name: 'Home' }];
+			breadcrumb = [{ id: null, name: $t('common.home') }];
 			error = '';
 			loadFolders(null);
 			dialogEl?.showModal();
@@ -43,7 +44,7 @@
 			// pre-computed here.
 			folders = all.filter((i) => i.type === 'folder' && i.id !== item?.id);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not load folders.';
+			error = err instanceof ApiError ? err.message : $t('dialogs.move.errors.couldNotLoadFolders');
 		} finally {
 			loading = false;
 		}
@@ -75,7 +76,7 @@
 			onMoved();
 			close();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not move this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotMove');
 		} finally {
 			moving = false;
 		}
@@ -84,7 +85,7 @@
 
 <dialog bind:this={dialogEl} onclose={close} class="card">
 	{#if item}
-		<h2>Move "{item.name}"</h2>
+		<h2>{$t('dialogs.move.heading', { name: item.name })}</h2>
 
 		<nav class="breadcrumb">
 			{#each breadcrumb as crumb, i (crumb.id ?? 'root')}
@@ -98,9 +99,9 @@
 		{#if error}<p class="error-text">{error}</p>{/if}
 
 		{#if loading}
-			<p>Loading…</p>
+			<p>{$t('common.loading')}</p>
 		{:else if folders.length === 0}
-			<p class="hint">No subfolders here.</p>
+			<p class="hint">{$t('dialogs.move.noSubfolders')}</p>
 		{:else}
 			<div class="item-list">
 				{#each folders as folder (folder.id)}
@@ -113,9 +114,9 @@
 		{/if}
 
 		<div class="dialog-actions">
-			<button class="btn" onclick={close}>Cancel</button>
+			<button class="btn" onclick={close}>{$t('common.cancel')}</button>
 			<button class="btn btn-primary" onclick={handleMoveHere} disabled={moving}>
-				{moving ? 'Moving…' : 'Move here'}
+				{moving ? $t('dialogs.move.moving') : $t('dialogs.move.moveHere')}
 			</button>
 		</div>
 	{/if}

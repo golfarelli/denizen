@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { renderAsync } from 'docx-preview';
+	import { t } from '$lib/i18n';
 
 	let { blob }: { blob: Blob } = $props();
 
@@ -20,7 +21,7 @@
 				className: 'docx-page'
 			});
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not render this document.';
+			error = err instanceof Error ? err.message : $t('viewers.errors.couldNotRenderDocument');
 		} finally {
 			rendering = false;
 		}
@@ -28,7 +29,7 @@
 </script>
 
 {#if rendering}
-	<p>Rendering document…</p>
+	<p>{$t('viewers.renderingDocument')}</p>
 {/if}
 {#if error}
 	<p class="error-text">{error}</p>

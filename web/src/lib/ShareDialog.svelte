@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, ApiError, type Item, type Share } from '$lib/api';
+	import { t } from '$lib/i18n';
 
 	// null = closed. Bound from the parent so opening/closing is just
 	// setting a variable, no separate open/close event plumbing needed.
@@ -38,7 +39,7 @@
 			const expiresAt = expiresInDays ? Math.floor(Date.now() / 1000) + expiresInDays * 86400 : null;
 			result = await api.createShare(item.id, requiresAuth, expiresAt);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not create the link.';
+			error = err instanceof ApiError ? err.message : $t('dialogs.share.errors.couldNotCreate');
 		} finally {
 			loading = false;
 		}
@@ -65,26 +66,26 @@
 
 <dialog bind:this={dialogEl} onclose={close} class="card">
 	{#if item}
-		<h2>Share "{item.name}"</h2>
+		<h2>{$t('dialogs.share.heading', { name: item.name })}</h2>
 
 		{#if !result}
 			<label class="field-inline">
 				<input type="checkbox" bind:checked={requiresAuth} />
-				Require the visitor to be logged in
+				{$t('dialogs.share.requireAuth')}
 			</label>
 			<div class="field">
-				<label for="expires">Expires after (days, blank = never)</label>
+				<label for="expires">{$t('dialogs.share.expiresLabel')}</label>
 				<input id="expires" type="number" min="1" bind:value={expiresInDays} />
 			</div>
 			{#if error}<p class="error-text">{error}</p>{/if}
 			<div class="dialog-actions">
-				<button class="btn" onclick={close}>Cancel</button>
+				<button class="btn" onclick={close}>{$t('common.cancel')}</button>
 				<button class="btn btn-primary" onclick={handleCreate} disabled={loading}>
-					{loading ? 'Creating…' : 'Create link'}
+					{loading ? $t('dialogs.share.creating') : $t('dialogs.share.createLink')}
 				</button>
 			</div>
 		{:else}
-			<p>Save this link now — it won't be shown again.</p>
+			<p>{$t('dialogs.share.saveNowNotice')}</p>
 			<div class="field">
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<input
@@ -94,8 +95,8 @@
 				/>
 			</div>
 			<div class="dialog-actions">
-				<button class="btn" onclick={copyLink}>{copied ? 'Copied!' : 'Copy link'}</button>
-				<button class="btn btn-primary" onclick={close}>Done</button>
+				<button class="btn" onclick={copyLink}>{copied ? $t('common.copied') : $t('common.copyLink')}</button>
+				<button class="btn btn-primary" onclick={close}>{$t('common.done')}</button>
 			</div>
 		{/if}
 	{/if}

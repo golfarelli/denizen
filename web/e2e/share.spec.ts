@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import { readFileSync } from 'fs';
+import { forceEnglishLocale } from './helpers/locale';
 
 const FIXTURE_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.txt');
 const PDF_BYTES = readFileSync(path.join(import.meta.dirname, 'fixtures', 'sample.pdf'));
@@ -107,6 +108,7 @@ test('the landing page\'s own Download button fetches real bytes, for a visitor 
 	const shareUrl = await page.locator('dialog input[readonly]').inputValue();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
+	await forceEnglishLocale(visitor);
 	const visitorPage = await visitor.newPage();
 	await visitorPage.goto(shareUrl);
 	const [download] = await Promise.all([
@@ -134,6 +136,7 @@ test('a revoked share\'s landing page says so instead of erroring', async ({ pag
 	await expect(shareRow).toBeHidden();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
+	await forceEnglishLocale(visitor);
 	const visitorPage = await visitor.newPage();
 	await visitorPage.goto(shareUrl);
 	await expect(visitorPage.getByText('This link is no longer available.')).toBeVisible();
@@ -149,6 +152,7 @@ test('a requires_auth share prompts an anonymous visitor to log in, then lands b
 	const shareUrl = await page.locator('dialog input[readonly]').inputValue();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
+	await forceEnglishLocale(visitor);
 	const visitorPage = await visitor.newPage();
 	await visitorPage.goto(shareUrl);
 	await expect(visitorPage.getByText(/requires you to be logged in/)).toBeVisible();
@@ -176,6 +180,7 @@ test('sharing a folder shows its name but no broken Download button', async ({ p
 	const shareUrl = await page.locator('dialog input[readonly]').inputValue();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
+	await forceEnglishLocale(visitor);
 	const visitorPage = await visitor.newPage();
 	await visitorPage.goto(shareUrl);
 	await expect(visitorPage.getByRole('heading', { name: folderName })).toBeVisible();
@@ -189,6 +194,7 @@ test('a shared PDF renders a full inline preview, not just a name/size card', as
 	const shareUrl = await page.locator('dialog input[readonly]').inputValue();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
+	await forceEnglishLocale(visitor);
 	const visitorPage = await visitor.newPage();
 	await visitorPage.goto(shareUrl);
 

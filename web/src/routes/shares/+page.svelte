@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Share, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import { t } from '$lib/i18n';
 
 	interface EnrichedShare extends Share {
 		item?: Item;
@@ -67,7 +68,7 @@
 				})
 			);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not load your shares.';
+			error = err instanceof ApiError ? err.message : $t('shares.errors.couldNotLoad');
 		} finally {
 			loading = false;
 		}
@@ -83,12 +84,12 @@
 	async function handleRevoke(id: string, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		if (!confirm('Revoke this share link? Anyone still holding it will lose access.')) return;
+		if (!confirm($t('shares.confirmRevoke'))) return;
 		try {
 			await api.revokeShare(id);
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not revoke this share.';
+			error = err instanceof ApiError ? err.message : $t('shares.errors.couldNotRevoke');
 		}
 	}
 
@@ -114,29 +115,26 @@
 </script>
 
 <svelte:head>
-	<title>My shares · Denizen</title>
+	<title>{$t('nav.myShares')} · Denizen</title>
 </svelte:head>
 
-<h1>My shares</h1>
-<p class="hint">
-	Links aren't shown again after creation — revoke and create a new one from the file browser if
-	you've lost it.
-</p>
+<h1>{$t('nav.myShares')}</h1>
+<p class="hint">{$t('shares.hint')}</p>
 
 {#if error}
 	<p class="error-text">{error}</p>
 {/if}
 
 {#if loading}
-	<p>Loading…</p>
+	<p>{$t('common.loading')}</p>
 {:else if shares.length === 0}
-	<div class="empty-state">You haven't shared anything yet.</div>
+	<div class="empty-state">{$t('shares.empty')}</div>
 {:else}
 	<div class="item-list-header">
 		<span class="item-icon"></span>
-		<span class="item-name-header">Name</span>
-		<span class="item-modified">Status</span>
-		<span class="item-size">Expires</span>
+		<span class="item-name-header">{$t('common.name')}</span>
+		<span class="item-modified">{$t('shares.status')}</span>
+		<span class="item-size">{$t('shares.expires')}</span>
 		<span class="row-menu"></span>
 	</div>
 	<div class="item-list">
@@ -153,19 +151,19 @@
 					onclick={() => openItem(share)}
 				>
 					{#if share.itemMissing}
-						(item no longer available)
+						{$t('shares.itemMissing')}
 					{:else if share.item?.deleted_at}
-						{share.item.name} (in trash)
+						{$t('shares.itemInTrash', { name: share.item.name })}
 					{:else}
 						{share.item?.name}
 					{/if}
 				</button>
-				<span class="item-modified">{share.requires_auth ? 'Login required' : 'Public'}</span>
-				<span class="item-size">{share.expires_at ? formatDate(share.expires_at) : 'Never'}</span>
+				<span class="item-modified">{share.requires_auth ? $t('shares.loginRequired') : $t('shares.public')}</span>
+				<span class="item-size">{share.expires_at ? formatDate(share.expires_at) : $t('shares.never')}</span>
 				<div class="row-menu">
 					<button
 						class="btn icon-btn"
-						aria-label="Actions for {share.item?.name ?? 'share'}"
+						aria-label={$t('common.actionsFor', { name: share.item?.name ?? $t('shares.genericItemName') })}
 						aria-haspopup="true"
 						aria-expanded={openMenuFor === share.id}
 						onclick={(e) => toggleMenu(share.id, e)}
@@ -190,7 +188,7 @@
 										<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke-linejoin="round" />
 										<circle cx="12" cy="12" r="3" />
 									</svg>
-									Open
+									{$t('common.open')}
 								</button>
 							{/if}
 							<button role="menuitem" onclick={(e) => handleRevoke(share.id, e)}>
@@ -201,9 +199,9 @@
 										stroke-linejoin="round"
 									/>
 								</svg>
-								Revoke
+								{$t('shares.revoke')}
 							</button>
-							<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
+							<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 						</div>
 					{/if}
 				</div>

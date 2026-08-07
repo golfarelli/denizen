@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api';
 	import { setAuth } from '$lib/auth';
+	import { t } from '$lib/i18n';
 
 	// Prefilled from an admin-generated invite link (see routes/admin —
 	// it builds exactly this ?code= shape), so following one doesn't also
@@ -27,7 +28,7 @@
 			setAuth({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token });
 			await goto('/');
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Something went wrong.';
+			error = err instanceof ApiError ? err.message : $t('common.somethingWentWrong');
 		} finally {
 			loading = false;
 		}
@@ -35,24 +36,24 @@
 </script>
 
 <svelte:head>
-	<title>Create account · Denizen</title>
+	<title>{$t('register.title')} · Denizen</title>
 </svelte:head>
 
 <div class="auth-page">
 	<div class="card">
-		<h1>Create your account</h1>
+		<h1>{$t('register.heading')}</h1>
 		<p class="error-text" style:visibility={error ? 'visible' : 'hidden'}>{error || ' '}</p>
 		<form onsubmit={handleSubmit}>
 			<div class="field">
-				<label for="invite">Invite code</label>
+				<label for="invite">{$t('register.inviteCode')}</label>
 				<input id="invite" bind:value={inviteCode} required />
 			</div>
 			<div class="field">
-				<label for="username">Username</label>
+				<label for="username">{$t('common.username')}</label>
 				<input id="username" bind:value={username} autocomplete="username" required minlength="3" />
 			</div>
 			<div class="field">
-				<label for="password">Password</label>
+				<label for="password">{$t('common.password')}</label>
 				<input
 					id="password"
 					type="password"
@@ -63,9 +64,9 @@
 				/>
 			</div>
 			<button class="btn btn-primary" type="submit" disabled={loading}>
-				{loading ? 'Creating account…' : 'Create account'}
+				{loading ? $t('register.creating') : $t('register.submit')}
 			</button>
 		</form>
-		<p><a href="/login">Already have an account? Log in</a></p>
+		<p><a href="/login">{$t('register.alreadyHaveAccount')}</a></p>
 	</div>
 </div>

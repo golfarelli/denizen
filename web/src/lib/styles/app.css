@@ -265,6 +265,39 @@ input {
 	color: var(--color-text-muted);
 }
 
+/* Two-way IT/EN switch, same visual language as .view-toggle — a plain
+   segmented pair rather than a dropdown, since there are only ever two
+   options right now (see lib/i18n's own comment on why a third language
+   later just means a third dictionary file, not a UI redesign). */
+.language-toggle {
+	display: flex;
+	gap: 2px;
+	margin: 0 var(--space-4) var(--space-4);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: 2px;
+}
+
+.language-toggle-btn {
+	flex: 1;
+	border: none;
+	background: none;
+	border-radius: calc(var(--radius) - 2px);
+	padding: var(--space-1) var(--space-2);
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.language-toggle-btn:hover {
+	background: var(--color-surface);
+}
+
+.language-toggle-btn.active {
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
 .sidebar-logout {
 	margin: 0 var(--space-4) var(--space-4);
 }

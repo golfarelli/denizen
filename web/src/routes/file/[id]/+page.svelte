@@ -8,6 +8,7 @@
 	import { previewKind, type PreviewKind } from '$lib/previewKind';
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import ShareDialog from '$lib/ShareDialog.svelte';
+	import { t } from '$lib/i18n';
 	// Dynamically imported below (`{#await import(...)}`), not statically
 	// here: pdf.js + docx-preview + xlsx together are a genuinely heavy
 	// ~290KB (gzipped) payload, and a static import would bundle all three
@@ -119,7 +120,7 @@
 				objectUrl = URL.createObjectURL(blob);
 			}
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not load this file.';
+			error = err instanceof ApiError ? err.message : $t('filePreview.errors.couldNotLoad');
 		} finally {
 			loading = false;
 		}
@@ -151,7 +152,7 @@
 			a.click();
 			if (revoke) URL.revokeObjectURL(url);
 		} catch {
-			error = 'Could not download this file.';
+			error = $t('common.errors.couldNotDownload');
 		}
 	}
 
@@ -197,13 +198,13 @@
 	async function handleRename() {
 		closeMenu();
 		if (!item) return;
-		const newName = prompt('New name', item.name);
+		const newName = prompt($t('common.newNamePrompt'), item.name);
 		if (!newName || newName === item.name) return;
 		try {
 			await api.move(item.id, newName, item.parent_id);
 			item.name = newName;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not rename this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotRename');
 		}
 	}
 
@@ -217,9 +218,9 @@
 		if (!item) return;
 		try {
 			await api.copyItem(item.id, item.parent_id);
-			showStatus(`Created a copy of "${item.name}" in the same folder.`);
+			showStatus($t('filePreview.copyCreated', { name: item.name }));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not copy this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotCopy');
 		}
 	}
 
@@ -233,27 +234,27 @@
 		if (!item) return;
 		try {
 			const { url, copied } = await copyShareLink(item.id);
-			showStatus(copied ? 'Link copied.' : `Link created (couldn't copy automatically): ${url}`);
+			showStatus(copied ? $t('filePreview.linkCopied') : $t('common.linkCreatedManualCopy', { url }));
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not create a share link.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotCreateShareLink');
 		}
 	}
 
 	async function handleDelete() {
 		closeMenu();
 		if (!item) return;
-		if (!confirm(`Move "${item.name}" to trash?`)) return;
+		if (!confirm($t('common.confirmTrash', { name: item.name }))) return;
 		try {
 			await api.deleteItem(item.id);
 			goto(backHref);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not delete this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotDelete');
 		}
 	}
 </script>
 
 <svelte:head>
-	<title>{item?.name ?? 'File'} · Denizen</title>
+	<title>{item?.name ?? $t('filePreview.fallbackTitle')} · Denizen</title>
 </svelte:head>
 
 <div class="preview-page">
@@ -263,13 +264,13 @@
 	     even while the file is still loading or failed to load, not just once
 	     item is populated. -->
 	<header class="preview-header">
-		<a href={backHref} class="preview-back" aria-label="Back">←</a>
-		<span class="preview-title">{item?.name ?? 'Loading…'}</span>
+		<a href={backHref} class="preview-back" aria-label={$t('filePreview.back')}>←</a>
+		<span class="preview-title">{item?.name ?? $t('common.loading')}</span>
 		{#if item}
 			<div class="row-menu">
 				<button
 					class="btn icon-btn"
-					aria-label="Actions for {item.name}"
+					aria-label={$t('common.actionsFor', { name: item.name })}
 					aria-haspopup="true"
 					aria-expanded={menuOpen}
 					onclick={toggleMenu}
@@ -292,7 +293,7 @@
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 								<path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
 							</svg>
-							Download
+							{$t('common.download')}
 						</button>
 						<button role="menuitem" onclick={handleRename}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -303,7 +304,7 @@
 								/>
 								<path d="M13 6.5l4 4" stroke-linecap="round" />
 							</svg>
-							Rename
+							{$t('common.rename')}
 						</button>
 						<button role="menuitem" onclick={handleStartMove}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -314,14 +315,14 @@
 								/>
 								<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
 							</svg>
-							Move
+							{$t('common.move')}
 						</button>
 						<button role="menuitem" onclick={handleCopy}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
 								<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
 							</svg>
-							Make a copy
+							{$t('common.makeACopy')}
 						</button>
 						<button role="menuitem" onclick={handleStartShare}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -330,7 +331,7 @@
 								<circle cx="17" cy="18" r="2.2" />
 								<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
 							</svg>
-							Share
+							{$t('common.share')}
 						</button>
 						<button role="menuitem" onclick={handleCopyLink}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -340,7 +341,7 @@
 									stroke-linejoin="round"
 								/>
 							</svg>
-							Copy link
+							{$t('common.copyLink')}
 						</button>
 						<button role="menuitem" class="danger" onclick={handleDelete}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -350,9 +351,9 @@
 									stroke-linejoin="round"
 								/>
 							</svg>
-							Delete
+							{$t('common.delete')}
 						</button>
-						<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
+						<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 					</div>
 				{/if}
 			</div>
@@ -364,7 +365,7 @@
 
 	<div class="preview-content">
 		{#if loading}
-			<p>Loading…</p>
+			<p>{$t('common.loading')}</p>
 		{:else if error}
 			<p class="error-text">{error}</p>
 		{:else if item}
@@ -399,13 +400,13 @@
 				</div>
 			{:else}
 				<div class="empty-state">
-					Preview isn't available for this file type yet.<br />
-					Use Download above to open it.
+					{$t('filePreview.noPreview1')}<br />
+					{$t('filePreview.noPreview2')}
 				</div>
 			{/if}
 		{/if}
 	</div>
 </div>
 
-<MoveDialog bind:item={movingItem} onMoved={() => showStatus('Moved.')} />
+<MoveDialog bind:item={movingItem} onMoved={() => showStatus($t('filePreview.moved'))} />
 <ShareDialog bind:item={sharingItem} />

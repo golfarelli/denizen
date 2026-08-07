@@ -10,6 +10,7 @@
 	import { registerServiceWorker } from '$lib/pwa';
 	import { fullscreen } from '$lib/fullscreen';
 	import { sidebarOpen, closeSidebar } from '$lib/sidebar';
+	import { locale, t, type Locale } from '$lib/i18n';
 
 	let { children } = $props();
 
@@ -76,6 +77,10 @@
 		$me && $me.quota_bytes > 0 ? Math.min(100, ($me.storage_used_bytes / $me.quota_bytes) * 100) : 0
 	);
 	let initial = $derived($me?.username.charAt(0).toUpperCase() ?? '?');
+
+	function setLocale(next: Locale) {
+		locale.set(next);
+	}
 </script>
 
 <svelte:head>
@@ -110,7 +115,7 @@
 						<path d="M4 11.5 12 4l8 7.5" stroke-linecap="round" stroke-linejoin="round" />
 						<path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9" stroke-linecap="round" stroke-linejoin="round" />
 					</svg>
-					Home
+					{$t('common.home')}
 				</a>
 				<a href="/shares" class:active={$page.url.pathname === '/shares'}>
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -119,7 +124,7 @@
 						<circle cx="17" cy="18" r="2.2" />
 						<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
 					</svg>
-					My shares
+					{$t('nav.myShares')}
 				</a>
 				<a href="/trash" class:active={$page.url.pathname === '/trash'}>
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -129,7 +134,7 @@
 							stroke-linejoin="round"
 						/>
 					</svg>
-					Trash
+					{$t('nav.trash')}
 				</a>
 				{#if $me?.is_admin}
 					<a href="/admin" class:active={$page.url.pathname === '/admin'}>
@@ -139,7 +144,7 @@
 							<circle cx="16" cy="12" r="2" fill="var(--color-sidebar-bg)" />
 							<circle cx="8" cy="18" r="2" fill="var(--color-sidebar-bg)" />
 						</svg>
-						Admin
+						{$t('nav.admin')}
 					</a>
 				{/if}
 			</nav>
@@ -154,10 +159,29 @@
 						></div>
 					</div>
 					<span class="storage-label">
-						{formatGB($me.storage_used_bytes)} GB of {formatGB($me.quota_bytes)} GB
+						{$t('layout.storageLabel', { used: formatGB($me.storage_used_bytes), quota: formatGB($me.quota_bytes) })}
 					</span>
 				</div>
 			{/if}
+
+			<div class="language-toggle" role="group" aria-label="Language">
+				<button
+					class="language-toggle-btn"
+					class:active={$locale === 'it'}
+					aria-pressed={$locale === 'it'}
+					onclick={() => setLocale('it')}
+				>
+					{$t('layout.languageItalian')}
+				</button>
+				<button
+					class="language-toggle-btn"
+					class:active={$locale === 'en'}
+					aria-pressed={$locale === 'en'}
+					onclick={() => setLocale('en')}
+				>
+					{$t('layout.languageEnglish')}
+				</button>
+			</div>
 
 			<button class="btn sidebar-logout" onclick={handleLogout}>
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -167,13 +191,13 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				Log out
+				{$t('nav.logout')}
 			</button>
 		</aside>
 
 		<div class="app-main">
 			<header class="topbar">
-				<button class="hamburger" aria-label="Open menu" onclick={() => sidebarOpen.set(!$sidebarOpen)}>
+				<button class="hamburger" aria-label={$t('layout.openMenu')} onclick={() => sidebarOpen.set(!$sidebarOpen)}>
 					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
 					</svg>
