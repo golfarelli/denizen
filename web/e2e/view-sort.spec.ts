@@ -63,3 +63,51 @@ test('clicking a column header sorts the list, and clicking again reverses it', 
 	await page.getByRole('button', { name: 'Name', exact: true }).click();
 	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[2], names[0], names[1]]);
 });
+
+// .item-list-header (the column headers sorting normally hangs off) is
+// display:none below 640px (see app.css) — a real, pre-existing mobile
+// layout choice, not a bug. Sorting still has to be reachable there
+// though: lib/SortMenu.svelte is the fix, a toolbar button that works
+// regardless of viewport width. Regression test for exactly that gap.
+test('on a mobile-width viewport, sorting is reachable via the toolbar SortMenu, not just the (hidden) column headers', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+
+	const stamp = Date.now();
+	const names = [`b-e2e-mobile-sort-${stamp}`, `a-e2e-mobile-sort-${stamp}`];
+	for (const name of names) {
+		page.once('dialog', (dialog) => dialog.accept(name));
+		// The toolbar's own New folder/Upload/Scan buttons are hidden on
+		// mobile (see app.css) in favor of the FAB — same reason this test
+		// has to go through it instead of "+ New folder" directly.
+		await page.locator('.fab').click();
+		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
+	}
+
+	// Confirm the premise: the column headers really are unreachable here.
+	await expect(page.locator('.item-list-header')).not.toBeVisible();
+
+	const sortButton = page.getByRole('button', { name: 'Sort by' });
+	await expect(sortButton).toBeVisible();
+	await sortButton.click();
+
+	const menu = page.locator('.dropdown-menu');
+	await expect(menu).toBeVisible();
+	await menu.getByRole('menuitem', { name: 'Name' }).click();
+
+	const rowNames = () => page.locator('.item-row .item-name').allTextContents();
+	const orderOf = (all: string[]) => all.filter((n) => names.includes(n));
+	// Default sort is already name/ascending (a before b) — since "Name"
+	// is already the active field, picking it from the menu toggles
+	// direction the same way clicking an already-active header does, so
+	// this first pick flips straight to descending (b before a).
+	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[0], names[1]]);
+
+	// Picking it again flips back to ascending.
+	await sortButton.click();
+	await menu.getByRole('menuitem', { name: 'Name' }).click();
+	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[1], names[0]]);
+});

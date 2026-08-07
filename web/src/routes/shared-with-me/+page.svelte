@@ -4,6 +4,8 @@
 	import { api, ApiError, type ReceivedShare, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { t } from '$lib/i18n';
+	import SortArrow from '$lib/SortArrow.svelte';
+	import SortMenu from '$lib/SortMenu.svelte';
 
 	interface EnrichedReceivedShare extends ReceivedShare {
 		item?: Item;
@@ -19,6 +21,36 @@
 	let shares = $state<EnrichedReceivedShare[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+
+	// Not the shared lib/sortItems.ts — this page's own Name/Shared by/
+	// Shared on columns don't match its Name/Modified/Size shape (see
+	// shares/+page.svelte's identical reasoning for the same choice).
+	type SortField = 'name' | 'sharedBy' | 'sharedOn';
+	type SortDirection = 'asc' | 'desc';
+	let sortField = $state<SortField>('sharedOn');
+	let sortDirection = $state<SortDirection>('desc');
+
+	function toggleSort(field: SortField) {
+		if (sortField === field) {
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortField = field;
+			sortDirection = 'asc';
+		}
+	}
+
+	let sortedShares = $derived.by(() => {
+		const sign = sortDirection === 'asc' ? 1 : -1;
+		return [...shares].sort((a, b) => {
+			if (sortField === 'name') {
+				return sign * (a.item?.name ?? '').localeCompare(b.item?.name ?? '', undefined, { numeric: true, sensitivity: 'base' });
+			}
+			if (sortField === 'sharedBy') {
+				return sign * a.owner_username.localeCompare(b.owner_username, undefined, { sensitivity: 'base' });
+			}
+			return sign * (a.created_at - b.created_at);
+		});
+	});
 
 	let openMenuFor = $state<string | null>(null);
 
@@ -89,7 +121,18 @@
 	<title>{$t('nav.sharedWithMe')} · Denizen</title>
 </svelte:head>
 
-<h1>{$t('nav.sharedWithMe')}</h1>
+<div class="toolbar">
+	<h1 style="margin:0">{$t('nav.sharedWithMe')}</h1>
+	<SortMenu
+		fields={[
+			{ key: 'name', label: $t('common.name') },
+			{ key: 'sharedBy', label: $t('sharedWithMe.sharedBy') },
+			{ key: 'sharedOn', label: $t('sharedWithMe.sharedOn') }
+		]}
+		bind:sortField
+		bind:sortDirection
+	/>
+</div>
 <p class="hint">{$t('sharedWithMe.hint')}</p>
 
 {#if error}
@@ -103,13 +146,22 @@
 {:else}
 	<div class="item-list-header">
 		<span class="item-icon"></span>
-		<span class="item-name-header">{$t('common.name')}</span>
-		<span class="item-modified">{$t('sharedWithMe.sharedBy')}</span>
-		<span class="item-size">{$t('sharedWithMe.sharedOn')}</span>
+		<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
+			{$t('common.name')}
+			{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
+		</button>
+		<button class="sort-header item-modified" onclick={() => toggleSort('sharedBy')}>
+			{$t('sharedWithMe.sharedBy')}
+			{#if sortField === 'sharedBy'}<SortArrow direction={sortDirection} />{/if}
+		</button>
+		<button class="sort-header item-size" onclick={() => toggleSort('sharedOn')}>
+			{$t('sharedWithMe.sharedOn')}
+			{#if sortField === 'sharedOn'}<SortArrow direction={sortDirection} />{/if}
+		</button>
 		<span class="row-menu"></span>
 	</div>
 	<div class="item-list">
-		{#each shares as share (share.id)}
+		{#each sortedShares as share (share.id)}
 			<div class="item-row">
 				<span class="item-icon">
 					{#if share.item}

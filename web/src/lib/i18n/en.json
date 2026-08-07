@@ -13,6 +13,7 @@
 	"common.open": "Open",
 	"common.home": "Home",
 	"common.actionsFor": "Actions for {name}",
+	"common.sortBy": "Sort by",
 	"common.name": "Name",
 	"common.modified": "Modified",
 	"common.size": "Size",

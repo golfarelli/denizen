@@ -12,6 +12,7 @@
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import { viewMode } from '$lib/viewMode';
 	import SortArrow from '$lib/SortArrow.svelte';
+	import SortMenu from '$lib/SortMenu.svelte';
 	import { t } from '$lib/i18n';
 
 	interface Crumb {
@@ -427,6 +428,15 @@
 			aria-label={$t('fileBrowser.searchAriaLabel')}
 		/>
 	</div>
+	<SortMenu
+		fields={[
+			{ key: 'name', label: $t('common.name') },
+			{ key: 'modified', label: $t('common.modified') },
+			{ key: 'size', label: $t('common.size') }
+		]}
+		bind:sortField
+		bind:sortDirection
+	/>
 	<div class="view-toggle" role="group" aria-label={$t('fileBrowser.viewGroupLabel')}>
 		<button
 			class="view-toggle-btn"
