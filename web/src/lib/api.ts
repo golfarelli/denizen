@@ -89,6 +89,11 @@ export interface Item {
 	created_at: number;
 	updated_at: number;
 	deleted_at?: number;
+	// False only for a file reached through someone else's direct share
+	// grant (view-only) — see internal/handler/item.go's own comment.
+	// Always true for anything returned by listItems/listTrash, which
+	// never surface anything but the caller's own items.
+	owned: boolean;
 }
 
 export interface Me {
@@ -116,6 +121,37 @@ export interface Share {
 	// docs/ARCHITECTURE.md), so there's no "look it up again later".
 	token?: string;
 	url?: string;
+}
+
+// A direct, view-only grant of one item to one specific person — distinct
+// from Share above (a link anyone holding it can use). Files only for now
+// (see internal/model.UserShare's own comment on why). The two response
+// shapes below mirror the backend's own two DTOs (internal/handler/
+// user_share.go): the owner's "who has access" view carries the
+// recipient's name, the recipient's "Shared with me" view carries the
+// owner's — never both on the same row, since which one you get already
+// tells you which side of the share you're looking at.
+export interface GrantedShare {
+	id: string;
+	item_id: string;
+	shared_with_username: string;
+	created_at: number;
+}
+
+export interface ReceivedShare {
+	id: string;
+	item_id: string;
+	owner_username: string;
+	created_at: number;
+}
+
+// The "pick a person to share with" source — GET /api/v1/users/directory,
+// available to any authenticated user (unlike listUsers below, admin-only)
+// and trimmed to just enough to identify someone, not the admin-facing
+// quota/storage/disabled fields Me carries.
+export interface DirectoryUser {
+	id: string;
+	username: string;
 }
 
 // What GET /s/{token}/meta returns — deliberately less than Item, since
@@ -213,6 +249,19 @@ export const api = {
 	listShares: () => req<Share[]>('/api/v1/shares'),
 
 	revokeShare: (id: string) => req<void>(`/api/v1/shares/${id}`, { method: 'DELETE' }),
+
+	// Direct, per-user file shares — see GrantedShare/ReceivedShare's own
+	// comment for how the two listing shapes differ.
+	createUserShare: (itemId: string, userId: string) =>
+		req<GrantedShare>(`/api/v1/items/${itemId}/user-shares`, jsonInit({ user_id: userId })),
+
+	listUserSharesForItem: (itemId: string) => req<GrantedShare[]>(`/api/v1/items/${itemId}/user-shares`),
+
+	revokeUserShare: (id: string) => req<void>(`/api/v1/user-shares/${id}`, { method: 'DELETE' }),
+
+	listSharedWithMe: () => req<ReceivedShare[]>('/api/v1/shared-with-me'),
+
+	listUserDirectory: () => req<DirectoryUser[]>('/api/v1/users/directory'),
 
 	// The public /s/{token}/* routes back routes/s/[token]/+page.svelte,
 	// reachable with no Denizen account at all — but still going through

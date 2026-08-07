@@ -24,11 +24,12 @@ import (
 // close on shutdown, or the auth service to create the bootstrap invite at
 // startup).
 type App struct {
-	Handler http.Handler
-	Auth    *service.AuthService
-	Items   *service.ItemService
-	Shares  *service.ShareService
-	Users   *service.UserService
+	Handler    http.Handler
+	Auth       *service.AuthService
+	Items      *service.ItemService
+	Shares     *service.ShareService
+	UserShares *service.UserShareService
+	Users      *service.UserService
 	// Store gives cmd/server what it needs for the background upload-GC
 	// sweep (StagingRoot) without exposing the whole storage layer more
 	// broadly than that.
@@ -49,18 +50,21 @@ func New(cfg config.Config) (*App, error) {
 	refreshTokens := repository.NewRefreshTokenRepository(cn)
 	items := repository.NewItemRepository(cn)
 	shares := repository.NewShareRepository(cn)
+	userShares := repository.NewUserShareRepository(cn)
 	tokens := token.NewIssuer(cfg.JWTSecret)
 	store := storage.New(cfg.DataDir)
 
 	authService := service.NewAuthService(users, invites, refreshTokens, tokens,
 		cfg.DefaultQuotaBytes, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	itemService := service.NewItemService(items, users, store)
+	itemService := service.NewItemService(items, users, userShares, store)
 	shareService := service.NewShareService(shares, itemService)
+	userShareService := service.NewUserShareService(userShares, itemService, users)
 	userService := service.NewUserService(users)
 
 	authHandler := handler.NewAuthHandler(authService, cfg.InviteTTL)
 	itemHandler := handler.NewItemHandler(itemService, tokens)
 	shareHandler := handler.NewShareHandler(shareService, tokens)
+	userShareHandler := handler.NewUserShareHandler(userShareService)
 	userHandler := handler.NewUserHandler(userService)
 	// oo.Enabled() is false whenever cfg.OnlyOfficeURL is unset (the
 	// default) — see onlyoffice.Client's own doc comment — so this is
@@ -74,19 +78,20 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	mux, err := router.New(authHandler, itemHandler, shareHandler, userHandler, onlyOfficeHandler, uploadHandler, tokens)
+	mux, err := router.New(authHandler, itemHandler, shareHandler, userShareHandler, userHandler, onlyOfficeHandler, uploadHandler, tokens)
 	if err != nil {
 		cn.Close()
 		return nil, err
 	}
 
 	return &App{
-		Handler: mux,
-		Auth:    authService,
-		Items:   itemService,
-		Shares:  shareService,
-		Users:   userService,
-		Store:   store,
-		DB:      cn,
+		Handler:    mux,
+		Auth:       authService,
+		Items:      itemService,
+		Shares:     shareService,
+		UserShares: userShareService,
+		Users:      userService,
+		Store:      store,
+		DB:         cn,
 	}, nil
 }

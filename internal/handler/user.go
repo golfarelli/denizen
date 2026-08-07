@@ -10,8 +10,8 @@ import (
 	"github.com/golfarelli/denizen/internal/service"
 )
 
-// UserHandler exposes GET /api/v1/me and the admin-only /api/v1/users
-// routes.
+// UserHandler exposes GET /api/v1/me, GET /api/v1/users/directory, and the
+// admin-only /api/v1/users routes.
 type UserHandler struct {
 	users *service.UserService
 }
@@ -65,6 +65,36 @@ func (h *UserHandler) List(res http.ResponseWriter, req *http.Request) {
 	out := make([]userResponse, len(items))
 	for i, item := range items {
 		out[i] = toUserResponse(item)
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
+type directoryUserResponse struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
+// Directory handles GET /api/v1/users/directory — unlike List above, this
+// is available to *any* authenticated user (not just an admin), which is
+// why it returns just enough to pick a person to share a file with (id +
+// username) rather than reusing userResponse's admin-facing fields
+// (quota, storage used, disabled, is_admin). The caller and any disabled
+// account are both excluded — sharing with yourself is meaningless
+// (UserShareService.Create rejects it anyway) and a disabled account
+// can't log in to see anything shared with it.
+func (h *UserHandler) Directory(res http.ResponseWriter, req *http.Request) {
+	items, err := h.users.ListAll(req.Context())
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	callerID := ownerID(req)
+	out := make([]directoryUserResponse, 0, len(items))
+	for _, item := range items {
+		if item.ID == callerID || item.Disabled {
+			continue
+		}
+		out = append(out, directoryUserResponse{ID: item.ID, Username: item.Username})
 	}
 	httpio.WriteJSON(res, http.StatusOK, out)
 }

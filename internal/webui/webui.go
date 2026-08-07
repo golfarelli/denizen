@@ -6,9 +6,10 @@
 // dist/'s real contents aren't checked into version control (they're
 // generated — see .gitignore) and must exist before `go build`/`go test`
 // run: `npm run build` inside web/ first, same as any other
-// generated-then-embedded asset in this repo (see internal/db/schema.sql
-// for the go:embed-must-be-same-directory constraint that shaped this
-// layout). Only a `dist/.gitkeep` placeholder is tracked, so go:embed —
+// generated-then-embedded asset in this repo (see internal/db/db.go's own
+// //go:embed migrations/*.sql for the go:embed-must-be-same-directory
+// constraint that shaped this layout). Only a `dist/.gitkeep` placeholder
+// is tracked, so go:embed —
 // which fails to *compile* against a missing or fully empty directory —
 // doesn't break a fresh clone before anyone has run the frontend build;
 // Handler() below fails at runtime instead, with a clearer message, if

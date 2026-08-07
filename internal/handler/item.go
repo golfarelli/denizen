@@ -43,9 +43,16 @@ type itemResponse struct {
 	CreatedAt int64   `json:"created_at"`
 	UpdatedAt int64   `json:"updated_at"`
 	DeletedAt *int64  `json:"deleted_at,omitempty"`
+	// Owned is false only when callerID reached this item through a direct
+	// share grant (model.UserShare), not ownership — every other call site
+	// below only ever deals in the caller's own items, where it's always
+	// true. The frontend's file preview page uses this to hide the
+	// mutating actions (Rename/Move/Delete/...) a grant recipient has no
+	// right to anyway — see routes/file/[id]/+page.svelte.
+	Owned bool `json:"owned"`
 }
 
-func toItemResponse(item *model.Item) itemResponse {
+func toItemResponse(item *model.Item, callerID string) itemResponse {
 	return itemResponse{
 		ID:        item.ID,
 		ParentID:  item.ParentID,
@@ -56,13 +63,14 @@ func toItemResponse(item *model.Item) itemResponse {
 		CreatedAt: item.CreatedAt,
 		UpdatedAt: item.UpdatedAt,
 		DeletedAt: item.DeletedAt,
+		Owned:     item.OwnerID == callerID,
 	}
 }
 
-func toItemResponses(items []*model.Item) []itemResponse {
+func toItemResponses(items []*model.Item, callerID string) []itemResponse {
 	out := make([]itemResponse, len(items))
 	for i, item := range items {
-		out[i] = toItemResponse(item)
+		out[i] = toItemResponse(item, callerID)
 	}
 	return out
 }
@@ -100,7 +108,7 @@ func (h *ItemHandler) Create(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item))
+	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
 }
 
 // List handles GET /api/v1/items?parent_id=... — parent_id omitted or empty
@@ -116,7 +124,7 @@ func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items))
+	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items, ownerID(req)))
 }
 
 // Get handles GET /api/v1/items/{id} — deliberately allows a trashed item
@@ -131,7 +139,7 @@ func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item))
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
 }
 
 // Content handles GET /api/v1/items/{id}/content — streams a file's bytes,
@@ -209,7 +217,7 @@ func (h *ItemHandler) Move(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item))
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
 }
 
 // Delete handles DELETE /api/v1/items/{id} — moves the item to trash (soft
@@ -242,7 +250,7 @@ func (h *ItemHandler) Copy(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item))
+	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
 }
 
 func (h *ItemHandler) ListTrash(res http.ResponseWriter, req *http.Request) {
@@ -251,7 +259,7 @@ func (h *ItemHandler) ListTrash(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items))
+	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items, ownerID(req)))
 }
 
 func (h *ItemHandler) Restore(res http.ResponseWriter, req *http.Request) {
@@ -260,7 +268,7 @@ func (h *ItemHandler) Restore(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item))
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
 }
 
 // DeletePermanently handles DELETE /api/v1/trash/{id} — unlike Delete, this

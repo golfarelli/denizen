@@ -59,7 +59,8 @@ func (r *ShareRepository) ListByOwner(ctx context.Context, ownerID string) ([]*m
 	return items, rows.Err()
 }
 
-// Delete revokes a share — a row delete, not a soft delete (see schema.sql).
+// Delete revokes a share — a row delete, not a soft delete (see
+// internal/db/migrations/0001_initial_schema.sql).
 func (r *ShareRepository) Delete(ctx context.Context, id string) error {
 	sql := `DELETE FROM shares WHERE id = ?`
 	_, err := r.cn.ExecContext(ctx, sql, id)
