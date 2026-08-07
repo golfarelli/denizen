@@ -209,10 +209,39 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 		t.Error("Archives.deleted_at is NULL after delete, want it set")
 	}
 
-	// a trashed item no longer shows up as an active item
+	// GET still works on a trashed item — deliberately (GetIncludingTrashed,
+	// not Get; see internal/handler/item.go's own comment): previewing
+	// something in the trash before deciding whether to restore or delete
+	// it forever needs this same read, and the response reflects the
+	// trashed state via deleted_at rather than hiding it as a 404.
 	getDeletedRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+archives.ID, fabio, nil)
-	if getDeletedRes.StatusCode != http.StatusNotFound {
-		t.Errorf("GET a trashed item: got status %d, want %d", getDeletedRes.StatusCode, http.StatusNotFound)
+	if getDeletedRes.StatusCode != http.StatusOK {
+		t.Errorf("GET a trashed item: got status %d, want %d", getDeletedRes.StatusCode, http.StatusOK)
+	}
+	deletedItem := decodeJSON[apiItem](t, getDeletedRes)
+	if deletedItem.DeletedAt == nil {
+		t.Error("GET a trashed item: response deleted_at is nil, want it set")
+	}
+
+	// It still doesn't show up in an active listing, though — GET-by-id
+	// working doesn't mean it's back to normal.
+	listRootAfterDeleteRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items", fabio, nil)
+	rootAfterDelete := decodeJSON[[]apiItem](t, listRootAfterDeleteRes)
+	for _, item := range rootAfterDelete {
+		if item.ID == archives.ID {
+			t.Error("trashed Archives still shows up in the active root listing")
+		}
+	}
+
+	// A mutating operation (here: rename) must still reject a trashed item
+	// — GetIncludingTrashed is only for the read-only preview path
+	// (internal/handler/item.go's Get/Content/ContentToken); Move (which
+	// PATCH .../items/{id} calls into) keeps using the strict Get.
+	renameTrashedRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+archives.ID, fabio, map[string]any{
+		"name": "Renamed While Trashed", "parent_id": nil,
+	})
+	if renameTrashedRes.StatusCode != http.StatusNotFound {
+		t.Errorf("renaming a trashed item: got status %d, want %d", renameTrashedRes.StatusCode, http.StatusNotFound)
 	}
 
 	// --- trash listing -----------------------------------------------------------

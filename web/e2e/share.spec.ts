@@ -87,8 +87,9 @@ test('share a file, a visitor with no account can fetch it, then revoking the li
 	const shareRow = page.locator('.item-row', { hasText: 'sample.txt' });
 	await expect(shareRow).toBeVisible();
 
+	await shareRow.getByRole('button', { name: 'Actions for' }).click();
 	page.once('dialog', (dialog) => dialog.accept());
-	await shareRow.getByRole('button', { name: 'Revoke' }).click();
+	await shareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
 	await expect(shareRow).not.toBeVisible();
 
 	const afterRevokeRes = await page.request.get(`${shareUrl}/meta`);
@@ -124,8 +125,9 @@ test('a revoked share\'s landing page says so instead of erroring', async ({ pag
 	await page.goto('/shares');
 	const shareRow = page.locator('.item-row', { hasText: name });
 	await expect(shareRow).toBeVisible();
+	await shareRow.getByRole('button', { name: 'Actions for' }).click();
 	page.once('dialog', (dialog) => dialog.accept());
-	await shareRow.getByRole('button', { name: 'Revoke' }).click();
+	await shareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
 	await expect(shareRow).toBeHidden();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
