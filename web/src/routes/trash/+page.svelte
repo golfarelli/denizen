@@ -5,6 +5,7 @@
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import SortArrow from '$lib/SortArrow.svelte';
+	import SortMenu from '$lib/SortMenu.svelte';
 	import { t } from '$lib/i18n';
 
 	let items = $state<Item[]>([]);
@@ -129,7 +130,18 @@
 	<title>{$t('nav.trash')} · Denizen</title>
 </svelte:head>
 
-<h1>{$t('nav.trash')}</h1>
+<div class="toolbar">
+	<h1 style="margin:0">{$t('nav.trash')}</h1>
+	<SortMenu
+		fields={[
+			{ key: 'name', label: $t('common.name') },
+			{ key: 'modified', label: $t('common.modified') },
+			{ key: 'size', label: $t('common.size') }
+		]}
+		bind:sortField
+		bind:sortDirection
+	/>
+</div>
 <p class="hint">{$t('trash.hint')}</p>
 
 {#if error}

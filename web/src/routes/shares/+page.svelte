@@ -4,6 +4,8 @@
 	import { api, ApiError, type Share, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { t } from '$lib/i18n';
+	import SortArrow from '$lib/SortArrow.svelte';
+	import SortMenu from '$lib/SortMenu.svelte';
 
 	interface EnrichedShare extends Share {
 		item?: Item;
@@ -17,6 +19,43 @@
 	let shares = $state<EnrichedShare[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+
+	// Not the shared lib/sortItems.ts (its Name/Modified/Size shape doesn't
+	// match this page's own Name/Status/Expires columns — EnrichedShare
+	// isn't an Item, it wraps one) — a small local comparator instead.
+	type SortField = 'name' | 'status' | 'expires';
+	type SortDirection = 'asc' | 'desc';
+	let sortField = $state<SortField>('name');
+	let sortDirection = $state<SortDirection>('asc');
+
+	function toggleSort(field: SortField) {
+		if (sortField === field) {
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortField = field;
+			sortDirection = 'asc';
+		}
+	}
+
+	let sortedShares = $derived.by(() => {
+		const sign = sortDirection === 'asc' ? 1 : -1;
+		return [...shares].sort((a, b) => {
+			if (sortField === 'name') {
+				return sign * (a.item?.name ?? '').localeCompare(b.item?.name ?? '', undefined, { numeric: true, sensitivity: 'base' });
+			}
+			if (sortField === 'status') {
+				return sign * (Number(a.requires_auth) - Number(b.requires_auth));
+			}
+			// "Never" (expires_at === undefined) always sorts last,
+			// regardless of direction — not just "largest" (which would
+			// flip to first on a descending sort, reading oddly next to
+			// real dates that keep behaving as expected).
+			if (a.expires_at == null && b.expires_at == null) return 0;
+			if (a.expires_at == null) return 1;
+			if (b.expires_at == null) return -1;
+			return sign * (a.expires_at - b.expires_at);
+		});
+	});
 
 	let openMenuFor = $state<string | null>(null);
 
@@ -118,7 +157,18 @@
 	<title>{$t('nav.myShares')} · Denizen</title>
 </svelte:head>
 
-<h1>{$t('nav.myShares')}</h1>
+<div class="toolbar">
+	<h1 style="margin:0">{$t('nav.myShares')}</h1>
+	<SortMenu
+		fields={[
+			{ key: 'name', label: $t('common.name') },
+			{ key: 'status', label: $t('shares.status') },
+			{ key: 'expires', label: $t('shares.expires') }
+		]}
+		bind:sortField
+		bind:sortDirection
+	/>
+</div>
 <p class="hint">{$t('shares.hint')}</p>
 
 {#if error}
@@ -132,13 +182,22 @@
 {:else}
 	<div class="item-list-header">
 		<span class="item-icon"></span>
-		<span class="item-name-header">{$t('common.name')}</span>
-		<span class="item-modified">{$t('shares.status')}</span>
-		<span class="item-size">{$t('shares.expires')}</span>
+		<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
+			{$t('common.name')}
+			{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
+		</button>
+		<button class="sort-header item-modified" onclick={() => toggleSort('status')}>
+			{$t('shares.status')}
+			{#if sortField === 'status'}<SortArrow direction={sortDirection} />{/if}
+		</button>
+		<button class="sort-header item-size" onclick={() => toggleSort('expires')}>
+			{$t('shares.expires')}
+			{#if sortField === 'expires'}<SortArrow direction={sortDirection} />{/if}
+		</button>
 		<span class="row-menu"></span>
 	</div>
 	<div class="item-list">
-		{#each shares as share (share.id)}
+		{#each sortedShares as share (share.id)}
 			<div class="item-row">
 				<span class="item-icon">
 					{#if share.item}
