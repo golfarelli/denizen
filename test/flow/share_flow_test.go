@@ -74,15 +74,28 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 		t.Fatalf("public metadata: got status %d", metaRes.StatusCode)
 	}
 	var meta struct {
-		Name      string `json:"name"`
-		Type      string `json:"type"`
-		SizeBytes int64  `json:"size_bytes"`
+		Name         string `json:"name"`
+		Type         string `json:"type"`
+		SizeBytes    int64  `json:"size_bytes"`
+		MimeType     string `json:"mime_type"`
+		RequiresAuth bool   `json:"requires_auth"`
 	}
 	if err := json.NewDecoder(metaRes.Body).Decode(&meta); err != nil {
 		t.Fatalf("decode public metadata: %v", err)
 	}
 	if meta.Name != "recipe.txt" || meta.SizeBytes != int64(len(content)) {
 		t.Errorf("public metadata = %+v, want name=recipe.txt size=%d", meta, len(content))
+	}
+	// mime_type/requires_auth — the landing page (routes/s/[token]/
+	// +page.svelte) needs both: mime_type to pick a viewer the same way
+	// the private preview page's own previewKind does, requires_auth to
+	// decide whether a direct <video src> (no way to attach an
+	// Authorization header) is safe to use for this particular share.
+	if meta.MimeType != "text/plain; charset=utf-8" {
+		t.Errorf("public metadata MimeType = %q, want a real sniffed type, not empty", meta.MimeType)
+	}
+	if meta.RequiresAuth != false {
+		t.Errorf("public metadata RequiresAuth = %v, want false for this share", meta.RequiresAuth)
 	}
 
 	contentRes, err := http.Get(ts.URL + "/s/" + share.Token + "/content")

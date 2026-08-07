@@ -125,6 +125,13 @@ export interface PublicShareItem {
 	name: string;
 	type: 'file' | 'folder';
 	size_bytes: number;
+	mime_type?: string;
+	// Whether *this share* needs a logged-in visitor — not whether the
+	// current request satisfied it (reaching this response at all already
+	// proves that). Used to decide whether a direct <video src> is safe
+	// (no way for it to attach an Authorization header) or whether the
+	// bytes have to be fetched as an authenticated blob instead.
+	requires_auth: boolean;
 }
 
 export const api = {

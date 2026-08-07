@@ -92,23 +92,33 @@ func (s *ShareService) Revoke(ctx context.Context, ownerID, id string) error {
 // visitor presented *some* valid access token of their own — not that they
 // own anything — which is all RequiresAuth ever asks for (see
 // docs/ARCHITECTURE.md: link-based sharing, not per-user ACLs).
-func (s *ShareService) Resolve(ctx context.Context, rawToken string, authenticated bool) (*model.Item, error) {
+//
+// Returns the share itself alongside the item — PublicMetadata
+// (internal/handler/share.go) reports RequiresAuth back to the frontend's
+// own /s/[token] landing page so it can decide whether a direct <video
+// src> (no way to attach an Authorization header) is safe to use, or
+// whether it has to fetch the bytes as an authenticated blob instead.
+func (s *ShareService) Resolve(ctx context.Context, rawToken string, authenticated bool) (*model.Share, *model.Item, error) {
 	share, err := s.shares.GetByTokenHash(ctx, token.HashOpaque(rawToken))
 	if err != nil {
 		if err == repository.ErrNotFound {
-			return nil, apperr.NotFound
+			return nil, nil, apperr.NotFound
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	if share.ExpiresAt != nil && *share.ExpiresAt < s.now().Unix() {
 		// An expired share looks exactly like "never existed" to a visitor —
 		// no reason to distinguish the two from the outside.
-		return nil, apperr.NotFound
+		return nil, nil, apperr.NotFound
 	}
 	if share.RequiresAuth && !authenticated {
-		return nil, apperr.Unauthorized
+		return nil, nil, apperr.Unauthorized
 	}
-	return s.items.GetForShare(ctx, share.ItemID)
+	item, err := s.items.GetForShare(ctx, share.ItemID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return share, item, nil
 }
 
 // FilePath resolves the on-disk path of an item already returned by

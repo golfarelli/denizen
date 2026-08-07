@@ -8,6 +8,7 @@
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import ScanDialog from '$lib/ScanDialog.svelte';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import { copyShareLink } from '$lib/copyShareLink';
 
 	interface Crumb {
 		id: string | null;
@@ -224,6 +225,26 @@
 		sharingItem = item;
 	}
 
+	let statusMessage = $state('');
+	let statusMessageTimeout: ReturnType<typeof setTimeout> | undefined;
+
+	function showStatus(message: string) {
+		statusMessage = message;
+		clearTimeout(statusMessageTimeout);
+		statusMessageTimeout = setTimeout(() => (statusMessage = ''), 4000);
+	}
+
+	async function handleCopyLink(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		try {
+			const { url, copied } = await copyShareLink(item.id);
+			showStatus(copied ? `Link to "${item.name}" copied.` : `Link created (couldn't copy automatically): ${url}`);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not create a share link.';
+		}
+	}
+
 	// Mirrors Google Drive's own "Make a copy": duplicates into the same
 	// folder the original is currently sitting in (which, for any row
 	// visible here, is exactly currentFolderId), auto-suffixed by the
@@ -406,6 +427,9 @@
 {#if error}
 	<p class="error-text">{error}</p>
 {/if}
+{#if statusMessage}
+	<p class="status-text">{statusMessage}</p>
+{/if}
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -512,6 +536,16 @@
 									<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
 								</svg>
 								Share
+							</button>
+							<button role="menuitem" onclick={(e) => handleCopyLink(item, e)}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+								Copy link
 							</button>
 							<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

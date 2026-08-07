@@ -1,8 +1,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { api, ApiError, type Item } from '$lib/api';
 	import { fullscreen } from '$lib/fullscreen';
+	import { copyShareLink } from '$lib/copyShareLink';
+	import { previewKind, type PreviewKind } from '$lib/previewKind';
+	import MoveDialog from '$lib/MoveDialog.svelte';
+	import ShareDialog from '$lib/ShareDialog.svelte';
 	// Dynamically imported below (`{#await import(...)}`), not statically
 	// here: pdf.js + docx-preview + xlsx together are a genuinely heavy
 	// ~290KB (gzipped) payload, and a static import would bundle all three
@@ -10,24 +15,6 @@
 	// actually opens — wasted download even for something as small as a
 	// text file or an image.
 
-	// Extensions treated as text even when the server's mime_type guess
-	// (Go's mime.TypeByExtension, or whatever the browser reported as
-	// File.type at upload time — see lib/upload.ts) is empty or generic:
-	// Go's own mime type database is OS-registration-based and doesn't
-	// reliably know about things like .md or .log.
-	const TEXT_EXTENSIONS = new Set([
-		'txt', 'md', 'markdown', 'json', 'csv', 'log', 'yaml', 'yml', 'xml',
-		'html', 'htm', 'css', 'js', 'ts', 'ini', 'conf', 'toml', 'sh', 'go', 'py'
-	]);
-
-	// Keyed by extension, not mime_type: both are OOXML zip-based formats
-	// with mime types Go's own guesser (mime.TypeByExtension) doesn't
-	// reliably know, and the legacy binary predecessors (.doc, .xls) need
-	// telling apart from these anyway since only one of the two libraries
-	// below (xlsx, via SheetJS's bundled legacy parser) can actually read
-	// its legacy sibling — .doc has no viewer here, only .xls does.
-
-	type PreviewKind = 'image' | 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'text' | 'video' | 'unsupported';
 	type OnlyOfficeStatus = { enabled: boolean; api_js_url?: string };
 
 	let item = $state<Item | null>(null);
@@ -64,19 +51,6 @@
 		return `/?folder=${encodeURIComponent(from)}`;
 	});
 
-	function previewKind(candidate: Item): PreviewKind {
-		const mime = candidate.mime_type ?? '';
-		const ext = candidate.name.split('.').pop()?.toLowerCase() ?? '';
-		if (mime.startsWith('image/')) return 'image';
-		if (mime === 'application/pdf') return 'pdf';
-		if (mime.startsWith('video/')) return 'video';
-		if (ext === 'docx') return 'docx';
-		if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
-		if (ext === 'pptx') return 'pptx'; // only ever previewable via OnlyOffice — no client-side viewer for it
-		if (mime.startsWith('text/') || TEXT_EXTENSIONS.has(ext)) return 'text';
-		return 'unsupported';
-	}
-
 	onMount(async () => {
 		// This page's viewers (OnlyOffice above all, but really any of them
 		// on a phone) benefit far more from real screen space than Denizen's
@@ -93,7 +67,7 @@
 
 		try {
 			item = await api.getItem(id);
-			kind = previewKind(item);
+			kind = previewKind(item.name, item.mime_type);
 
 			if (kind === 'unsupported') return; // no bytes to fetch — nothing to preview
 
@@ -180,6 +154,102 @@
 			error = 'Could not download this file.';
 		}
 	}
+
+	// This page only ever has one item open at a time, unlike the list's
+	// per-row openMenuFor map — a single boolean is enough.
+	let menuOpen = $state(false);
+	let movingItem = $state<Item | null>(null);
+	let sharingItem = $state<Item | null>(null);
+	let statusMessage = $state('');
+	let statusMessageTimeout: ReturnType<typeof setTimeout> | undefined;
+
+	function showStatus(message: string) {
+		statusMessage = message;
+		clearTimeout(statusMessageTimeout);
+		statusMessageTimeout = setTimeout(() => (statusMessage = ''), 4000);
+	}
+
+	function toggleMenu(event: MouseEvent) {
+		event.stopPropagation();
+		menuOpen = !menuOpen;
+	}
+
+	function closeMenu() {
+		menuOpen = false;
+	}
+
+	$effect(() => {
+		if (!menuOpen) return;
+		function handlePointerDown() {
+			closeMenu();
+		}
+		function handleKeydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') closeMenu();
+		}
+		window.addEventListener('click', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('click', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
+
+	async function handleRename() {
+		closeMenu();
+		if (!item) return;
+		const newName = prompt('New name', item.name);
+		if (!newName || newName === item.name) return;
+		try {
+			await api.move(item.id, newName, item.parent_id);
+			item.name = newName;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not rename this item.';
+		}
+	}
+
+	function handleStartMove() {
+		closeMenu();
+		movingItem = item;
+	}
+
+	async function handleCopy() {
+		closeMenu();
+		if (!item) return;
+		try {
+			await api.copyItem(item.id, item.parent_id);
+			showStatus(`Created a copy of "${item.name}" in the same folder.`);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not copy this item.';
+		}
+	}
+
+	function handleStartShare() {
+		closeMenu();
+		sharingItem = item;
+	}
+
+	async function handleCopyLink() {
+		closeMenu();
+		if (!item) return;
+		try {
+			const { url, copied } = await copyShareLink(item.id);
+			showStatus(copied ? 'Link copied.' : `Link created (couldn't copy automatically): ${url}`);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not create a share link.';
+		}
+	}
+
+	async function handleDelete() {
+		closeMenu();
+		if (!item) return;
+		if (!confirm(`Move "${item.name}" to trash?`)) return;
+		try {
+			await api.deleteItem(item.id);
+			goto(backHref);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not delete this item.';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -196,9 +266,101 @@
 		<a href={backHref} class="preview-back" aria-label="Back">←</a>
 		<span class="preview-title">{item?.name ?? 'Loading…'}</span>
 		{#if item}
-			<button class="btn" onclick={handleDownload}>Download</button>
+			<div class="row-menu">
+				<button
+					class="btn icon-btn"
+					aria-label="Actions for {item.name}"
+					aria-haspopup="true"
+					aria-expanded={menuOpen}
+					onclick={toggleMenu}
+				>
+					<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+						<circle cx="12" cy="5" r="1.6" fill="currentColor" />
+						<circle cx="12" cy="12" r="1.6" fill="currentColor" />
+						<circle cx="12" cy="19" r="1.6" fill="currentColor" />
+					</svg>
+				</button>
+				{#if menuOpen}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<div class="menu-backdrop" onclick={closeMenu}></div>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_interactive_supports_focus -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
+						<button role="menuitem" onclick={handleDownload}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							Download
+						</button>
+						<button role="menuitem" onclick={handleRename}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+								<path d="M13 6.5l4 4" stroke-linecap="round" />
+							</svg>
+							Rename
+						</button>
+						<button role="menuitem" onclick={handleStartMove}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+								<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							Move
+						</button>
+						<button role="menuitem" onclick={handleCopy}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+								<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							Make a copy
+						</button>
+						<button role="menuitem" onclick={handleStartShare}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<circle cx="6" cy="12" r="2.2" />
+								<circle cx="17" cy="6" r="2.2" />
+								<circle cx="17" cy="18" r="2.2" />
+								<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
+							</svg>
+							Share
+						</button>
+						<button role="menuitem" onclick={handleCopyLink}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Copy link
+						</button>
+						<button role="menuitem" class="danger" onclick={handleDelete}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path
+									d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							Delete
+						</button>
+						<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</header>
+	{#if statusMessage}
+		<p class="status-text preview-status">{statusMessage}</p>
+	{/if}
 
 	<div class="preview-content">
 		{#if loading}
@@ -244,3 +406,6 @@
 		{/if}
 	</div>
 </div>
+
+<MoveDialog bind:item={movingItem} onMoved={() => showStatus('Moved.')} />
+<ShareDialog bind:item={sharingItem} />

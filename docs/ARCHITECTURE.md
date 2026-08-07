@@ -540,11 +540,7 @@ directly before this existed. It fetches that JSON itself (via
 that go through a deliberately credential-free `publicReq` — still goes
 through the normal `apiFetch`, so a visitor who *does* happen to be logged
 in gets their access token attached automatically, which is what actually
-satisfies a `requires_auth` share for them) and renders a name/size/icon
-card with a Download button (a plain blob fetch + `<a download>`, same
-pattern as the private file browser's own download; images additionally
-get fetched and shown inline, since "here's a photo" is a common enough
-share to be worth the one extra request). A `requires_auth` share an
+satisfies a `requires_auth` share for them). A `requires_auth` share an
 anonymous visitor hits shows a "Log in" prompt instead of erroring — the
 metadata fetch's 401 is what triggers that state — linking to
 `/login?then=<this page's own path>`, so `routes/login/+page.svelte`
@@ -558,6 +554,51 @@ re-litigated there) — see `+layout.svelte`'s route guard for how `/s/`
 paths are exempted from the app-wide "no session → bounce to /login"
 check that would otherwise undermine all of this for a logged-out
 visitor before the page ever got a chance to render.
+
+The page renders a real *preview*, not just a name/size card with a
+Download button — reusing the exact same `lib/previewKind.ts` decision and
+`.preview-page`/`.preview-header`/`.preview-content` layout/CSS classes as
+the private file preview page (`routes/file/[id]/+page.svelte`), down to
+loading PdfViewer/DocxViewer/XlsxViewer via the same dynamic `import()`.
+One real difference: this page never reaches for OnlyOffice, even when
+configured — `OnlyOfficeHandler.Config` requires an authenticated owner
+(`ownerID(req)`), which an anonymous share visitor doesn't have — so
+docx/xlsx/pdf here always use the client-side fallback viewers, the same
+ones the private page itself falls back to when OnlyOffice isn't
+configured at all. Video gets one more wrinkle:
+`publicItemResponse.RequiresAuth` (new on `GET /s/{token}/meta`, alongside
+`MimeType` — both needed for `previewKind` to decide correctly, and
+`Resolve` in `internal/service/share.go` had to start returning the
+`*model.Share` itself, not just the resolved `*model.Item`, to have
+`RequiresAuth` available to hand back) tells the page whether a direct
+`<video src="/s/{token}/content">` is safe — real HTTP Range streaming, no
+token needed, since the share token embedded in the URL path is already
+this route's own auth. A `requires_auth` share can't do that (a plain
+element `src` has no way to attach the `Authorization` header that route
+would then also require), so those fall back to fetching the whole video
+as an authenticated blob first, same as every other type here — losing
+Range streaming for that one combination, accepted as a narrow, honestly-
+documented limitation rather than building a share-scoped content-token
+mechanism to avoid it.
+
+**Copy link** (the file browser's and the private preview page's own row
+action menus) is a fast path around `ShareDialog`'s own form —
+`lib/copyShareLink.ts` mints a share with the same quick defaults Drive's
+own "Copy link" uses (no login required, never expires) and writes the
+URL straight to the clipboard, for whoever just wants a link without
+configuring anything. Always mints a *new* share rather than trying to
+find and reuse an existing one for the same item — impossible anyway, since
+the raw token is only ever shown once, at creation (see above). Clipboard
+write failure (`navigator.clipboard` needs a secure context — https or
+localhost, not necessarily true for a home server reached over plain http
+on the LAN) doesn't throw and lose the share that already got created; the
+caller falls back to showing the URL itself in its own transient status
+message instead.
+
+The private preview page's own toolbar also traded its lone Download
+button for the same "⋮" row action menu the file browser's rows use
+(Download/Rename/Move/Make a copy/Share/Copy link/Delete) — Fabio's own
+ask, so the full set of actions is reachable without leaving the preview.
 
 ## Quotas
 
