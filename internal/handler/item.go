@@ -119,8 +119,14 @@ func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
 	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items))
 }
 
+// Get handles GET /api/v1/items/{id} — deliberately allows a trashed item
+// too (GetIncludingTrashed, not Get): previewing something in the trash
+// before deciding whether to restore or delete it forever is exactly what
+// Trash's own "open to view" needs, and this is the same read a normal
+// preview does. Mutating routes (Move, Copy, ...) all check via Get
+// directly, in internal/service, and keep rejecting a trashed item.
 func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
-	item, err := h.items.Get(req.Context(), ownerID(req), req.PathValue("id"))
+	item, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), req.PathValue("id"))
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
@@ -131,9 +137,9 @@ func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
 // Content handles GET /api/v1/items/{id}/content — streams a file's bytes,
 // with Range support (via http.ServeContent, so a paused download or a
 // video/PDF preview seeking around doesn't need custom byte-range logic
-// here).
+// here). Trashed items are readable here too — see Get's own comment.
 func (h *ItemHandler) Content(res http.ResponseWriter, req *http.Request) {
-	item, err := h.items.Get(req.Context(), ownerID(req), req.PathValue("id"))
+	item, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), req.PathValue("id"))
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
@@ -156,12 +162,15 @@ type contentTokenResponse struct {
 // query parameter (?token=...), for <video>/<audio> elements that can't
 // attach the Authorization header this app's own fetch() calls use
 // instead (see lib/api.ts's downloadContent, used by everything else).
+// Trashed items included, same as Get/Content above — a trashed video
+// still needs to be previewable via <video>, which is what this token is
+// for.
 func (h *ItemHandler) ContentToken(res http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	// Same ownership check every other item route already goes through —
 	// confirms the item exists and actually belongs to the caller before
 	// minting anything for it.
-	if _, err := h.items.Get(req.Context(), ownerID(req), id); err != nil {
+	if _, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), id); err != nil {
 		httpio.WriteError(res, err)
 		return
 	}

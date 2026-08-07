@@ -461,6 +461,9 @@
 					</button>
 					{#if openMenuFor === item.id}
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="menu-backdrop" onclick={closeMenu}></div>
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<!-- svelte-ignore a11y_interactive_supports_focus -->
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
@@ -520,6 +523,7 @@
 								</svg>
 								Delete
 							</button>
+							<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
 						</div>
 					{/if}
 				</div>
@@ -544,6 +548,9 @@
 	</svg>
 </button>
 {#if fabMenuOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div class="menu-backdrop" onclick={() => (fabMenuOpen = false)}></div>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- svelte-ignore a11y_interactive_supports_focus -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -589,6 +596,7 @@
 			</svg>
 			New folder
 		</button>
+		<button class="dropdown-menu-cancel" onclick={() => (fabMenuOpen = false)}>Cancel</button>
 	</div>
 {/if}
 

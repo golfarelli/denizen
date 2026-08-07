@@ -66,8 +66,8 @@ Independent of, and composes cleanly with, the file preview page's own
 `lib/fullscreen.ts` store — fullscreen hides this entire shell (sidebar
 included), checked first in the layout's template.
 
-File/folder rows across the app (the file browser, trash, the move-folder
-picker) get a colored icon per type via `lib/FileIcon.svelte`. Files render
+File/folder rows across the app (the file browser, trash, my shares, the
+move-folder picker) get a colored icon per type via `lib/FileIcon.svelte`. Files render
 as a rounded-square color chip per category (blue for Word, green for
 Excel, red for PDF, etc.) with a short baked-in text label for the
 categories where that's the clearest cue, or a small picture/play glyph
@@ -107,18 +107,65 @@ Icon and the row-menu both span both rows (their area name repeats down
 both `grid-template-areas` rows) so they stay vertically centered against
 the row as a whole.
 
-Not every `.item-row` is this 5-column shape, though — trash, shares,
-admin, and the move-folder picker all reuse `.item-row` for a simpler
-icon+name+buttons row that doesn't have modified/size cells to place.
-Those get an `.item-row-flex` modifier class instead, falling back to a
-plain flex row (`.item-name`'s own `flex: 1` still applies — grid-area and
-flex are simply no-ops under each other's layout mode, so one rule serves
-both) rather than leaving two of the grid's named columns permanently
-empty. Its own mobile breakpoint wraps the row instead of reflowing it
-into named areas, since what follows the name varies per page (a couple of
-full-text buttons on trash, two more `.item-size` spans and a button on
-shares) and would otherwise squeeze the name down to nothing on a narrow
-screen exactly the way the original all-Unicode-icon kebab did.
+Not every `.item-row` is this 5-column shape, though — admin and the
+move-folder picker reuse `.item-row` for a simpler icon+name+buttons row
+that doesn't have modified/size cells to place. Those get an
+`.item-row-flex` modifier class instead, falling back to a plain flex row
+(`.item-name`'s own `flex: 1` still applies — grid-area and flex are
+simply no-ops under each other's layout mode, so one rule serves both)
+rather than leaving two of the grid's named columns permanently empty. Its
+own mobile breakpoint wraps the row instead of reflowing it into named
+areas, since what follows the name varies per page and would otherwise
+squeeze the name down to nothing on a narrow screen exactly the way the
+original all-Unicode-icon kebab did.
+
+Trash and My shares *used* to be `.item-row-flex` pages too, each with its
+own bespoke layout — full-text Restore/Delete forever buttons on trash,
+two extra `.item-size` spans (status, expiry) on shares — until Fabio
+asked for them to visually match the file browser itself. Both now use the
+real 5-column grid and a row action menu identical in shape to the file
+browser's own (Trash: Open/Restore/Delete forever; My shares: Open/Revoke
+— "Open" only rendered when the target is an openable file, not a
+folder or a share whose target no longer resolves at all). Column meaning
+still bends to what each page actually has to show: My shares repurposes
+the modified/size grid cells for share-specific status ("Public"/"Login
+required") and expiry rather than the underlying item's own modified time
+and size, which aren't especially useful there.
+
+**Trash preview.** Both rows are now genuinely clickable through to a real
+preview — Trash's own "possibilità di aprire il file per vederlo" ask —
+which needed a backend change, not just a frontend one:
+`ItemService.GetIncludingTrashed` (`internal/service/item.go`) is `Get`
+without the not-trashed requirement, and `ItemHandler`'s `Get`/`Content`/
+`ContentToken` (the three read-only item routes — GET .../items/{id}, GET
+.../content, POST .../content-token) switched to it. Every *mutating*
+route (Move, Copy, ReplaceContent, ...) still goes through the strict
+`Get` directly in `internal/service`, so a trashed item stays fully
+un-editable — only reachable read-only, for a quick look before deciding
+whether to restore it or delete it forever, the same as Drive/Nextcloud's
+own trash. `FilePath` needed its own trashed-item branch alongside this:
+`Delete` physically renames a trashed item straight to
+`storage.TrashPath(username, id, name)`, a flat location that has nothing
+to do with `pathOf`'s usual parent_id-chain walk (which doesn't change
+until Restore) — correct only for the *top-level* entry of a trashed
+subtree, not an arbitrary descendant several folders down, but that's the
+only case any real caller hits: `ListTrash` (see its own comment) only
+ever surfaces one row per trashed subtree, its top-level item, so that's
+the only id Trash's own "open to view" can ever pass through.
+
+**The mobile action sheet.** Below the same 640px breakpoint the two-line
+row reflow uses, every `.dropdown-menu` (file browser, trash, shares, and
+the FAB's own menu, which carries this same class) becomes a fullscreen
+bottom sheet instead of a small anchored popover — `position: fixed`,
+pinned to the bottom edge, plus a genuine sibling `.menu-backdrop` element
+(not a `::before` pseudo-element: a pseudo-element's clicks bubble to the
+real element that generates it, which already stops propagation so its
+own content clicks don't self-close the menu — so a pseudo-element
+backdrop could never register as "outside" the menu) and a `.dropdown-
+menu-cancel` button, both inert/`display: none` above the breakpoint. Each
+page's own `openMenuFor`/`toggleMenu`/`closeMenu` state and outside-click/
+Escape handling (unchanged from before this) drive both presentations —
+only the CSS differs by viewport width, not the open/close logic itself.
 
 A later pass, prompted by Fabio comparing a Drive screenshot directly
 against Denizen's own file list, dropped `.item-list`'s outer bordered

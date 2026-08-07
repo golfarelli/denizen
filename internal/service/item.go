@@ -147,6 +147,28 @@ func (s *ItemService) Get(ctx context.Context, ownerID, id string) (*model.Item,
 	return item, nil
 }
 
+// GetIncludingTrashed is Get without the not-trashed requirement — for
+// read-only access to an item regardless of trash state (previewing a
+// trashed file before deciding whether to restore or delete it forever,
+// matching Drive/Nextcloud's own trash behavior). Deliberately not just
+// Get with a flag: every mutating operation (Move, Copy, ReplaceContent,
+// ...) calls Get directly for its own precondition check, and those must
+// keep rejecting a trashed item — only the read-only item/content/
+// content-token handlers (internal/handler/item.go) use this one.
+func (s *ItemService) GetIncludingTrashed(ctx context.Context, ownerID, id string) (*model.Item, error) {
+	item, err := s.items.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, apperr.NotFound
+		}
+		return nil, err
+	}
+	if item.OwnerID != ownerID {
+		return nil, apperr.NotFound
+	}
+	return item, nil
+}
+
 // GetForShare returns an active item by ID with no ownership check — used
 // only by the public share-resolution path (internal/service/share.go),
 // where authorization comes from presenting a valid share token instead of
@@ -166,10 +188,21 @@ func (s *ItemService) GetForShare(ctx context.Context, id string) (*model.Item, 
 }
 
 // FilePath resolves the real on-disk path of an already-authorized file
-// item. Callers (the private download handler, having called Get; the
-// public share handler, having validated a share token) are responsible
-// for their own authorization before calling this — it doesn't re-check
-// anything itself.
+// item. Callers (the private download/preview handlers, having called Get
+// or GetIncludingTrashed; the public share handler, having validated a
+// share token) are responsible for their own authorization before calling
+// this — it doesn't re-check anything itself.
+//
+// A trashed item needs its own branch here: Delete (below) physically
+// renames the *top-level* trashed item straight to storage.TrashPath, not
+// the nested location pathOf would still compute from parent_id (which
+// doesn't change on trash — only on Restore). This is only correct for
+// that top-level entry, not an arbitrary descendant several folders deep
+// inside a trashed subtree — but that's the only case any real caller
+// hits: ListTrash (see its own comment) only ever surfaces one row per
+// trashed subtree, its top-level item, which is the only thing Trash's
+// own "open to view" (routes/trash/+page.svelte) can pass an id for in
+// the first place.
 func (s *ItemService) FilePath(ctx context.Context, item *model.Item) (string, error) {
 	if item.Type != model.ItemTypeFile {
 		return "", apperr.Validation("not a file")
@@ -177,6 +210,9 @@ func (s *ItemService) FilePath(ctx context.Context, item *model.Item) (string, e
 	username, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return "", err
+	}
+	if item.DeletedAt != nil {
+		return s.storage.TrashPath(username, item.ID, item.Name), nil
 	}
 	return s.pathOf(ctx, item, username)
 }

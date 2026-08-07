@@ -50,15 +50,19 @@
 	// OnlyOfficeViewer.svelte.
 	let onlyOffice = $state<OnlyOfficeStatus | null>(null);
 
-	// Set by the file list when navigating here (routes/+page.svelte) so
-	// "Back" returns to the folder the user actually came from, not always
-	// the root — falls back to root for a direct link/bookmark that never
-	// went through the list.
-	let backHref = $derived(
-		$page.url.searchParams.has('from')
-			? `/?folder=${encodeURIComponent($page.url.searchParams.get('from')!)}`
-			: '/'
-	);
+	// Set by whichever list navigated here (routes/+page.svelte, routes/
+	// trash/+page.svelte, routes/shares/+page.svelte) so "Back" returns to
+	// where the user actually came from — a real folder id, or one of the
+	// two fixed non-folder lists that also open files this way now — not
+	// always the root. Falls back to root for a direct link/bookmark that
+	// never went through any of them.
+	let backHref = $derived.by(() => {
+		const from = $page.url.searchParams.get('from');
+		if (!from) return '/';
+		if (from === 'trash') return '/trash';
+		if (from === 'shares') return '/shares';
+		return `/?folder=${encodeURIComponent(from)}`;
+	});
 
 	function previewKind(candidate: Item): PreviewKind {
 		const mime = candidate.mime_type ?? '';

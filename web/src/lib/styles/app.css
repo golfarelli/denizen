@@ -840,6 +840,33 @@ dialog::backdrop {
 	padding-top: calc(var(--space-2) + 2px);
 }
 
+/* Backdrop + Cancel button for the mobile bottom-sheet version of
+   .dropdown-menu (see the media query below) — inert on desktop, where
+   the small anchored dropdown still just closes via the existing
+   outside-click/Escape handling each page already has. A real sibling
+   element, not a ::before on .dropdown-menu itself: a pseudo-element's
+   clicks bubble to its own element (which stops propagation so its own
+   content clicks don't close the menu), so it could never register as
+   "outside" the menu the way a real separate element can. */
+.menu-backdrop {
+	display: none;
+}
+
+.dropdown-menu-cancel {
+	display: none;
+	width: 100%;
+	margin-top: var(--space-2);
+	padding: var(--space-3);
+	text-align: center;
+	border: none;
+	background: var(--color-surface);
+	border-radius: var(--radius);
+	font: inherit;
+	font-weight: 600;
+	color: inherit;
+	cursor: pointer;
+}
+
 /* Mobile only (see the media query below) — Drive's own floating "+"
    replaces a permanently-visible row of Upload/Scan/New folder buttons,
    which on a phone-width screen was a whole extra row eaten out of the
@@ -953,6 +980,45 @@ dialog::backdrop {
 
 	.item-row-flex .item-name {
 		flex-basis: 100%;
+	}
+
+	/* Every action menu (row kebabs across the file list/trash/shares, and
+	   the FAB's own .fab-menu, which carries this same .dropdown-menu
+	   class) becomes a fullscreen-width bottom sheet instead of a small
+	   anchored dropdown — much easier to hit the right option with a
+	   thumb than a compact popover pinned to wherever the trigger button
+	   happened to be. */
+	.menu-backdrop {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgb(0 0 0 / 45%);
+		z-index: 39;
+	}
+
+	.dropdown-menu {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		top: auto;
+		margin: 0;
+		min-width: 0;
+		max-width: none;
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+		box-shadow: 0 -8px 24px rgb(0 0 0 / 25%);
+		z-index: 40;
+		padding: var(--space-2);
+		padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+	}
+
+	.dropdown-menu button {
+		padding: var(--space-3);
+		font-size: 1rem;
+	}
+
+	.dropdown-menu-cancel {
+		display: block;
 	}
 }
 

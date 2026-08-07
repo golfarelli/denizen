@@ -83,3 +83,58 @@ func TestContentFlow_DownloadAndRange(t *testing.T) {
 		t.Errorf("anonymous download: got status %d, want %d", anonRes.StatusCode, http.StatusUnauthorized)
 	}
 }
+
+// TestContentFlow_TrashedFileStillPreviewable covers the read-only trash-
+// preview path (internal/handler/item.go's Get/Content/ContentToken all
+// switched from ItemService.Get to GetIncludingTrashed) — a trashed file's
+// metadata, bytes, and a minted content token all still have to work for
+// its owner, the same as an active file, so Trash's own "open to view"
+// (routes/trash/+page.svelte) has something real to point at.
+func TestContentFlow_TrashedFileStillPreviewable(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	content := []byte("a file about to be trashed, then previewed anyway")
+	item := uploadFile(t, ts, fabio, nil, "doomed.txt", content)
+
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, fabio, nil)
+	if deleteRes.StatusCode != http.StatusNoContent {
+		t.Fatalf("trash the item: got status %d", deleteRes.StatusCode)
+	}
+
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	if contentRes.StatusCode != http.StatusOK {
+		t.Fatalf("download trashed item content: got status %d", contentRes.StatusCode)
+	}
+	body, err := io.ReadAll(contentRes.Body)
+	if err != nil {
+		t.Fatalf("read trashed item content: %v", err)
+	}
+	if !bytes.Equal(body, content) {
+		t.Error("trashed item content does not match what was uploaded")
+	}
+
+	tokenRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+item.ID+"/content-token", fabio, map[string]any{})
+	if tokenRes.StatusCode != http.StatusOK {
+		t.Fatalf("mint content token for trashed item: got status %d", tokenRes.StatusCode)
+	}
+	minted := decodeJSON[struct {
+		Token string `json:"token"`
+	}](t, tokenRes)
+	if minted.Token == "" {
+		t.Fatal("minted content token is empty")
+	}
+	tokenContentRes, err := http.Get(ts.URL + "/api/v1/items/" + item.ID + "/content?token=" + minted.Token)
+	if err != nil {
+		t.Fatalf("GET content via minted token: %v", err)
+	}
+	if tokenContentRes.StatusCode != http.StatusOK {
+		t.Errorf("content via minted token for trashed item: got status %d, want %d", tokenContentRes.StatusCode, http.StatusOK)
+	}
+}
