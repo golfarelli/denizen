@@ -174,5 +174,8 @@ test('a file type without preview support falls back to a download prompt', asyn
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	await expect(page.getByText("Preview isn't available for this file type yet.")).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
+	// Download now lives behind the page's own "⋮" action menu (the same
+	// one the file list's rows use), not a directly-visible button.
+	await page.getByRole('button', { name: 'Actions for unsupported.bin' }).click();
+	await expect(page.locator('.dropdown-menu').getByRole('menuitem', { name: 'Download' })).toBeVisible();
 });

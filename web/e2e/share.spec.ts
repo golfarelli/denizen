@@ -62,10 +62,13 @@ test('share a file, a visitor with no account can fetch it, then revoking the li
 	// the actual regression test for "share links open JSON, not the
 	// file": a real page.goto, not just an API assertion.
 	await page.goto(shareUrl);
-	await expect(page.getByRole('heading', { name: 'sample.txt' })).toBeVisible();
+	await expect(page.locator('.preview-title')).toHaveText('sample.txt');
 	await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
-	// Not raw JSON: the app's own brand mark renders, not a `{"name":...}`
-	// blob dumped as plain text.
+	// The real regression check for "opens JSON, not the file": actual
+	// file content rendered inline (this page's own full preview, same as
+	// the private file page), not a `{"name":...}` blob dumped as plain
+	// text.
+	await expect(page.locator('.preview-text')).toHaveText(readFileSync(FIXTURE_PATH, 'utf8'));
 	await expect(page.getByText('{"name"', { exact: false })).toHaveCount(0);
 
 	// page.request never attaches this app's Authorization header (that's
@@ -177,5 +180,32 @@ test('sharing a folder shows its name but no broken Download button', async ({ p
 	await visitorPage.goto(shareUrl);
 	await expect(visitorPage.getByRole('heading', { name: folderName })).toBeVisible();
 	await expect(visitorPage.getByRole('button', { name: 'Download' })).toHaveCount(0);
+	await visitor.close();
+});
+
+test('a shared PDF renders a full inline preview, not just a name/size card', async ({ page }) => {
+	await shareNewFile(page);
+	await page.getByRole('button', { name: 'Create link' }).click();
+	const shareUrl = await page.locator('dialog input[readonly]').inputValue();
+
+	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
+	const visitorPage = await visitor.newPage();
+	await visitorPage.goto(shareUrl);
+
+	// Same real-pixels check preview.spec.ts uses for the private page's
+	// own PDF viewer — a blank-but-present canvas would be exactly what a
+	// broken/stubbed-out public viewer would produce.
+	const canvas = visitorPage.locator('.pdf-pages canvas.pdf-page').first();
+	await expect(canvas).toBeVisible({ timeout: 10_000 });
+	const hasContent = await canvas.evaluate((el: HTMLCanvasElement) => {
+		const ctx = el.getContext('2d');
+		if (!ctx) return false;
+		const { data } = ctx.getImageData(0, 0, el.width, el.height);
+		for (let i = 0; i < data.length; i += 4) {
+			if (data[i] !== 255 || data[i + 1] !== 255 || data[i + 2] !== 255) return true;
+		}
+		return false;
+	});
+	expect(hasContent).toBe(true);
 	await visitor.close();
 });

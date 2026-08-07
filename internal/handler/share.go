@@ -104,9 +104,18 @@ func (h *ShareHandler) Revoke(res http.ResponseWriter, req *http.Request) {
 }
 
 type publicItemResponse struct {
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	SizeBytes int64  `json:"size_bytes"`
+	Name      string  `json:"name"`
+	Type      string  `json:"type"`
+	SizeBytes int64   `json:"size_bytes"`
+	MimeType  *string `json:"mime_type,omitempty"`
+	// RequiresAuth tells the landing page whether a direct <video src> is
+	// safe to use for this share (see routes/s/[token]/+page.svelte) — a
+	// plain element src has no way to attach an Authorization header, so
+	// it only works when the share needs none at all. Reaching this
+	// handler at all already proves the *current* request is allowed
+	// through (Resolve already checked that); this is about a *future*
+	// request an element attribute makes on its own.
+	RequiresAuth bool `json:"requires_auth"`
 }
 
 // PublicMetadata handles GET /s/{token}/meta — called by the frontend's
@@ -117,13 +126,14 @@ type publicItemResponse struct {
 // endpoints (just enough for that landing page to render something), since
 // the visitor isn't necessarily anyone with an account.
 func (h *ShareHandler) PublicMetadata(res http.ResponseWriter, req *http.Request) {
-	item, err := h.shares.Resolve(req.Context(), req.PathValue("token"), middleware.IsAuthenticated(h.tokens, req))
+	share, item, err := h.shares.Resolve(req.Context(), req.PathValue("token"), middleware.IsAuthenticated(h.tokens, req))
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
 	}
 	httpio.WriteJSON(res, http.StatusOK, publicItemResponse{
 		Name: item.Name, Type: string(item.Type), SizeBytes: item.SizeBytes,
+		MimeType: item.MimeType, RequiresAuth: share.RequiresAuth,
 	})
 }
 
@@ -131,7 +141,7 @@ func (h *ShareHandler) PublicMetadata(res http.ResponseWriter, req *http.Request
 // this way (no zip-on-the-fly in this pass) — only a shared file's actual
 // bytes are.
 func (h *ShareHandler) PublicContent(res http.ResponseWriter, req *http.Request) {
-	item, err := h.shares.Resolve(req.Context(), req.PathValue("token"), middleware.IsAuthenticated(h.tokens, req))
+	_, item, err := h.shares.Resolve(req.Context(), req.PathValue("token"), middleware.IsAuthenticated(h.tokens, req))
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
