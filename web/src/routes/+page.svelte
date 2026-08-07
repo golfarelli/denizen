@@ -12,6 +12,7 @@
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import { viewMode } from '$lib/viewMode';
 	import SortArrow from '$lib/SortArrow.svelte';
+	import { t } from '$lib/i18n';
 
 	interface Crumb {
 		id: string | null;
@@ -27,7 +28,12 @@
 	}
 
 	let items = $state<Item[]>([]);
-	let breadcrumb = $state<Crumb[]>([{ id: null, name: 'Home' }]);
+	// The root crumb's label is snapshotted at whatever locale was active
+	// when it was (re)built (on every folder navigation, see buildBreadcrumb
+	// below) — switching language mid-browse without navigating leaves it
+	// stale until the next folder change. Not worth extra reactive
+	// plumbing for a single-user app where that's a rare, harmless edge.
+	let breadcrumb = $state<Crumb[]>([{ id: null, name: $t('common.home') }]);
 	let loading = $state(true);
 	let error = $state('');
 	let uploads = $state<UploadEntry[]>([]);
@@ -149,7 +155,7 @@
 	let currentFolderId = $derived($page.url.searchParams.get('folder'));
 
 	async function buildBreadcrumb(folderId: string | null): Promise<Crumb[]> {
-		if (!folderId) return [{ id: null, name: 'Home' }];
+		if (!folderId) return [{ id: null, name: $t('common.home') }];
 		const chain: Crumb[] = [];
 		let current: string | null = folderId;
 		while (current) {
@@ -157,7 +163,7 @@
 			chain.unshift({ id: item.id, name: item.name });
 			current = item.parent_id;
 		}
-		return [{ id: null, name: 'Home' }, ...chain];
+		return [{ id: null, name: $t('common.home') }, ...chain];
 	}
 
 	async function load(folderId: string | null) {
@@ -168,7 +174,7 @@
 			items = listing ?? [];
 			breadcrumb = crumbs;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not load this folder.';
+			error = err instanceof ApiError ? err.message : $t('fileBrowser.errors.couldNotLoadFolder');
 		} finally {
 			loading = false;
 		}
@@ -197,25 +203,25 @@
 	}
 
 	async function handleNewFolder() {
-		const name = prompt('Folder name');
+		const name = prompt($t('fileBrowser.folderNamePrompt'));
 		if (!name) return;
 		try {
 			await api.createFolder(name, currentFolderId);
 			await load(currentFolderId);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not create the folder.';
+			error = err instanceof ApiError ? err.message : $t('fileBrowser.errors.couldNotCreateFolder');
 		}
 	}
 
 	async function handleDelete(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		if (!confirm(`Move "${item.name}" to trash?`)) return;
+		if (!confirm($t('common.confirmTrash', { name: item.name }))) return;
 		try {
 			await api.deleteItem(item.id);
 			await load(currentFolderId);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not delete this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotDelete');
 		}
 	}
 
@@ -226,13 +232,13 @@
 	async function handleRename(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		const newName = prompt('New name', item.name);
+		const newName = prompt($t('common.newNamePrompt'), item.name);
 		if (!newName || newName === item.name) return;
 		try {
 			await api.move(item.id, newName, currentFolderId);
 			await load(currentFolderId);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not rename this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotRename');
 		}
 	}
 
@@ -262,9 +268,13 @@
 		closeMenu();
 		try {
 			const { url, copied } = await copyShareLink(item.id);
-			showStatus(copied ? `Link to "${item.name}" copied.` : `Link created (couldn't copy automatically): ${url}`);
+			showStatus(
+				copied
+					? $t('fileBrowser.linkCopied', { name: item.name })
+					: $t('common.linkCreatedManualCopy', { url })
+			);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not create a share link.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotCreateShareLink');
 		}
 	}
 
@@ -279,7 +289,7 @@
 			await api.copyItem(item.id, currentFolderId);
 			await load(currentFolderId);
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not copy this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotCopy');
 		}
 	}
 
@@ -298,7 +308,7 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch {
-			error = 'Could not download this file.';
+			error = $t('common.errors.couldNotDownload');
 		}
 	}
 
@@ -404,19 +414,24 @@
 </nav>
 
 <div class="toolbar">
-	<h1 style="margin:0">Files</h1>
+	<h1 style="margin:0">{$t('fileBrowser.title')}</h1>
 	<div class="search-box">
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 			<circle cx="11" cy="11" r="6" />
 			<path d="m20 20-3.5-3.5" stroke-linecap="round" />
 		</svg>
-		<input type="search" placeholder="Search this folder…" bind:value={searchQuery} aria-label="Search files" />
+		<input
+			type="search"
+			placeholder={$t('fileBrowser.searchPlaceholder')}
+			bind:value={searchQuery}
+			aria-label={$t('fileBrowser.searchAriaLabel')}
+		/>
 	</div>
-	<div class="view-toggle" role="group" aria-label="View">
+	<div class="view-toggle" role="group" aria-label={$t('fileBrowser.viewGroupLabel')}>
 		<button
 			class="view-toggle-btn"
 			class:active={$viewMode === 'list'}
-			aria-label="List view"
+			aria-label={$t('fileBrowser.listView')}
 			aria-pressed={$viewMode === 'list'}
 			onclick={() => viewMode.set('list')}
 		>
@@ -427,7 +442,7 @@
 		<button
 			class="view-toggle-btn"
 			class:active={$viewMode === 'grid'}
-			aria-label="Grid view"
+			aria-label={$t('fileBrowser.gridView')}
 			aria-pressed={$viewMode === 'grid'}
 			onclick={() => viewMode.set('grid')}
 		>
@@ -440,9 +455,9 @@
 		</button>
 	</div>
 	<div class="toolbar-actions">
-		<button class="btn" onclick={() => fileInput.click()}>+ Upload</button>
-		<button class="btn" onclick={() => (scanOpen = true)}>📷 Scan</button>
-		<button class="btn btn-primary" onclick={handleNewFolder}>+ New folder</button>
+		<button class="btn" onclick={() => fileInput.click()}>{$t('fileBrowser.upload')}</button>
+		<button class="btn" onclick={() => (scanOpen = true)}>{$t('fileBrowser.scan')}</button>
+		<button class="btn btn-primary" onclick={handleNewFolder}>{$t('fileBrowser.newFolder')}</button>
 	</div>
 </div>
 
@@ -463,11 +478,11 @@
 					<div class="upload-bar"><div class="upload-bar-fill" style="width: {entry.progress}%"></div></div>
 					<span class="upload-percent">{entry.progress}%</span>
 				{:else if entry.status === 'done'}
-					<span class="upload-status-done">Done</span>
-					<button class="btn icon-btn" aria-label="Dismiss" onclick={() => dismissUpload(entry.id)}>✕</button>
+					<span class="upload-status-done">{$t('common.done')}</span>
+					<button class="btn icon-btn" aria-label={$t('fileBrowser.dismiss')} onclick={() => dismissUpload(entry.id)}>✕</button>
 				{:else}
-					<span class="error-text">{entry.error ?? 'Failed'}</span>
-					<button class="btn icon-btn" aria-label="Dismiss" onclick={() => dismissUpload(entry.id)}>✕</button>
+					<span class="error-text">{entry.error ?? $t('common.failed')}</span>
+					<button class="btn icon-btn" aria-label={$t('fileBrowser.dismiss')} onclick={() => dismissUpload(entry.id)}>✕</button>
 				{/if}
 			</div>
 		{/each}
@@ -492,17 +507,17 @@
 	class:dropzone-active={dragging}
 >
 	{#if loading}
-		<p>Loading…</p>
+		<p>{$t('common.loading')}</p>
 	{:else if items.length === 0}
-		<div class="empty-state">This folder is empty. Drop files here, or use "+ Upload".</div>
+		<div class="empty-state">{$t('fileBrowser.emptyFolder')}</div>
 	{:else if visibleItems.length === 0}
-		<div class="empty-state">No files match "{searchQuery}" in this folder.</div>
+		<div class="empty-state">{$t('fileBrowser.noSearchMatches', { query: searchQuery })}</div>
 	{:else}
 		{#snippet rowMenu(item: Item)}
 			<div class="row-menu">
 				<button
 					class="btn icon-btn"
-					aria-label="Actions for {item.name}"
+					aria-label={$t('common.actionsFor', { name: item.name })}
 					aria-haspopup="true"
 					aria-expanded={openMenuFor === item.id}
 					onclick={(e) => toggleMenu(item.id, e)}
@@ -526,7 +541,7 @@
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 									<path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
 								</svg>
-								Download
+								{$t('common.download')}
 							</button>
 						{/if}
 						<button role="menuitem" onclick={(e) => handleRename(item, e)}>
@@ -538,7 +553,7 @@
 								/>
 								<path d="M13 6.5l4 4" stroke-linecap="round" />
 							</svg>
-							Rename
+							{$t('common.rename')}
 						</button>
 						<button role="menuitem" onclick={(e) => handleStartMove(item, e)}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -549,14 +564,14 @@
 								/>
 								<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
 							</svg>
-							Move
+							{$t('common.move')}
 						</button>
 						<button role="menuitem" onclick={(e) => handleCopy(item, e)}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
 								<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
 							</svg>
-							Make a copy
+							{$t('common.makeACopy')}
 						</button>
 						<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -565,7 +580,7 @@
 								<circle cx="17" cy="18" r="2.2" />
 								<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
 							</svg>
-							Share
+							{$t('common.share')}
 						</button>
 						<button role="menuitem" onclick={(e) => handleCopyLink(item, e)}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -575,7 +590,7 @@
 									stroke-linejoin="round"
 								/>
 							</svg>
-							Copy link
+							{$t('common.copyLink')}
 						</button>
 						<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -585,9 +600,9 @@
 									stroke-linejoin="round"
 								/>
 							</svg>
-							Delete
+							{$t('common.delete')}
 						</button>
-						<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
+						<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 					</div>
 				{/if}
 			</div>
@@ -597,15 +612,15 @@
 			<div class="item-list-header">
 				<span class="item-icon"></span>
 				<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
-					Name
+					{$t('common.name')}
 					{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
 				</button>
 				<button class="sort-header item-modified" onclick={() => toggleSort('modified')}>
-					Modified
+					{$t('common.modified')}
 					{#if sortField === 'modified'}<SortArrow direction={sortDirection} />{/if}
 				</button>
 				<button class="sort-header item-size" onclick={() => toggleSort('size')}>
-					Size
+					{$t('common.size')}
 					{#if sortField === 'size'}<SortArrow direction={sortDirection} />{/if}
 				</button>
 				<span class="row-menu"></span>
@@ -652,7 +667,7 @@
 
 <button
 	class="fab"
-	aria-label="Add"
+	aria-label={$t('fileBrowser.addAriaLabel')}
 	aria-haspopup="true"
 	aria-expanded={fabMenuOpen}
 	onclick={(e) => {
@@ -682,7 +697,7 @@
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 				<path d="M12 15V4M8 8l4-4 4 4M5 20h14" stroke-linecap="round" stroke-linejoin="round" />
 			</svg>
-			Upload
+			{$t('fileBrowser.uploadPlain')}
 		</button>
 		<button
 			role="menuitem"
@@ -695,7 +710,7 @@
 				<path d="M8 7l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3Z" stroke-linejoin="round" />
 				<circle cx="12" cy="13.5" r="3.2" />
 			</svg>
-			Scan
+			{$t('fileBrowser.scanPlain')}
 		</button>
 		<button
 			role="menuitem"
@@ -711,9 +726,9 @@
 				/>
 				<path d="M12 11v4M10 13h4" stroke-linecap="round" />
 			</svg>
-			New folder
+			{$t('fileBrowser.newFolderPlain')}
 		</button>
-		<button class="dropdown-menu-cancel" onclick={() => (fabMenuOpen = false)}>Cancel</button>
+		<button class="dropdown-menu-cancel" onclick={() => (fabMenuOpen = false)}>{$t('common.cancel')}</button>
 	</div>
 {/if}
 

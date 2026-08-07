@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { startUpload } from '$lib/upload';
+	import { t } from '$lib/i18n';
 
 	interface SharedFile {
 		name: string;
@@ -26,12 +27,12 @@
 	onMount(async () => {
 		const shareId = $page.url.searchParams.get('share_id');
 		if (!shareId) {
-			loadError = 'No shared files to upload.';
+			loadError = $t('shareTarget.errors.noFiles');
 			loading = false;
 			return;
 		}
 		if (!('caches' in window)) {
-			loadError = 'This browser does not support receiving shared files.';
+			loadError = $t('shareTarget.errors.unsupported');
 			loading = false;
 			return;
 		}
@@ -53,9 +54,9 @@
 			await cache.delete(`/__shared/${shareId}/count`);
 
 			files = loaded;
-			if (loaded.length === 0) loadError = 'No shared files were found.';
+			if (loaded.length === 0) loadError = $t('shareTarget.errors.notFound');
 		} catch {
-			loadError = 'Could not read the shared file(s).';
+			loadError = $t('shareTarget.errors.couldNotRead');
 		} finally {
 			loading = false;
 		}
@@ -84,34 +85,34 @@
 </script>
 
 <svelte:head>
-	<title>Share to Denizen</title>
+	<title>{$t('shareTarget.title')}</title>
 </svelte:head>
 
-<h1>Share to Denizen</h1>
+<h1>{$t('shareTarget.title')}</h1>
 
 {#if loading}
-	<p>Reading the shared file(s)…</p>
+	<p>{$t('shareTarget.reading')}</p>
 {:else if loadError}
 	<p class="error-text">{loadError}</p>
-	<a class="btn" href="/">Back to Denizen</a>
+	<a class="btn" href="/">{$t('shareTarget.back')}</a>
 {:else}
-	<p class="hint">Uploads to your Home folder.</p>
+	<p class="hint">{$t('shareTarget.uploadsToHome')}</p>
 	<div class="item-list" style="margin-bottom: var(--space-4)">
 		{#each files as entry (entry.name)}
 			<div class="item-row">
 				<span class="item-icon">📄</span>
 				<span class="item-name" style="cursor: default">{entry.name}</span>
 				{#if entry.status === 'uploading'}
-					<span class="upload-percent">Uploading…</span>
+					<span class="upload-percent">{$t('shareTarget.uploading')}</span>
 				{:else if entry.status === 'done'}
-					<span class="upload-status-done">Done</span>
+					<span class="upload-status-done">{$t('common.done')}</span>
 				{:else if entry.status === 'error'}
-					<span class="error-text">{entry.error ?? 'Failed'}</span>
+					<span class="error-text">{entry.error ?? $t('common.failed')}</span>
 				{/if}
 			</div>
 		{/each}
 	</div>
 	<button class="btn btn-primary" onclick={handleUploadAll} disabled={files.every((f) => f.status !== 'pending')}>
-		Upload
+		{$t('fileBrowser.uploadPlain')}
 	</button>
 {/if}

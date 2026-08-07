@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { photosToPdf } from '$lib/scan';
+	import { t } from '$lib/i18n';
 
 	// No "item" concept here (unlike ShareDialog/MoveDialog) — this is a
 	// toolbar-level action, not a per-row one, so a plain open flag is all
@@ -64,7 +65,7 @@
 			onScanned(file);
 			close();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not build the PDF.';
+			error = err instanceof Error ? err.message : $t('dialogs.scan.errors.couldNotBuild');
 		} finally {
 			building = false;
 		}
@@ -73,12 +74,12 @@
 
 <dialog bind:this={dialogEl} onclose={close} class="card">
 	{#if open}
-		<h2>Scan document</h2>
+		<h2>{$t('dialogs.scan.heading')}</h2>
 
 		{#if error}<p class="error-text">{error}</p>{/if}
 
 		{#if pages.length === 0}
-			<p class="hint">Capture at least one page with your camera.</p>
+			<p class="hint">{$t('dialogs.scan.hint')}</p>
 		{:else}
 			<div class="scan-pages">
 				{#each pages as page (page.id)}
@@ -86,7 +87,7 @@
 						<img src={page.previewUrl} alt="" />
 						<button
 							class="btn icon-btn scan-page-remove"
-							aria-label="Remove page"
+							aria-label={$t('dialogs.scan.removePage')}
 							onclick={() => removePage(page.id)}
 						>
 							✕
@@ -106,11 +107,11 @@
 		/>
 
 		<div class="dialog-actions" style="justify-content: space-between">
-			<button class="btn" onclick={() => fileInput?.click()}>+ Add page</button>
+			<button class="btn" onclick={() => fileInput?.click()}>{$t('dialogs.scan.addPage')}</button>
 			<div style="display:flex; gap: var(--space-2)">
-				<button class="btn" onclick={close}>Cancel</button>
+				<button class="btn" onclick={close}>{$t('common.cancel')}</button>
 				<button class="btn btn-primary" onclick={handleFinish} disabled={pages.length === 0 || building}>
-					{building ? 'Building PDF…' : `Save as PDF (${pages.length})`}
+					{building ? $t('dialogs.scan.building') : $t('dialogs.scan.saveAsPdf', { count: pages.length })}
 				</button>
 			</div>
 		</div>

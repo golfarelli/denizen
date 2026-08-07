@@ -6,6 +6,7 @@
 	// hands back its final URL — pdf.js does its actual parsing off the
 	// main thread in this worker, not inline in this module.
 	import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+	import { t } from '$lib/i18n';
 
 	pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -34,7 +35,7 @@
 			pdfDoc = await loadingTask.promise;
 			await renderAllPages();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not render this PDF.';
+			error = err instanceof Error ? err.message : $t('viewers.errors.couldNotRenderPdf');
 		} finally {
 			rendering = false;
 		}
@@ -79,7 +80,7 @@
 </script>
 
 {#if rendering}
-	<p>Rendering PDF…</p>
+	<p>{$t('viewers.renderingPdf')}</p>
 {/if}
 {#if error}
 	<p class="error-text">{error}</p>

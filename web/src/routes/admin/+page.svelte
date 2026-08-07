@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api, ApiError, type Me } from '$lib/api';
 	import { me } from '$lib/me';
+	import { t } from '$lib/i18n';
 
 	const GIB = 1024 ** 3;
 
@@ -25,7 +26,7 @@
 		try {
 			users = await api.listUsers();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not load users.';
+			error = err instanceof ApiError ? err.message : $t('admin.errors.couldNotLoadUsers');
 		} finally {
 			loading = false;
 		}
@@ -46,7 +47,7 @@
 			const quotaBytes = inviteQuotaGB ? Math.round(inviteQuotaGB * GIB) : null;
 			inviteResult = await api.createInvite(quotaBytes);
 		} catch (err) {
-			inviteError = err instanceof ApiError ? err.message : 'Could not create the invite.';
+			inviteError = err instanceof ApiError ? err.message : $t('admin.errors.couldNotCreateInvite');
 		} finally {
 			inviteLoading = false;
 		}
@@ -70,7 +71,7 @@
 			await api.updateUser(user.id, { disabled: !user.disabled });
 			await loadUsers();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not update this user.';
+			error = err instanceof ApiError ? err.message : $t('admin.errors.couldNotUpdateUser');
 		}
 	}
 
@@ -87,7 +88,7 @@
 			delete editingQuotaGB[user.id];
 			await loadUsers();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not update this user.';
+			error = err instanceof ApiError ? err.message : $t('admin.errors.couldNotUpdateUser');
 		}
 	}
 
@@ -97,28 +98,28 @@
 </script>
 
 <svelte:head>
-	<title>Admin · Denizen</title>
+	<title>{$t('nav.admin')} · Denizen</title>
 </svelte:head>
 
-<h1>Admin</h1>
+<h1>{$t('nav.admin')}</h1>
 
 {#if $me && !$me.is_admin}
-	<p class="error-text">You don't have access to this page.</p>
+	<p class="error-text">{$t('admin.noAccess')}</p>
 {:else}
 	<section class="card" style="margin-bottom: var(--space-6)">
-		<h2>Invite someone</h2>
+		<h2>{$t('admin.inviteSomeone')}</h2>
 		<div class="field">
-			<label for="invite-quota">Storage quota, in GB (blank = server default)</label>
+			<label for="invite-quota">{$t('admin.quotaLabel')}</label>
 			<input id="invite-quota" type="number" min="0" step="0.5" bind:value={inviteQuotaGB} />
 		</div>
 		{#if inviteError}<p class="error-text">{inviteError}</p>{/if}
 		<button class="btn btn-primary" onclick={handleCreateInvite} disabled={inviteLoading}>
-			{inviteLoading ? 'Creating…' : 'Create invite'}
+			{inviteLoading ? $t('admin.creatingInvite') : $t('admin.createInvite')}
 		</button>
 
 		{#if inviteResult}
 			<div class="field" style="margin-top: var(--space-4)">
-				<label for="invite-url">Share this link (shown only once)</label>
+				<label for="invite-url">{$t('admin.shareLinkLabel')}</label>
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<input
 					id="invite-url"
@@ -127,21 +128,21 @@
 					onclick={(e) => (e.target as HTMLInputElement).select()}
 				/>
 			</div>
-			<button class="btn" onclick={copyInviteLink}>{inviteCopied ? 'Copied!' : 'Copy link'}</button>
+			<button class="btn" onclick={copyInviteLink}>{inviteCopied ? $t('common.copied') : $t('common.copyLink')}</button>
 		{/if}
 	</section>
 
-	<h2>Users</h2>
+	<h2>{$t('admin.users')}</h2>
 	{#if error}<p class="error-text">{error}</p>{/if}
 
 	{#if loading}
-		<p>Loading…</p>
+		<p>{$t('common.loading')}</p>
 	{:else}
 		<div class="item-list">
 			{#each users as user (user.id)}
 				<div class="item-row item-row-flex">
 					<span class="item-name" style="cursor:default; flex:1">
-						{user.username}{user.is_admin ? ' 👑' : ''}{user.disabled ? ' (disabled)' : ''}
+						{user.username}{user.is_admin ? ' 👑' : ''}{user.disabled ? ` (${$t('admin.disabled')})` : ''}
 					</span>
 
 					{#if editingQuotaGB[user.id] !== undefined}
@@ -152,14 +153,14 @@
 							style="width:6rem"
 							bind:value={editingQuotaGB[user.id]}
 						/>
-						<button class="btn" onclick={() => saveQuota(user)}>Save</button>
+						<button class="btn" onclick={() => saveQuota(user)}>{$t('common.save')}</button>
 					{:else}
 						<span class="item-size">{formatGB(user.storage_used_bytes)} / {formatGB(user.quota_bytes)}</span>
-						<button class="btn" onclick={() => startEditQuota(user)}>Edit quota</button>
+						<button class="btn" onclick={() => startEditQuota(user)}>{$t('admin.editQuota')}</button>
 					{/if}
 
 					<button class="btn" onclick={() => toggleDisabled(user)}>
-						{user.disabled ? 'Enable' : 'Disable'}
+						{user.disabled ? $t('admin.enable') : $t('admin.disable')}
 					</button>
 				</div>
 			{/each}

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { forceEnglishLocale } from './helpers/locale';
 
 test('create an invite, register through it in a separate session, then disable that user', async ({
 	page,
@@ -23,6 +24,7 @@ test('create an invite, register through it in a separate session, then disable 
 	// tokens were there — see lib/auth.ts), which is exactly the mistake a
 	// shared-session test here would make.
 	const guestContext = await browser.newContext();
+	await forceEnglishLocale(guestContext);
 	const guestPage = await guestContext.newPage();
 	await guestPage.goto(inviteUrl);
 	await expect(guestPage.getByLabel('Invite code')).not.toHaveValue('');
@@ -43,6 +45,7 @@ test('create an invite, register through it in a separate session, then disable 
 
 	// --- disabling actually took effect: that account can no longer log in -------
 	const disabledContext = await browser.newContext();
+	await forceEnglishLocale(disabledContext);
 	const disabledPage = await disabledContext.newPage();
 	await disabledPage.goto('/login');
 	await disabledPage.getByLabel('Username').fill(newUsername);

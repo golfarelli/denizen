@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import * as XLSX from 'xlsx';
+	import { t } from '$lib/i18n';
 
 	let { blob }: { blob: Blob } = $props();
 
@@ -22,7 +23,7 @@
 			sheetNames = workbook.SheetNames;
 			if (sheetNames.length > 0) selectSheet(sheetNames[0]);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not read this spreadsheet.';
+			error = err instanceof Error ? err.message : $t('viewers.errors.couldNotReadSpreadsheet');
 		} finally {
 			loading = false;
 		}
@@ -41,7 +42,7 @@
 </script>
 
 {#if loading}
-	<p>Reading spreadsheet…</p>
+	<p>{$t('viewers.readingSpreadsheet')}</p>
 {:else if error}
 	<p class="error-text">{error}</p>
 {:else}

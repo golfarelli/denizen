@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { api } from '$lib/api';
+	import { t } from '$lib/i18n';
 
 	// Phase 1 only: view. No editorConfig.callbackUrl/save-back handling
 	// exists server-side yet — see internal/onlyoffice's own doc comment —
@@ -35,7 +36,7 @@
 				.DocsAPI;
 			editor = new DocsAPI.DocEditor(containerId, config);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not load the document editor.';
+			error = err instanceof Error ? err.message : $t('viewers.errors.couldNotLoadEditor');
 		} finally {
 			loading = false;
 		}
@@ -54,14 +55,14 @@
 			const script = document.createElement('script');
 			script.src = src;
 			script.onload = () => resolve();
-			script.onerror = () => reject(new Error('Could not load the OnlyOffice editor script.'));
+			script.onerror = () => reject(new Error($t('viewers.errors.couldNotLoadEditorScript')));
 			document.head.appendChild(script);
 		});
 	}
 </script>
 
 {#if loading}
-	<p>Loading document editor…</p>
+	<p>{$t('viewers.loadingEditor')}</p>
 {/if}
 {#if error}
 	<p class="error-text">{error}</p>

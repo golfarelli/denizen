@@ -5,6 +5,7 @@
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import SortArrow from '$lib/SortArrow.svelte';
+	import { t } from '$lib/i18n';
 
 	let items = $state<Item[]>([]);
 	let loading = $state(true);
@@ -62,7 +63,7 @@
 		try {
 			items = await api.listTrash();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not load the trash.';
+			error = err instanceof ApiError ? err.message : $t('trash.errors.couldNotLoad');
 		} finally {
 			loading = false;
 		}
@@ -87,19 +88,19 @@
 			await api.restoreItem(item.id);
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not restore this item.';
+			error = err instanceof ApiError ? err.message : $t('trash.errors.couldNotRestore');
 		}
 	}
 
 	async function handleDeleteForever(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		if (!confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return;
+		if (!confirm($t('trash.confirmDeleteForever', { name: item.name }))) return;
 		try {
 			await api.permanentlyDeleteItem(item.id);
 			await load();
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'Could not delete this item.';
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotDelete');
 		}
 	}
 
@@ -125,36 +126,33 @@
 </script>
 
 <svelte:head>
-	<title>Trash · Denizen</title>
+	<title>{$t('nav.trash')} · Denizen</title>
 </svelte:head>
 
-<h1>Trash</h1>
-<p class="hint">
-	Items here are permanently deleted automatically after 30 days. Trashed items still count
-	against your storage quota until then.
-</p>
+<h1>{$t('nav.trash')}</h1>
+<p class="hint">{$t('trash.hint')}</p>
 
 {#if error}
 	<p class="error-text">{error}</p>
 {/if}
 
 {#if loading}
-	<p>Loading…</p>
+	<p>{$t('common.loading')}</p>
 {:else if items.length === 0}
-	<div class="empty-state">Trash is empty.</div>
+	<div class="empty-state">{$t('trash.empty')}</div>
 {:else}
 	<div class="item-list-header">
 		<span class="item-icon"></span>
 		<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
-			Name
+			{$t('common.name')}
 			{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
 		</button>
 		<button class="sort-header item-modified" onclick={() => toggleSort('modified')}>
-			Modified
+			{$t('common.modified')}
 			{#if sortField === 'modified'}<SortArrow direction={sortDirection} />{/if}
 		</button>
 		<button class="sort-header item-size" onclick={() => toggleSort('size')}>
-			Size
+			{$t('common.size')}
 			{#if sortField === 'size'}<SortArrow direction={sortDirection} />{/if}
 		</button>
 		<span class="row-menu"></span>
@@ -177,7 +175,7 @@
 				<div class="row-menu">
 					<button
 						class="btn icon-btn"
-						aria-label="Actions for {item.name}"
+						aria-label={$t('common.actionsFor', { name: item.name })}
 						aria-haspopup="true"
 						aria-expanded={openMenuFor === item.id}
 						onclick={(e) => toggleMenu(item.id, e)}
@@ -202,7 +200,7 @@
 										<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke-linejoin="round" />
 										<circle cx="12" cy="12" r="3" />
 									</svg>
-									Open
+									{$t('common.open')}
 								</button>
 							{/if}
 							<button role="menuitem" onclick={(e) => handleRestore(item, e)}>
@@ -210,7 +208,7 @@
 									<path d="M4 9a8 8 0 1 1 1.5 8.5" stroke-linecap="round" />
 									<path d="M4 4v5h5" stroke-linecap="round" stroke-linejoin="round" />
 								</svg>
-								Restore
+								{$t('trash.restore')}
 							</button>
 							<button role="menuitem" class="danger" onclick={(e) => handleDeleteForever(item, e)}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -220,9 +218,9 @@
 										stroke-linejoin="round"
 									/>
 								</svg>
-								Delete forever
+								{$t('trash.deleteForever')}
 							</button>
-							<button class="dropdown-menu-cancel" onclick={closeMenu}>Cancel</button>
+							<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 						</div>
 					{/if}
 				</div>

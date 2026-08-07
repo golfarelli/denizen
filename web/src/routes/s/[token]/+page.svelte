@@ -5,6 +5,7 @@
 	import { fullscreen } from '$lib/fullscreen';
 	import { previewKind, type PreviewKind } from '$lib/previewKind';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import { t } from '$lib/i18n';
 	// Dynamically imported below, same as the private preview page
 	// (routes/file/[id]/+page.svelte) and for the same reason — pdf.js/
 	// docx-preview/xlsx together are a genuinely heavy ~290KB (gzipped)
@@ -100,9 +101,9 @@
 				// unknown/revoked/expired token all look identical from the
 				// outside — mirrored here rather than trying to tell them
 				// apart in the UI either.
-				error = 'This link is no longer available.';
+				error = $t('sharePage.linkGone');
 			} else {
-				error = err instanceof ApiError ? err.message : 'Could not load this share.';
+				error = err instanceof ApiError ? err.message : $t('sharePage.errors.couldNotLoad');
 			}
 		} finally {
 			loading = false;
@@ -127,7 +128,7 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch {
-			error = 'Could not download this file.';
+			error = $t('common.errors.couldNotDownload');
 		} finally {
 			downloading = false;
 		}
@@ -135,7 +136,7 @@
 </script>
 
 <svelte:head>
-	<title>{item?.name ?? 'Shared file'} · Denizen</title>
+	<title>{item?.name ?? $t('sharePage.fallbackTitle')} · Denizen</title>
 </svelte:head>
 
 <div class="preview-page">
@@ -149,21 +150,21 @@
 				/>
 			</svg>
 		</a>
-		<span class="preview-title">{item?.name ?? (loading ? 'Loading…' : 'Denizen')}</span>
+		<span class="preview-title">{item?.name ?? (loading ? $t('common.loading') : 'Denizen')}</span>
 		{#if item?.type === 'file'}
 			<button class="btn btn-primary" onclick={handleDownload} disabled={downloading}>
-				{downloading ? 'Downloading…' : 'Download'}
+				{downloading ? $t('common.downloading') : $t('common.download')}
 			</button>
 		{/if}
 	</header>
 
 	<div class="preview-content">
 		{#if loading}
-			<p>Loading…</p>
+			<p>{$t('common.loading')}</p>
 		{:else if needsLogin}
 			<div class="share-card">
-				<p>This link requires you to be logged in to a Denizen account to view it.</p>
-				<a class="btn btn-primary" href="/login?then={encodeURIComponent($page.url.pathname)}">Log in</a>
+				<p>{$t('sharePage.needsLogin')}</p>
+				<a class="btn btn-primary" href="/login?then={encodeURIComponent($page.url.pathname)}">{$t('common.logIn')}</a>
 			</div>
 		{:else if error}
 			<div class="share-card">
@@ -173,11 +174,8 @@
 			<div class="share-card">
 				<div class="share-card-icon"><FileIcon type="folder" name={item.name} size="3.5rem" /></div>
 				<h1>{item.name}</h1>
-				<p class="hint">Folder</p>
-				<p class="hint">
-					Shared folders can't be downloaded as a whole yet — ask whoever shared this with you
-					for the individual files instead.
-				</p>
+				<p class="hint">{$t('sharePage.folderLabel')}</p>
+				<p class="hint">{$t('sharePage.folderNote')}</p>
 			</div>
 		{:else if item}
 			{#if kind === 'image'}
@@ -208,7 +206,7 @@
 					<div class="share-card-icon"><FileIcon type={item.type} name={item.name} size="3.5rem" /></div>
 					<h1>{item.name}</h1>
 					<p class="hint">{formatSize(item.size_bytes)}</p>
-					<p class="hint">Preview isn't available for this file type — use Download above.</p>
+					<p class="hint">{$t('sharePage.noPreview')}</p>
 				</div>
 			{/if}
 		{/if}

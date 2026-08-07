@@ -1,5 +1,6 @@
 import { test as setup, expect } from '@playwright/test';
 import { readFileSync } from 'fs';
+import { forceEnglishLocale } from './helpers/locale';
 
 export const ADMIN_USERNAME = 'e2e-admin';
 export const ADMIN_PASSWORD = 'e2e-admin-password-123';
@@ -7,6 +8,13 @@ export const ADMIN_AUTH_FILE = 'e2e/.auth/admin.json';
 
 setup('register the bootstrap admin account', async ({ page }) => {
 	const inviteCode = await waitForBootstrapInviteCode();
+
+	// Denizen defaults to Italian — this storageState snapshot (captured
+	// below) becomes the whole suite's own starting point (see
+	// playwright.config.ts), so forcing English here is what keeps every
+	// other test's English-text assertions valid without having to repeat
+	// this per test.
+	await forceEnglishLocale(page.context());
 
 	await page.goto(`/register?code=${inviteCode}`);
 	await expect(page.getByLabel('Invite code')).toHaveValue(inviteCode);
