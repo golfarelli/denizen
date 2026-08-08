@@ -89,11 +89,13 @@
 	"shares.errors.couldNotLoad": "Impossibile caricare le tue condivisioni.",
 	"shares.errors.couldNotRevoke": "Impossibile revocare questa condivisione.",
 
-	"sharedWithMe.hint": "File che qualcun altro ha condiviso direttamente con te, in sola visualizzazione.",
+	"sharedWithMe.hint": "File e cartelle che qualcun altro ha condiviso direttamente con te.",
 	"sharedWithMe.empty": "Non c'è ancora nulla condiviso con te.",
 	"sharedWithMe.sharedBy": "Condiviso da",
 	"sharedWithMe.sharedOn": "Condiviso il",
 	"sharedWithMe.itemMissing": "(non più disponibile)",
+	"sharedWithMe.permissionView": "Sola lettura",
+	"sharedWithMe.permissionEdit": "Può modificare",
 	"sharedWithMe.errors.couldNotLoad": "Impossibile caricare ciò che è stato condiviso con te.",
 
 	"filePreview.fallbackTitle": "File",
@@ -165,6 +167,11 @@
 	"dialogs.share.errors.couldNotLoadPeople": "Impossibile caricare le persone.",
 	"dialogs.share.errors.couldNotSharePerson": "Impossibile condividere con questa persona.",
 	"dialogs.share.errors.couldNotRemovePerson": "Impossibile rimuovere l'accesso di questa persona.",
+	"dialogs.share.errors.couldNotChangePermission": "Impossibile cambiare il permesso di questa persona.",
+	"dialogs.share.permissionView": "Può vedere",
+	"dialogs.share.permissionEdit": "Può modificare",
+	"dialogs.share.permissionLabel": "Permesso di {name}",
+	"dialogs.share.sharedWithBadge": "Condiviso con {names}",
 
 	"dialogs.move.heading": "Sposta \"{name}\"",
 	"dialogs.move.noSubfolders": "Nessuna sottocartella qui.",

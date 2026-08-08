@@ -58,7 +58,7 @@ test('sharing a file with a specific person: they see it view-only in Shared wit
 
 	const dialog = page.locator('dialog.card[open]');
 	await expect(dialog.getByRole('heading', { name: 'People with access', level: 3 })).toBeVisible();
-	await dialog.locator('.share-people-add select').selectOption({ label: anna });
+	await dialog.locator('.share-person-select').selectOption({ label: anna });
 	await dialog.locator('.share-people-add').getByRole('button', { name: 'Share', exact: true }).click();
 	await expect(dialog.locator('.share-people-list')).toContainText(anna);
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -105,7 +105,7 @@ test('sharing a file with a specific person: they see it view-only in Shared wit
 	await expect(annaPage.locator('.item-row', { hasText: name })).toHaveCount(0);
 });
 
-test('sharing a folder offers only a link, not the per-person section (files-only for direct shares)', async ({ page }) => {
+test('sharing a folder offers both the per-person section and a link', async ({ page }) => {
 	await page.goto('/');
 
 	const folderName = `E2E Folder Share ${Date.now()}`;
@@ -119,8 +119,9 @@ test('sharing a folder offers only a link, not the per-person section (files-onl
 
 	const dialog = page.locator('dialog.card[open]');
 	await expect(dialog.getByRole('heading', { name: `Share "${folderName}"` })).toBeVisible();
-	await expect(dialog.getByRole('heading', { name: 'People with access', level: 3 })).toHaveCount(0);
-	// The link section is still there, unaffected.
+	// Folders get the same per-person section files do now — a grant on a
+	// folder is inherited by everything nested inside it.
+	await expect(dialog.getByRole('heading', { name: 'People with access', level: 3 })).toBeVisible();
 	await expect(dialog.getByRole('button', { name: 'Create link' })).toBeVisible();
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
 });

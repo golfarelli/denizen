@@ -104,7 +104,15 @@
 	onMount(load);
 
 	function openItem(share: EnrichedReceivedShare) {
-		if (!share.item || share.item.type !== 'file') return;
+		if (!share.item) return;
+		if (share.item.type === 'folder') {
+			// The same file browser everything else uses (routes/+page.svelte)
+			// — its ?folder= handling already resolves a shared folder's
+			// owner and lists its children (see ItemService.ListChildren),
+			// no dedicated "browsing someone else's drive" page needed.
+			goto(`/?folder=${encodeURIComponent(share.item.id)}`);
+			return;
+		}
 		goto(`/file/${share.item.id}?from=shared-with-me`);
 	}
 
@@ -173,6 +181,9 @@
 						{$t('sharedWithMe.itemMissing')}
 					{:else}
 						{share.item?.name}
+						<span class="permission-tag">
+							{share.permission === 'edit' ? $t('sharedWithMe.permissionEdit') : $t('sharedWithMe.permissionView')}
+						</span>
 					{/if}
 				</button>
 				<span class="item-modified">{share.owner_username}</span>
@@ -216,3 +227,16 @@
 		{/each}
 	</div>
 {/if}
+
+<style>
+	.permission-tag {
+		margin-left: var(--space-2);
+		padding: 0.05em 0.5em;
+		border-radius: 1em;
+		background: var(--color-border);
+		color: var(--color-text-muted);
+		font-size: 0.75em;
+		font-weight: normal;
+		vertical-align: middle;
+	}
+</style>

@@ -88,21 +88,18 @@
 				// Real fidelity + real editing if a Document Server is
 				// configured, checked before deciding whether to fetch
 				// anything here at all — OnlyOffice does its own fetching,
-				// server-side, from the URL its config points at. Only
-				// attempted when this item is actually ours: the Config
-				// endpoint (internal/handler/onlyoffice.go) requires real
-				// ownership, not just view access via a direct share grant
-				// (same reasoning as the public share landing page's own
-				// OnlyOffice skip — see routes/s/[token]/+page.svelte) — a
-				// grant recipient falls straight through to the same
-				// client-side viewers a deployment with no Document Server
-				// configured at all already uses.
-				if (item.owned) {
-					onlyOffice = await api.getOnlyOfficeStatus();
-					if (onlyOffice.enabled) {
-						loading = false;
-						return;
-					}
+				// server-side, from the URL its config points at. The Config
+				// endpoint (internal/handler/onlyoffice.go) now allows a
+				// share recipient in too — real edit mode at 'edit'
+				// permission, read-only at 'view' (same server-side gate
+				// either way, driven by item.can_edit, not decided here) —
+				// unlike the public share landing page, which still skips
+				// OnlyOffice entirely since a link has no identity to check
+				// a permission against (see routes/s/[token]/+page.svelte).
+				onlyOffice = await api.getOnlyOfficeStatus();
+				if (onlyOffice.enabled) {
+					loading = false;
+					return;
 				}
 				if (kind === 'pptx') {
 					// No client-side fallback exists for PowerPoint — this
@@ -306,7 +303,7 @@
 							</svg>
 							{$t('common.download')}
 						</button>
-						{#if item.owned}
+						{#if item.can_edit}
 							<button role="menuitem" onclick={handleRename}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 									<path
@@ -329,13 +326,15 @@
 								</svg>
 								{$t('common.move')}
 							</button>
-							<button role="menuitem" onclick={handleCopy}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-									<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-									<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
-								</svg>
-								{$t('common.makeACopy')}
-							</button>
+						{/if}
+						<button role="menuitem" onclick={handleCopy}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+								<path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							{$t('common.makeACopy')}
+						</button>
+						{#if item.owned}
 							<button role="menuitem" onclick={handleStartShare}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 									<circle cx="6" cy="12" r="2.2" />
@@ -355,6 +354,8 @@
 								</svg>
 								{$t('common.copyLink')}
 							</button>
+						{/if}
+						{#if item.can_edit}
 							<button role="menuitem" class="danger" onclick={handleDelete}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 									<path
