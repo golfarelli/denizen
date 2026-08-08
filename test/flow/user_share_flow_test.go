@@ -12,6 +12,7 @@ type userShareResponse struct {
 	ItemID             string `json:"item_id"`
 	SharedWithUsername string `json:"shared_with_username,omitempty"`
 	OwnerUsername      string `json:"owner_username,omitempty"`
+	Permission         string `json:"permission"`
 	CreatedAt          int64  `json:"created_at"`
 }
 
@@ -24,6 +25,13 @@ func createUserShare(t *testing.T, ts *testServer, owner registeredUser, itemID,
 	t.Helper()
 	return authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+itemID+"/user-shares", owner, map[string]any{
 		"user_id": targetUserID,
+	})
+}
+
+func createUserShareWithPermission(t *testing.T, ts *testServer, owner registeredUser, itemID, targetUserID, permission string) *http.Response {
+	t.Helper()
+	return authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+itemID+"/user-shares", owner, map[string]any{
+		"user_id": targetUserID, "permission": permission,
 	})
 }
 
@@ -96,16 +104,18 @@ func TestUserShareFlow_GrantsViewOnlyAccessAndCanBeRevoked(t *testing.T) {
 		t.Fatalf("luigi GET item mario was shared: got status %d, want 404", luigiRes.StatusCode)
 	}
 
-	// --- view-only: mario cannot rename, move, delete, or re-share it ------------
+	// --- view-only: mario can see it (200s above) but can't write to it,
+	// which now reads as 403 (he has *some* access, just not enough),
+	// unlike luigi's 404 above (no access to the item at all) --------------
 	renameRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+item.ID, mario, map[string]any{
 		"name": "hijacked.txt", "parent_id": nil,
 	})
-	if renameRes.StatusCode != http.StatusNotFound {
-		t.Errorf("mario PATCH (rename) shared item: got status %d, want 404 (mutating ops must stay owner-only)", renameRes.StatusCode)
+	if renameRes.StatusCode != http.StatusForbidden {
+		t.Errorf("mario PATCH (rename) view-only shared item: got status %d, want 403", renameRes.StatusCode)
 	}
 	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, mario, nil)
-	if deleteRes.StatusCode != http.StatusNotFound {
-		t.Errorf("mario DELETE shared item: got status %d, want 404", deleteRes.StatusCode)
+	if deleteRes.StatusCode != http.StatusForbidden {
+		t.Errorf("mario DELETE view-only shared item: got status %d, want 403", deleteRes.StatusCode)
 	}
 	reshareRes := createUserShare(t, ts, mario, item.ID, luigi.id)
 	if reshareRes.StatusCode != http.StatusNotFound {
@@ -171,14 +181,14 @@ func TestUserShareFlow_ValidationRejectsFoldersSelfDuplicatesAndUnknownUsers(t *
 	}
 	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
 
-	// --- folders can't be shared directly yet -------------------------------------
+	// --- folders can be shared too, same as files -----------------------------------
 	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
 		"type": "folder", "name": "Vacanze", "parent_id": nil,
 	})
 	folder := decodeJSON[apiItem](t, folderRes)
 	folderShareRes := createUserShare(t, ts, fabio, folder.ID, mario.id)
-	if folderShareRes.StatusCode != http.StatusBadRequest {
-		t.Errorf("sharing a folder: got status %d, want 400", folderShareRes.StatusCode)
+	if folderShareRes.StatusCode != http.StatusCreated {
+		t.Errorf("sharing a folder: got status %d, want 201", folderShareRes.StatusCode)
 	}
 
 	item := uploadFile(t, ts, fabio, nil, "doc.txt", []byte("hello"))
@@ -289,4 +299,256 @@ func TestUserShareFlow_DirectoryExcludesSelfAndDisabledUsers(t *testing.T) {
 	if len(directory) != 1 || directory[0].Username != "mario" {
 		t.Errorf("directory (as fabio) = %+v, want exactly [mario] (self and disabled luigi excluded)", directory)
 	}
+}
+
+// TestUserShareFlow_EditPermissionAllowsWriteAndCanBeChangedLater covers the
+// view/edit permission level itself: a view grant still can't write
+// (already covered by the 403s in the first test above), an edit grant
+// can, and PATCH /user-shares/{id} can flip an existing grant between the
+// two without revoking and re-sharing.
+func TestUserShareFlow_EditPermissionAllowsWriteAndCanBeChangedLater(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateInvite: %v", err)
+	}
+	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
+
+	item := uploadFile(t, ts, fabio, nil, "doc.txt", []byte("hello"))
+
+	grantRes := createUserShareWithPermission(t, ts, fabio, item.ID, mario.id, "edit")
+	if grantRes.StatusCode != http.StatusCreated {
+		t.Fatalf("share at edit: got status %d", grantRes.StatusCode)
+	}
+	grant := decodeJSON[userShareResponse](t, grantRes)
+	if grant.Permission != "edit" {
+		t.Errorf("grant.Permission = %q, want edit", grant.Permission)
+	}
+
+	// --- mario, with edit access, can rename and move it -------------------------
+	renameRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+item.ID, mario, map[string]any{
+		"name": "renamed-by-mario.txt", "parent_id": nil,
+	})
+	if renameRes.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(renameRes.Body)
+		t.Fatalf("mario PATCH (rename) edit-shared item: got status %d, body: %s", renameRes.StatusCode, body)
+	}
+	renamed := decodeJSON[apiItem](t, renameRes)
+	if renamed.Name != "renamed-by-mario.txt" {
+		t.Errorf("renamed item name = %q, want renamed-by-mario.txt", renamed.Name)
+	}
+	// Ownership never transfers — mario edited it, fabio still owns it.
+	var ownerAfterRename string
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT owner_id FROM items WHERE id = ?`, item.ID).Scan(&ownerAfterRename); err != nil {
+		t.Fatalf("scan owner_id: %v", err)
+	}
+	if ownerAfterRename != fabio.id {
+		t.Errorf("owner_id after mario's rename = %q, want fabio's id %q", ownerAfterRename, fabio.id)
+	}
+
+	// --- fabio downgrades the grant to view-only ----------------------------------
+	downgradeRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/user-shares/"+grant.ID, fabio, map[string]any{
+		"permission": "view",
+	})
+	if downgradeRes.StatusCode != http.StatusOK {
+		t.Fatalf("downgrade grant to view: got status %d", downgradeRes.StatusCode)
+	}
+	downgraded := decodeJSON[userShareResponse](t, downgradeRes)
+	if downgraded.Permission != "view" {
+		t.Errorf("downgraded grant.Permission = %q, want view", downgraded.Permission)
+	}
+
+	// --- mario can no longer write it, but can still read it ---------------------
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, mario, nil)
+	if deleteRes.StatusCode != http.StatusForbidden {
+		t.Errorf("mario DELETE after downgrade to view: got status %d, want 403", deleteRes.StatusCode)
+	}
+	getRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID, mario, nil)
+	if getRes.StatusCode != http.StatusOK {
+		t.Errorf("mario GET after downgrade to view: got status %d, want 200 (still readable)", getRes.StatusCode)
+	}
+
+	// --- mario (the recipient, not the owner) may not change his own grant -------
+	selfUpgradeRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/user-shares/"+grant.ID, mario, map[string]any{
+		"permission": "edit",
+	})
+	if selfUpgradeRes.StatusCode != http.StatusNotFound {
+		t.Errorf("mario upgrading his own received grant: got status %d, want 404 (only the owner may change it)", selfUpgradeRes.StatusCode)
+	}
+}
+
+// TestUserShareFlow_FolderShareIsInheritedByEverythingInsideIt covers the
+// other half of "like Google Drive": sharing a folder gives access to its
+// whole subtree, at edit permission real collaboration (upload, create
+// subfolder), and whatever a grant recipient creates still lands in the
+// real owner's drive and quota, not their own.
+func TestUserShareFlow_FolderShareIsInheritedByEverythingInsideIt(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateInvite: %v", err)
+	}
+	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
+
+	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+		"type": "folder", "name": "Team", "parent_id": nil,
+	})
+	folder := decodeJSON[apiItem](t, folderRes)
+	existing := uploadFile(t, ts, fabio, &folder.ID, "already-here.txt", []byte("preexisting"))
+
+	if res := createUserShareWithPermission(t, ts, fabio, folder.ID, mario.id, "view"); res.StatusCode != http.StatusCreated {
+		t.Fatalf("share folder at view: got status %d", res.StatusCode)
+	}
+
+	// --- view: mario can browse in and see the file already inside it, but
+	// can neither upload nor create a subfolder --------------------------------
+	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+folder.ID, mario, nil)
+	if listRes.StatusCode != http.StatusOK {
+		t.Fatalf("mario list view-shared folder: got status %d, want 200", listRes.StatusCode)
+	}
+	children := decodeJSON[[]apiItem](t, listRes)
+	if len(children) != 1 || children[0].ID != existing.ID || children[0].CanEdit {
+		t.Errorf("mario's listing of the view-shared folder = %+v, want exactly [%s] with can_edit=false", children, existing.ID)
+	}
+
+	subfolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", mario, map[string]any{
+		"type": "folder", "name": "Sub", "parent_id": folder.ID,
+	})
+	if subfolderRes.StatusCode != http.StatusForbidden {
+		t.Errorf("mario creating a subfolder in a view-shared folder: got status %d, want 403", subfolderRes.StatusCode)
+	}
+
+	// --- fabio upgrades the share to edit ------------------------------------------
+	grants := decodeJSON[[]userShareResponse](t, mustGet(t, ts, fabio, "/api/v1/items/"+folder.ID+"/user-shares"))
+	if len(grants) != 1 {
+		t.Fatalf("grants for folder = %+v, want exactly one", grants)
+	}
+	if res := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/user-shares/"+grants[0].ID, fabio, map[string]any{
+		"permission": "edit",
+	}); res.StatusCode != http.StatusOK {
+		t.Fatalf("upgrade folder grant to edit: got status %d", res.StatusCode)
+	}
+
+	// --- edit: mario can now create a subfolder and upload into it, both
+	// landing in fabio's drive (owner_id) and counting against fabio's quota,
+	// not mario's --------------------------------------------------------------
+	subfolderRes2 := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", mario, map[string]any{
+		"type": "folder", "name": "Sub", "parent_id": folder.ID,
+	})
+	if subfolderRes2.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(subfolderRes2.Body)
+		t.Fatalf("mario creating a subfolder in an edit-shared folder: got status %d, body: %s", subfolderRes2.StatusCode, body)
+	}
+	subfolder := decodeJSON[apiItem](t, subfolderRes2)
+
+	content := []byte("uploaded by mario, owned by fabio")
+	uploaded := uploadFile(t, ts, mario, &subfolder.ID, "from-mario.txt", content)
+
+	var uploadedOwnerID string
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT owner_id FROM items WHERE id = ?`, uploaded.ID).Scan(&uploadedOwnerID); err != nil {
+		t.Fatalf("scan owner_id of mario's upload: %v", err)
+	}
+	if uploadedOwnerID != fabio.id {
+		t.Errorf("owner_id of the file mario uploaded into fabio's shared folder = %q, want fabio's id %q", uploadedOwnerID, fabio.id)
+	}
+
+	var fabioStorageUsed, marioStorageUsed int64
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, fabio.id).Scan(&fabioStorageUsed); err != nil {
+		t.Fatalf("scan fabio's storage_used_bytes: %v", err)
+	}
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, mario.id).Scan(&marioStorageUsed); err != nil {
+		t.Fatalf("scan mario's storage_used_bytes: %v", err)
+	}
+	wantFabioStorageUsed := int64(len("preexisting") + len(content))
+	if fabioStorageUsed != wantFabioStorageUsed {
+		t.Errorf("fabio's storage_used_bytes = %d, want %d (his own upload + what mario uploaded into his shared folder)", fabioStorageUsed, wantFabioStorageUsed)
+	}
+	if marioStorageUsed != 0 {
+		t.Errorf("mario's storage_used_bytes = %d, want 0 (nothing he uploads into someone else's shared folder counts against him)", marioStorageUsed)
+	}
+
+	// --- can't move a shared item across into a different owner's drive ----------
+	marioOwnFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", mario, map[string]any{
+		"type": "folder", "name": "MarioOwn", "parent_id": nil,
+	})
+	marioOwnFolder := decodeJSON[apiItem](t, marioOwnFolderRes)
+	crossOwnerMoveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+uploaded.ID, mario, map[string]any{
+		"name": uploaded.Name, "parent_id": marioOwnFolder.ID,
+	})
+	if crossOwnerMoveRes.StatusCode != http.StatusBadRequest {
+		t.Errorf("mario moving a shared item into his own drive: got status %d, want 400", crossOwnerMoveRes.StatusCode)
+	}
+}
+
+// TestUserShareFlow_OwnerSeesWhoAnItemIsSharedWith covers the "who has
+// access" badge: List/Get expose shared_with on an owned item, and never
+// on one the caller only has a grant to (that's the owner's own
+// information to see, not the recipient's).
+func TestUserShareFlow_OwnerSeesWhoAnItemIsSharedWith(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateInvite: %v", err)
+	}
+	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
+
+	item := uploadFile(t, ts, fabio, nil, "doc.txt", []byte("hello"))
+	if res := createUserShare(t, ts, fabio, item.ID, mario.id); res.StatusCode != http.StatusCreated {
+		t.Fatalf("share: got status %d", res.StatusCode)
+	}
+
+	fabioGet := decodeJSON[apiItem](t, mustGet(t, ts, fabio, "/api/v1/items/"+item.ID))
+	if len(fabioGet.SharedWith) != 1 || fabioGet.SharedWith[0] != "mario" {
+		t.Errorf("fabio's own GET of his shared item: shared_with = %+v, want [mario]", fabioGet.SharedWith)
+	}
+
+	fabioList := decodeJSON[[]apiItem](t, mustGet(t, ts, fabio, "/api/v1/items"))
+	var listedRow *apiItem
+	for i := range fabioList {
+		if fabioList[i].ID == item.ID {
+			listedRow = &fabioList[i]
+		}
+	}
+	if listedRow == nil || len(listedRow.SharedWith) != 1 || listedRow.SharedWith[0] != "mario" {
+		t.Errorf("fabio's root listing row for the shared item: shared_with = %+v, want [mario]", listedRow)
+	}
+
+	marioGet := decodeJSON[apiItem](t, mustGet(t, ts, mario, "/api/v1/items/"+item.ID))
+	if len(marioGet.SharedWith) != 0 {
+		t.Errorf("mario's own GET of an item shared with him: shared_with = %+v, want empty (that's fabio's info to see, not his)", marioGet.SharedWith)
+	}
+}
+
+func mustGet(t *testing.T, ts *testServer, user registeredUser, path string) *http.Response {
+	t.Helper()
+	res := authedRequest(t, http.MethodGet, ts.URL+path, user, nil)
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("GET %s: got status %d, body: %s", path, res.StatusCode, body)
+	}
+	return res
 }

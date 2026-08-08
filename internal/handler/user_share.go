@@ -6,6 +6,7 @@ import (
 
 	"github.com/golfarelli/denizen/internal/apperr"
 	"github.com/golfarelli/denizen/internal/httpio"
+	"github.com/golfarelli/denizen/internal/model"
 	"github.com/golfarelli/denizen/internal/service"
 )
 
@@ -26,13 +27,15 @@ type grantedShareResponse struct {
 	ID                 string `json:"id"`
 	ItemID             string `json:"item_id"`
 	SharedWithUsername string `json:"shared_with_username"`
+	Permission         string `json:"permission"`
 	CreatedAt          int64  `json:"created_at"`
 }
 
 func toGrantedShareResponse(g service.GrantedShare) grantedShareResponse {
 	return grantedShareResponse{
 		ID: g.Grant.ID, ItemID: g.Grant.ItemID,
-		SharedWithUsername: g.SharedWithUsername, CreatedAt: g.Grant.CreatedAt,
+		SharedWithUsername: g.SharedWithUsername, Permission: string(g.Grant.Permission),
+		CreatedAt: g.Grant.CreatedAt,
 	}
 }
 
@@ -42,33 +45,62 @@ type receivedShareResponse struct {
 	ID            string `json:"id"`
 	ItemID        string `json:"item_id"`
 	OwnerUsername string `json:"owner_username"`
+	Permission    string `json:"permission"`
 	CreatedAt     int64  `json:"created_at"`
 }
 
 func toReceivedShareResponse(g service.ReceivedShare) receivedShareResponse {
 	return receivedShareResponse{
 		ID: g.Grant.ID, ItemID: g.Grant.ItemID,
-		OwnerUsername: g.OwnerUsername, CreatedAt: g.Grant.CreatedAt,
+		OwnerUsername: g.OwnerUsername, Permission: string(g.Grant.Permission),
+		CreatedAt: g.Grant.CreatedAt,
 	}
 }
 
 type createUserShareRequest struct {
-	UserID string `json:"user_id"`
+	UserID     string `json:"user_id"`
+	Permission string `json:"permission"`
 }
 
-// Create handles POST /api/v1/items/{id}/user-shares.
+// Create handles POST /api/v1/items/{id}/user-shares. Permission defaults
+// to "view" when omitted, so older clients (or a bare {"user_id": "..."}
+// call) keep getting today's behavior rather than a validation error.
 func (h *UserShareHandler) Create(res http.ResponseWriter, req *http.Request) {
 	var in createUserShareRequest
 	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
 		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
 		return
 	}
-	grant, err := h.shares.Create(req.Context(), ownerID(req), req.PathValue("id"), in.UserID)
+	permission := model.SharePermission(in.Permission)
+	if permission == "" {
+		permission = model.SharePermissionView
+	}
+	grant, err := h.shares.Create(req.Context(), ownerID(req), req.PathValue("id"), in.UserID, permission)
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
 	}
 	httpio.WriteJSON(res, http.StatusCreated, toGrantedShareResponse(*grant))
+}
+
+type updateUserShareRequest struct {
+	Permission string `json:"permission"`
+}
+
+// UpdatePermission handles PATCH /api/v1/user-shares/{id} — flips an
+// existing grant between view and edit without revoking and re-sharing.
+func (h *UserShareHandler) UpdatePermission(res http.ResponseWriter, req *http.Request) {
+	var in updateUserShareRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+	grant, err := h.shares.UpdatePermission(req.Context(), ownerID(req), req.PathValue("id"), model.SharePermission(in.Permission))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, toGrantedShareResponse(*grant))
 }
 
 // ListForItem handles GET /api/v1/items/{id}/user-shares — the owner's own

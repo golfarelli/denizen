@@ -152,20 +152,17 @@ func (s *ItemService) Get(ctx context.Context, ownerID, id string) (*model.Item,
 // read-only access to an item regardless of trash state (previewing a
 // trashed file before deciding whether to restore or delete it forever,
 // matching Drive/Nextcloud's own trash behavior). Deliberately not just
-// Get with a flag: every mutating operation (Move, Copy, ReplaceContent,
-// ...) calls Get directly for its own precondition check, and those must
-// keep rejecting a trashed item — only the read-only item/content/
+// Get with a flag: mutating operations need their own, edit-permission-
+// aware precondition (see GetForWrite) and must keep rejecting a trashed
+// item regardless of who's asking — only the read-only item/content/
 // content-token handlers (internal/handler/item.go) use this one.
 //
 // Also the entry point for a direct per-user share's recipient (see
-// model.UserShare): if callerID isn't the owner, a grant on this exact
-// item is the only other way in — never into someone else's trash (a
-// grant recipient gets no restore/trash-preview capability, unlike the
-// owner, so a trashed target simply doesn't exist for them), and never
-// through a folder (grants are files-only for now — see model.UserShare's
-// own comment on why extending this to folders is a separate, bigger
-// piece of work: real navigation/breadcrumb support for browsing into
-// someone else's folder tree, not just a check removed here).
+// model.UserShare): if callerID isn't the owner, a grant on this item or
+// an ancestor folder of it (see resolveGrant) is the only other way in —
+// at any permission level, view or edit — but never into someone else's
+// trash (a grant recipient gets no restore/trash-preview capability,
+// unlike the owner, so a trashed target simply doesn't exist for them).
 func (s *ItemService) GetIncludingTrashed(ctx context.Context, callerID, id string) (*model.Item, error) {
 	item, err := s.items.GetByID(ctx, id)
 	if err != nil {
@@ -180,11 +177,154 @@ func (s *ItemService) GetIncludingTrashed(ctx context.Context, callerID, id stri
 	if item.DeletedAt != nil {
 		return nil, apperr.NotFound
 	}
-	granted, err := s.grants.Exists(ctx, item.ID, callerID)
+	grant, err := s.resolveGrant(ctx, item, callerID)
 	if err != nil {
 		return nil, err
 	}
-	if !granted {
+	if grant == nil {
+		return nil, apperr.NotFound
+	}
+	return item, nil
+}
+
+// resolveGrant finds the user_shares grant, if any, that gives callerID
+// access to item — either a direct grant on item itself, or on the
+// nearest shared ancestor folder above it (a folder share is inherited by
+// everything nested inside it, same as Drive). Returns (nil, nil), not an
+// error, when there's simply no path in at all — every caller here treats
+// that as apperr.NotFound (or, for CanEdit, "no").
+func (s *ItemService) resolveGrant(ctx context.Context, item *model.Item, callerID string) (*model.UserShare, error) {
+	current := item
+	for {
+		grant, err := s.grants.FindGrant(ctx, current.ID, callerID)
+		if err != nil && err != repository.ErrNotFound {
+			return nil, err
+		}
+		if grant != nil {
+			return grant, nil
+		}
+		if current.ParentID == nil {
+			return nil, nil
+		}
+		parent, err := s.items.GetByID(ctx, *current.ParentID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return nil, nil
+			}
+			return nil, err
+		}
+		current = parent
+	}
+}
+
+// CanEdit reports whether callerID may modify item's content or, for a
+// folder, create/upload/rename/move/delete within it: true for the owner,
+// or a direct/inherited share grant (resolveGrant) at 'edit' permission.
+// Call after read access to item has already been established (Get/
+// GetIncludingTrashed) — this doesn't re-check that on its own.
+func (s *ItemService) CanEdit(ctx context.Context, callerID string, item *model.Item) (bool, error) {
+	if item.OwnerID == callerID {
+		return true, nil
+	}
+	grant, err := s.resolveGrant(ctx, item, callerID)
+	if err != nil {
+		return false, err
+	}
+	return grant != nil && grant.Permission == model.SharePermissionEdit, nil
+}
+
+// SharedUsernames returns, for each of itemIDs, the usernames it's been
+// directly shared with — the file browser's "who has access" row badge.
+// Callers are expected to only ever pass ids the caller actually owns
+// (List/ListChildren already scope what a caller can see); this does no
+// ownership check of its own, same trust boundary as the repository call
+// underneath it.
+func (s *ItemService) SharedUsernames(ctx context.Context, itemIDs []string) (map[string][]string, error) {
+	grants, err := s.grants.ListByItems(ctx, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	usernames := make(map[string]string, len(grants))
+	out := make(map[string][]string, len(grants))
+	for _, grant := range grants {
+		username, ok := usernames[grant.SharedWithID]
+		if !ok {
+			username = "?"
+			if u, err := s.users.GetByID(ctx, grant.SharedWithID); err == nil {
+				username = u.Username
+			}
+			usernames[grant.SharedWithID] = username
+		}
+		out[grant.ItemID] = append(out[grant.ItemID], username)
+	}
+	return out, nil
+}
+
+// GetForWrite is the write-side counterpart to GetIncludingTrashed: the
+// owner, or someone holding 'edit' access to item (directly, or inherited
+// from a shared ancestor folder — see resolveGrant), and never a trashed
+// item, for the owner either (matching Get, not GetIncludingTrashed's own
+// trash-preview carve-out). Every mutating ItemService method that a
+// share recipient can now reach (Move, Delete, Copy's destination,
+// CreateFolder, FinalizeUpload, ReplaceContent) goes through this instead
+// of Get.
+//
+// Two different failure shapes on purpose, same distinction Get already
+// makes for ownership: apperr.NotFound when callerID has no relationship
+// to item at all (never reveals it exists, same as an unrelated stranger
+// hitting Get on someone else's item), apperr.Forbidden only once a grant
+// already proves callerID can at least see it, just not edit it.
+func (s *ItemService) GetForWrite(ctx context.Context, callerID, id string) (*model.Item, error) {
+	item, err := s.items.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, apperr.NotFound
+		}
+		return nil, err
+	}
+	if item.DeletedAt != nil {
+		return nil, apperr.NotFound
+	}
+	if item.OwnerID == callerID {
+		return item, nil
+	}
+	grant, err := s.resolveGrant(ctx, item, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if grant == nil {
+		return nil, apperr.NotFound
+	}
+	if grant.Permission != model.SharePermissionEdit {
+		return nil, apperr.Forbidden
+	}
+	return item, nil
+}
+
+// getReadable is Copy's own precondition: the owner, or a grant (any
+// permission — view is enough to "make a copy", same as Drive) on this
+// item or an ancestor of it, and never a trashed item, even the owner's
+// own (Copy never supported that, no reason to start now — matches Get,
+// not GetIncludingTrashed's trash-preview carve-out).
+func (s *ItemService) getReadable(ctx context.Context, callerID, id string) (*model.Item, error) {
+	item, err := s.items.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, apperr.NotFound
+		}
+		return nil, err
+	}
+	if item.DeletedAt != nil {
+		return nil, apperr.NotFound
+	}
+	if item.OwnerID == callerID {
+		return item, nil
+	}
+	grant, err := s.resolveGrant(ctx, item, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if grant == nil {
 		return nil, apperr.NotFound
 	}
 	return item, nil
@@ -239,17 +379,36 @@ func (s *ItemService) FilePath(ctx context.Context, item *model.Item) (string, e
 }
 
 // ListChildren lists the active direct children of parentID (nil = root).
-func (s *ItemService) ListChildren(ctx context.Context, ownerID string, parentID *string) ([]*model.Item, error) {
+//
+// callerID is who's asking, not necessarily whose tree gets listed:
+// browsing into a folder shared with callerID (directly, or inherited
+// from a shared ancestor — see resolveGrant) lists that folder owner's
+// children instead of callerID's own, at any grant permission (view is
+// enough to browse in). canEdit reports whether callerID may also
+// create/upload/rename/move/delete within parentID — always true for the
+// caller's own root (parentID == nil), meaningless to a caller that
+// ignores it otherwise.
+func (s *ItemService) ListChildren(ctx context.Context, callerID string, parentID *string) (items []*model.Item, canEdit bool, err error) {
+	ownerID := callerID
+	canEdit = true
 	if parentID != nil {
-		parent, err := s.Get(ctx, ownerID, *parentID)
+		parent, err := s.GetIncludingTrashed(ctx, callerID, *parentID)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if parent.Type != model.ItemTypeFolder {
-			return nil, apperr.Validation("not a folder")
+			return nil, false, apperr.Validation("not a folder")
+		}
+		if parent.DeletedAt != nil {
+			return nil, false, apperr.NotFound // trash has its own ListTrash/Restore flow, not this one
+		}
+		ownerID = parent.OwnerID
+		if canEdit, err = s.CanEdit(ctx, callerID, parent); err != nil {
+			return nil, false, err
 		}
 	}
-	return s.items.ListChildren(ctx, ownerID, parentID)
+	items, err = s.items.ListChildren(ctx, ownerID, parentID)
+	return items, canEdit, err
 }
 
 // ListTrash lists only the top-level entry of each trashed subtree — e.g.
@@ -273,22 +432,27 @@ func (s *ItemService) ListTrash(ctx context.Context, ownerID string) ([]*model.I
 	return top, nil
 }
 
-// ValidateFolder checks that parentID (nil = the user's root) is a real,
-// owned, active folder — used by the upload package's tus pre-create hook
-// to fail fast, before any bytes are staged, instead of only discovering a
-// bad target once the upload finishes (see internal/upload).
-func (s *ItemService) ValidateFolder(ctx context.Context, ownerID string, parentID *string) error {
+// ValidateFolder checks that parentID (nil = callerID's own root) is a
+// real, active folder callerID may create things in — their own, or one
+// they hold 'edit' access to via a direct/inherited share grant (see
+// GetForWrite) — and returns the id of whoever's storage tree it actually
+// lives under (== callerID unless it's a shared folder). Used by the
+// upload package's tus pre-create hook to fail fast, before any bytes are
+// staged, instead of only discovering a bad target once the upload
+// finishes (see internal/upload), and reused by CreateFolder/
+// FinalizeUpload themselves for the exact same resolution.
+func (s *ItemService) ValidateFolder(ctx context.Context, callerID string, parentID *string) (string, error) {
 	if parentID == nil {
-		return nil
+		return callerID, nil
 	}
-	item, err := s.Get(ctx, ownerID, *parentID)
+	item, err := s.GetForWrite(ctx, callerID, *parentID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if item.Type != model.ItemTypeFolder {
-		return apperr.Validation("parent is not a folder")
+		return "", apperr.Validation("parent is not a folder")
 	}
-	return nil
+	return item.OwnerID, nil
 }
 
 // CheckQuota reports whether ownerID has enough quota left for
@@ -319,14 +483,23 @@ func (s *ItemService) CheckQuota(ctx context.Context, ownerID string, additional
 
 // --- create ---------------------------------------------------------------
 
-// CreateFolder creates a new folder under parentID (nil = root). Files
-// aren't created through this — they arrive via the (upcoming) upload
+// CreateFolder creates a new folder under parentID (nil = callerID's own
+// root). Files aren't created through this — they arrive via the upload
 // endpoint instead, since a file needs bytes, not just a name.
-func (s *ItemService) CreateFolder(ctx context.Context, ownerID string, parentID *string, name string) (*model.Item, error) {
+//
+// parentID may be a folder shared with callerID at 'edit' permission
+// (ValidateFolder resolves and authorizes that) — the new folder is then
+// owned by whoever's shared folder it was created in, not by callerID.
+func (s *ItemService) CreateFolder(ctx context.Context, callerID string, parentID *string, name string) (*model.Item, error) {
 	if err := validateName(name); err != nil {
 		return nil, err
 	}
 	name = strings.TrimSpace(name)
+
+	ownerID, err := s.ValidateFolder(ctx, callerID, parentID)
+	if err != nil {
+		return nil, err
+	}
 
 	username, err := s.username(ctx, ownerID)
 	if err != nil {
@@ -382,11 +555,20 @@ func (s *ItemService) CreateFolder(ctx context.Context, ownerID string, parentID
 // A crash between them would leave the counter briefly behind the real
 // total; acceptable for now, worth revisiting if/when the repository layer
 // grows real transaction support.
-func (s *ItemService) FinalizeUpload(ctx context.Context, ownerID string, parentID *string, name, sourcePath string, sizeBytes int64, mimeType string) (*model.Item, error) {
+// callerID is who's uploading, not necessarily who owns the result:
+// parentID may be a folder shared with callerID at 'edit' permission (see
+// ValidateFolder), in which case the new file — and the quota it counts
+// against — belongs to that folder's real owner instead.
+func (s *ItemService) FinalizeUpload(ctx context.Context, callerID string, parentID *string, name, sourcePath string, sizeBytes int64, mimeType string) (*model.Item, error) {
 	if err := validateName(name); err != nil {
 		return nil, err
 	}
 	name = strings.TrimSpace(name)
+
+	ownerID, err := s.ValidateFolder(ctx, callerID, parentID)
+	if err != nil {
+		return nil, err
+	}
 
 	username, err := s.username(ctx, ownerID)
 	if err != nil {
@@ -451,8 +633,11 @@ func (s *ItemService) FinalizeUpload(ctx context.Context, ownerID string, parent
 // OnlyOffice save callback (internal/handler/onlyoffice.go) once the
 // Document Server reports a document is ready to save; r is the response
 // body of a GET against the URL that callback provides.
-func (s *ItemService) ReplaceContent(ctx context.Context, ownerID, id string, r io.Reader) (*model.Item, error) {
-	item, err := s.Get(ctx, ownerID, id)
+// callerID needs only 'edit' access (GetForWrite), not ownership — see
+// model.UserShare — but every disk/quota effect below still lands on
+// item.OwnerID, the real owner, never callerID.
+func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r io.Reader) (*model.Item, error) {
+	item, err := s.GetForWrite(ctx, callerID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +645,7 @@ func (s *ItemService) ReplaceContent(ctx context.Context, ownerID, id string, r 
 		return nil, apperr.Validation("not a file")
 	}
 
-	username, err := s.username(ctx, ownerID)
+	username, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +671,7 @@ func (s *ItemService) ReplaceContent(ctx context.Context, ownerID, id string, r 
 	// The definitive quota check (see CheckQuota's own doc comment) against
 	// the size *delta*, not the new total — a shrinking edit should never
 	// be blocked by a quota that's already fully used.
-	if err := s.CheckQuota(ctx, ownerID, written-item.SizeBytes); err != nil {
+	if err := s.CheckQuota(ctx, item.OwnerID, written-item.SizeBytes); err != nil {
 		_ = s.storage.Remove(stagePath)
 		return nil, err
 	}
@@ -510,7 +695,7 @@ func (s *ItemService) ReplaceContent(ctx context.Context, ownerID, id string, r 
 	if err := s.items.UpdateContent(ctx, id, written, checksum, now); err != nil {
 		return nil, err
 	}
-	if err := s.users.IncrementStorageUsed(ctx, ownerID, written-item.SizeBytes); err != nil {
+	if err := s.users.IncrementStorageUsed(ctx, item.OwnerID, written-item.SizeBytes); err != nil {
 		return nil, err
 	}
 
@@ -530,14 +715,21 @@ type MoveInput struct {
 	ParentID *string // nil = the user's root
 }
 
-// Move renames and/or reparents an item, moving its bytes on disk to match.
-func (s *ItemService) Move(ctx context.Context, ownerID, id string, in MoveInput) (*model.Item, error) {
+// Move renames and/or reparents an item, moving its bytes on disk to
+// match. callerID needs only 'edit' access (GetForWrite), not ownership.
+//
+// in.ParentID == nil ("root") always means the root of item's own
+// existing tree — item.OwnerID's root, not necessarily callerID's — since
+// Move never changes who owns an item, only where it sits; see the
+// destOwnerID != item.OwnerID check below for why a reparent can also
+// never smuggle an item across into a different person's drive.
+func (s *ItemService) Move(ctx context.Context, callerID, id string, in MoveInput) (*model.Item, error) {
 	if err := validateName(in.Name); err != nil {
 		return nil, err
 	}
 	name := strings.TrimSpace(in.Name)
 
-	item, err := s.Get(ctx, ownerID, id)
+	item, err := s.GetForWrite(ctx, callerID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -548,7 +740,17 @@ func (s *ItemService) Move(ctx context.Context, ownerID, id string, in MoveInput
 		}
 	}
 
-	username, err := s.username(ctx, ownerID)
+	destOwnerID := item.OwnerID
+	if in.ParentID != nil {
+		if destOwnerID, err = s.ValidateFolder(ctx, callerID, in.ParentID); err != nil {
+			return nil, err
+		}
+		if destOwnerID != item.OwnerID {
+			return nil, apperr.Validation("cannot move an item into a different person's drive")
+		}
+	}
+
+	username, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -556,11 +758,11 @@ func (s *ItemService) Move(ctx context.Context, ownerID, id string, in MoveInput
 	if err != nil {
 		return nil, err
 	}
-	newFolderPath, err := s.folderPath(ctx, ownerID, username, in.ParentID)
+	newFolderPath, err := s.folderPath(ctx, item.OwnerID, username, in.ParentID)
 	if err != nil {
 		return nil, err
 	}
-	finalName, err := s.uniqueName(ctx, ownerID, in.ParentID, item.Type, name, item.ID)
+	finalName, err := s.uniqueName(ctx, item.OwnerID, in.ParentID, item.Type, name, item.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -624,16 +826,31 @@ func (s *ItemService) checkNotSelfOrDescendant(ctx context.Context, itemID, targ
 // narrow edge case, flagged here rather than silently mishandled, in the
 // same spirit as Delete's documented gap around already-individually-
 // trashed descendants.
-func (s *ItemService) Copy(ctx context.Context, ownerID, id string, destParentID *string) (*model.Item, error) {
-	item, err := s.Get(ctx, ownerID, id)
+// Copy needs only read access to the source (getReadable: owner, or any
+// grant — view is enough to "make a copy", like Drive) but 'edit' access
+// to the destination (ValidateFolder) — the two can be different people's
+// drives (copying something shared with callerID into their own root, or
+// copying callerID's own file into a folder shared with them), so source
+// and destination owners are resolved and threaded through separately.
+func (s *ItemService) Copy(ctx context.Context, callerID, id string, destParentID *string) (*model.Item, error) {
+	item, err := s.getReadable(ctx, callerID, id)
 	if err != nil {
 		return nil, err
 	}
-	username, err := s.username(ctx, ownerID)
+	sourceUsername, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return nil, err
 	}
-	destFolderPath, err := s.folderPath(ctx, ownerID, username, destParentID)
+
+	destOwnerID, err := s.ValidateFolder(ctx, callerID, destParentID)
+	if err != nil {
+		return nil, err
+	}
+	destUsername, err := s.username(ctx, destOwnerID)
+	if err != nil {
+		return nil, err
+	}
+	destFolderPath, err := s.folderPath(ctx, destOwnerID, destUsername, destParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -642,11 +859,15 @@ func (s *ItemService) Copy(ctx context.Context, ownerID, id string, destParentID
 			return nil, err
 		}
 	}
-	return s.copyRecursive(ctx, ownerID, username, item, destParentID, destFolderPath)
+	return s.copyRecursive(ctx, destOwnerID, sourceUsername, item, destParentID, destFolderPath)
 }
 
-func (s *ItemService) copyRecursive(ctx context.Context, ownerID, username string, item *model.Item, destParentID *string, destFolderPath string) (*model.Item, error) {
-	finalName, err := s.uniqueName(ctx, ownerID, destParentID, item.Type, item.Name, "")
+// copyRecursive walks the source subtree (item, owned by whoever it was
+// before Copy was ever called — every descendant fetched here shares that
+// same owner, so sourceUsername never needs re-resolving as the recursion
+// descends) and recreates it under destOwnerID.
+func (s *ItemService) copyRecursive(ctx context.Context, destOwnerID, sourceUsername string, item *model.Item, destParentID *string, destFolderPath string) (*model.Item, error) {
+	finalName, err := s.uniqueName(ctx, destOwnerID, destParentID, item.Type, item.Name, "")
 	if err != nil {
 		return nil, err
 	}
@@ -658,29 +879,29 @@ func (s *ItemService) copyRecursive(ctx context.Context, ownerID, username strin
 			return nil, err
 		}
 		newItem := &model.Item{
-			ID: idgen.New(), OwnerID: ownerID, ParentID: destParentID, Name: finalName,
+			ID: idgen.New(), OwnerID: destOwnerID, ParentID: destParentID, Name: finalName,
 			Type: model.ItemTypeFolder, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := s.items.Create(ctx, newItem); err != nil {
 			_ = s.storage.Remove(targetPath)
 			return nil, err
 		}
-		children, err := s.items.ListChildren(ctx, ownerID, &item.ID)
+		children, err := s.items.ListChildren(ctx, item.OwnerID, &item.ID)
 		if err != nil {
 			return newItem, err // the folder itself copied fine; report the error rather than roll it back
 		}
 		for _, child := range children {
-			if _, err := s.copyRecursive(ctx, ownerID, username, child, &newItem.ID, targetPath); err != nil {
+			if _, err := s.copyRecursive(ctx, destOwnerID, sourceUsername, child, &newItem.ID, targetPath); err != nil {
 				return newItem, err
 			}
 		}
 		return newItem, nil
 	}
 
-	if err := s.CheckQuota(ctx, ownerID, item.SizeBytes); err != nil {
+	if err := s.CheckQuota(ctx, destOwnerID, item.SizeBytes); err != nil {
 		return nil, err
 	}
-	sourcePath, err := s.pathOf(ctx, item, username)
+	sourcePath, err := s.pathOf(ctx, item, sourceUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -688,7 +909,7 @@ func (s *ItemService) copyRecursive(ctx context.Context, ownerID, username strin
 		return nil, err
 	}
 	newItem := &model.Item{
-		ID: idgen.New(), OwnerID: ownerID, ParentID: destParentID, Name: finalName,
+		ID: idgen.New(), OwnerID: destOwnerID, ParentID: destParentID, Name: finalName,
 		Type: model.ItemTypeFile, SizeBytes: item.SizeBytes, MimeType: item.MimeType, Checksum: item.Checksum,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -696,7 +917,7 @@ func (s *ItemService) copyRecursive(ctx context.Context, ownerID, username strin
 		_ = s.storage.Remove(targetPath)
 		return nil, err
 	}
-	if err := s.users.IncrementStorageUsed(ctx, ownerID, item.SizeBytes); err != nil {
+	if err := s.users.IncrementStorageUsed(ctx, destOwnerID, item.SizeBytes); err != nil {
 		return nil, err
 	}
 	return newItem, nil
@@ -713,12 +934,16 @@ func (s *ItemService) copyRecursive(ctx context.Context, ownerID, username strin
 // that was already individually trashed before its ancestor is deleted
 // (and is therefore no longer physically nested under it) isn't visited
 // again here — a narrow edge case, not handled specially in this pass.
-func (s *ItemService) Delete(ctx context.Context, ownerID, id string) error {
-	item, err := s.Get(ctx, ownerID, id)
+// callerID needs only 'edit' access (GetForWrite), not ownership — trashes
+// into item.OwnerID's own trash, same as if the owner had deleted it
+// themselves (a grant recipient still gets no restore/trash-preview
+// capability of their own — see GetIncludingTrashed).
+func (s *ItemService) Delete(ctx context.Context, callerID, id string) error {
+	item, err := s.GetForWrite(ctx, callerID, id)
 	if err != nil {
 		return err
 	}
-	username, err := s.username(ctx, ownerID)
+	username, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return err
 	}
@@ -733,7 +958,7 @@ func (s *ItemService) Delete(ctx context.Context, ownerID, id string) error {
 	}
 
 	now := s.now().Unix()
-	if err := s.markSubtreeDeleted(ctx, ownerID, item.ID, now); err != nil {
+	if err := s.markSubtreeDeleted(ctx, item.OwnerID, item.ID, now); err != nil {
 		_ = s.storage.Rename(trashPath, itemPath) // best-effort: keep DB and disk in agreement
 		return err
 	}

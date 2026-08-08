@@ -40,21 +40,30 @@ type ReceivedShare struct {
 	OwnerUsername string
 }
 
-// Create grants sharedWithID view access to itemID, owned by ownerID.
-// Files only (see model.UserShare) — sharing a folder returns a
-// validation error for now rather than being silently accepted but
-// useless (a recipient couldn't browse into it — see
-// ItemService.GetIncludingTrashed's own comment on why that's out of
-// scope for now).
-func (s *UserShareService) Create(ctx context.Context, ownerID, itemID, sharedWithID string) (*GrantedShare, error) {
-	// Get enforces ownership + "not currently trashed" — same precondition
-	// ShareService.Create uses for token-based links.
-	item, err := s.items.Get(ctx, ownerID, itemID)
-	if err != nil {
+// ValidatePermission rejects anything but "view"/"edit" — shared here
+// since both Create and UpdatePermission below need the exact same check.
+func ValidatePermission(permission model.SharePermission) error {
+	if permission != model.SharePermissionView && permission != model.SharePermissionEdit {
+		return apperr.Validation("permission must be \"view\" or \"edit\"")
+	}
+	return nil
+}
+
+// Create grants sharedWithID access to itemID (file or folder, owned by
+// ownerID) at the given permission level. A folder grant is inherited by
+// everything nested inside it — see ItemService.resolveGrant — so sharing
+// a folder is enough to give someone real browse (and, at "edit", real
+// upload/organize) access to its whole subtree without sharing each item
+// in it one by one.
+func (s *UserShareService) Create(ctx context.Context, ownerID, itemID, sharedWithID string, permission model.SharePermission) (*GrantedShare, error) {
+	if err := ValidatePermission(permission); err != nil {
 		return nil, err
 	}
-	if item.Type != model.ItemTypeFile {
-		return nil, apperr.Validation("only files can be shared with a specific person right now, not folders")
+	// Get enforces ownership + "not currently trashed" — same precondition
+	// ShareService.Create uses for token-based links.
+	_, err := s.items.Get(ctx, ownerID, itemID)
+	if err != nil {
+		return nil, err
 	}
 	if sharedWithID == ownerID {
 		return nil, apperr.Validation("cannot share an item with yourself")
@@ -69,11 +78,11 @@ func (s *UserShareService) Create(ctx context.Context, ownerID, itemID, sharedWi
 	if target.Disabled {
 		return nil, apperr.Validation("that account is disabled")
 	}
-	exists, err := s.grants.Exists(ctx, itemID, sharedWithID)
-	if err != nil {
+	existing, err := s.grants.FindGrant(ctx, itemID, sharedWithID)
+	if err != nil && err != repository.ErrNotFound {
 		return nil, err
 	}
-	if exists {
+	if existing != nil {
 		return nil, apperr.Conflict("already shared with this person")
 	}
 
@@ -82,12 +91,40 @@ func (s *UserShareService) Create(ctx context.Context, ownerID, itemID, sharedWi
 		ItemID:       itemID,
 		OwnerID:      ownerID,
 		SharedWithID: sharedWithID,
+		Permission:   permission,
 		CreatedAt:    s.now().Unix(),
 	}
 	if err := s.grants.Create(ctx, grant); err != nil {
 		return nil, err
 	}
 	return &GrantedShare{Grant: grant, SharedWithUsername: target.Username}, nil
+}
+
+// UpdatePermission changes an existing grant's view/edit level — only the
+// owner who created it may change it (mirrors Revoke).
+func (s *UserShareService) UpdatePermission(ctx context.Context, ownerID, id string, permission model.SharePermission) (*GrantedShare, error) {
+	if err := ValidatePermission(permission); err != nil {
+		return nil, err
+	}
+	grant, err := s.grants.GetByID(ctx, id)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, apperr.NotFound
+		}
+		return nil, err
+	}
+	if grant.OwnerID != ownerID {
+		return nil, apperr.NotFound
+	}
+	if err := s.grants.UpdatePermission(ctx, id, permission); err != nil {
+		return nil, err
+	}
+	grant.Permission = permission
+	username := "?"
+	if u, err := s.users.GetByID(ctx, grant.SharedWithID); err == nil {
+		username = u.Username
+	}
+	return &GrantedShare{Grant: grant, SharedWithUsername: username}, nil
 }
 
 // ListForItem lists everyone itemID is directly shared with — ownership
