@@ -125,3 +125,52 @@ test('sharing a folder offers both the per-person section and a link', async ({ 
 	await expect(dialog.getByRole('button', { name: 'Create link' })).toBeVisible();
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
+
+test('"My shares" shows both link shares and direct person shares, not just links', async ({ page, browser }) => {
+	const { username: anna } = await registerSecondUser(page, browser);
+
+	await page.goto('/');
+	const linkedName = uniqueName('txt');
+	const personName = uniqueName('txt');
+	await page.locator('input[type="file"]').setInputFiles([
+		{ name: linkedName, mimeType: 'text/plain', buffer: Buffer.from('shared via link') },
+		{ name: personName, mimeType: 'text/plain', buffer: Buffer.from('shared with anna') }
+	]);
+	await expect(page.locator('.item-row', { hasText: linkedName })).toBeVisible({ timeout: 15_000 });
+	await expect(page.locator('.item-row', { hasText: personName })).toBeVisible({ timeout: 15_000 });
+
+	// --- a token link on one file ---------------------------------------------------
+	const linkedRow = page.locator('.item-row', { hasText: linkedName });
+	await linkedRow.getByRole('button', { name: `Actions for ${linkedName}` }).click();
+	await linkedRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+	const dialog = page.locator('dialog.card[open]');
+	await dialog.getByRole('button', { name: 'Create link' }).click();
+	await expect(dialog.getByRole('button', { name: 'Done' })).toBeVisible();
+	await dialog.getByRole('button', { name: 'Done' }).click();
+
+	// --- a direct grant to anna on the other file ------------------------------------
+	const personRow = page.locator('.item-row', { hasText: personName });
+	await personRow.getByRole('button', { name: `Actions for ${personName}` }).click();
+	await personRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+	await dialog.locator('.share-person-select').selectOption({ label: anna });
+	await dialog.locator('.share-people-add').getByRole('button', { name: 'Share', exact: true }).click();
+	await expect(dialog.locator('.share-people-list')).toContainText(anna);
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+	// --- "My shares" lists both, correctly labeled -----------------------------------
+	await page.goto('/shares');
+	const linkedShareRow = page.locator('.item-row', { hasText: linkedName });
+	const personShareRow = page.locator('.item-row', { hasText: personName });
+	await expect(linkedShareRow).toBeVisible();
+	await expect(personShareRow).toBeVisible();
+	await expect(linkedShareRow).toContainText('Public');
+	await expect(personShareRow).toContainText(anna);
+	await expect(personShareRow).toContainText('Can view');
+
+	// --- revoking the person share from here works too --------------------------------
+	await personShareRow.getByRole('button', { name: `Actions for ${personName}` }).click();
+	page.once('dialog', (d) => d.accept());
+	await personShareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
+	await expect(personShareRow).not.toBeVisible();
+	await expect(linkedShareRow).toBeVisible(); // untouched
+});

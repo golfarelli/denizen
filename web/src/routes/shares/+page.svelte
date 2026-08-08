@@ -1,19 +1,56 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError, type Share, type Item } from '$lib/api';
+	import { api, ApiError, type Share, type GrantedShare, type Item, type SharePermission } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { t } from '$lib/i18n';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
 
-	interface EnrichedShare extends Share {
+	// Two very different kinds of "share" — a token-based link anyone
+	// holding it can use (Share), and a direct grant to one specific
+	// person (GrantedShare) — merged into one list/sort/revoke flow since
+	// from the owner's own point of view ("everything I've shared") they
+	// belong on the same page. kind is what the template and handleRevoke
+	// below branch on; everything else about a row is read off whichever
+	// of the two link/person-only field groups actually applies.
+	interface EnrichedShare {
+		id: string;
+		item_id: string;
 		item?: Item;
 		// Distinct from "item is in the trash" (item still resolves, just
 		// with deleted_at set — GetIncludingTrashed server-side, see
 		// internal/handler/item.go) — this is the actually-gone case: the
 		// share outlived its target being permanently deleted.
 		itemMissing?: boolean;
+		created_at: number;
+		kind: 'link' | 'person';
+		requires_auth?: boolean; // link only
+		expires_at?: number; // link only
+		shared_with_username?: string; // person only
+		permission?: SharePermission; // person only
+	}
+
+	function fromLink(share: Share): EnrichedShare {
+		return {
+			id: share.id,
+			item_id: share.item_id,
+			created_at: share.created_at,
+			kind: 'link',
+			requires_auth: share.requires_auth,
+			expires_at: share.expires_at
+		};
+	}
+
+	function fromGrant(grant: GrantedShare): EnrichedShare {
+		return {
+			id: grant.id,
+			item_id: grant.item_id,
+			created_at: grant.created_at,
+			kind: 'person',
+			shared_with_username: grant.shared_with_username,
+			permission: grant.permission
+		};
 	}
 
 	let shares = $state<EnrichedShare[]>([]);
@@ -37,6 +74,15 @@
 		}
 	}
 
+	// A single sortable string for the Status column across both kinds —
+	// groups public links, then login-required links, then person shares
+	// (alphabetical by recipient), which reads sensibly without needing a
+	// more elaborate multi-key comparator for what's a personal-scale list.
+	function statusSortKey(share: EnrichedShare): string {
+		if (share.kind === 'person') return `2-${share.shared_with_username}`;
+		return share.requires_auth ? '1' : '0';
+	}
+
 	let sortedShares = $derived.by(() => {
 		const sign = sortDirection === 'asc' ? 1 : -1;
 		return [...shares].sort((a, b) => {
@@ -44,12 +90,13 @@
 				return sign * (a.item?.name ?? '').localeCompare(b.item?.name ?? '', undefined, { numeric: true, sensitivity: 'base' });
 			}
 			if (sortField === 'status') {
-				return sign * (Number(a.requires_auth) - Number(b.requires_auth));
+				return sign * statusSortKey(a).localeCompare(statusSortKey(b));
 			}
-			// "Never" (expires_at === undefined) always sorts last,
-			// regardless of direction — not just "largest" (which would
-			// flip to first on a descending sort, reading oddly next to
-			// real dates that keep behaving as expected).
+			// "Never" (expires_at === undefined — always true for a person
+			// share, which never expires) always sorts last, regardless of
+			// direction — not just "largest" (which would flip to first on
+			// a descending sort, reading oddly next to real dates that keep
+			// behaving as expected).
 			if (a.expires_at == null && b.expires_at == null) return 0;
 			if (a.expires_at == null) return 1;
 			if (b.expires_at == null) return -1;
@@ -88,18 +135,30 @@
 		loading = true;
 		error = '';
 		try {
-			const list = await api.listShares();
-			// The listing itself only carries item_id (see api.ts's Share
-			// type) — resolve each target's full item to show something a
-			// person recognizes (name, icon, size) and to know whether it's
-			// still openable. A share can outlive its target being
-			// permanently deleted, so a lookup failing here is an expected
-			// case, not an error to surface: that share just shows as
-			// pointing at a gone item.
+			const [links, grants] = await Promise.all([api.listShares(), api.listMyUserShares()]);
+			const merged = [...links.map(fromLink), ...grants.map(fromGrant)];
+			// Neither listing carries more than item_id (see api.ts's Share/
+			// GrantedShare types) — resolve each target's full item to show
+			// something a person recognizes (name, icon) and to know
+			// whether it's still openable. A share can outlive its target
+			// being permanently deleted, so a lookup failing here is an
+			// expected case, not an error to surface: that row just shows
+			// as pointing at a gone item. Several rows can point at the
+			// same item_id (a link and a person share, or two people), so
+			// this resolves each item once and reuses it, not once per row.
+			const itemCache = new Map<string, Promise<Item>>();
+			function resolveItem(itemId: string): Promise<Item> {
+				let promise = itemCache.get(itemId);
+				if (!promise) {
+					promise = api.getItem(itemId);
+					itemCache.set(itemId, promise);
+				}
+				return promise;
+			}
 			shares = await Promise.all(
-				list.map(async (share) => {
+				merged.map(async (share) => {
 					try {
-						const item = await api.getItem(share.item_id);
+						const item = await resolveItem(share.item_id);
 						return { ...share, item };
 					} catch {
 						return { ...share, itemMissing: true };
@@ -116,32 +175,34 @@
 	onMount(load);
 
 	function openItem(share: EnrichedShare) {
-		if (!share.item || share.item.type !== 'file') return;
+		if (!share.item) return;
+		// Every row here is one of the caller's own items (they're the one
+		// who shared it) — unlike shared-with-me/+page.svelte, there's no
+		// access question, just "file preview or browse into the folder".
+		if (share.item.type === 'folder') {
+			goto(`/?folder=${encodeURIComponent(share.item.id)}`);
+			return;
+		}
 		goto(`/file/${share.item.id}?from=shares`);
 	}
 
-	async function handleRevoke(id: string, event: MouseEvent) {
+	async function handleRevoke(share: EnrichedShare, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		if (!confirm($t('shares.confirmRevoke'))) return;
+		const prompt = share.kind === 'person'
+			? $t('shares.confirmRevokePerson', { name: share.shared_with_username ?? '' })
+			: $t('shares.confirmRevoke');
+		if (!confirm(prompt)) return;
 		try {
-			await api.revokeShare(id);
+			if (share.kind === 'person') {
+				await api.revokeUserShare(share.id);
+			} else {
+				await api.revokeShare(share.id);
+			}
 			await load();
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $t('shares.errors.couldNotRevoke');
 		}
-	}
-
-	function formatSize(bytes: number): string {
-		if (bytes === 0) return '';
-		const units = ['B', 'KB', 'MB', 'GB'];
-		let value = bytes;
-		let unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value /= 1024;
-			unit++;
-		}
-		return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 	}
 
 	function formatDate(unixSeconds: number): string {
@@ -162,7 +223,7 @@
 	<SortMenu
 		fields={[
 			{ key: 'name', label: $t('common.name') },
-			{ key: 'status', label: $t('shares.status') },
+			{ key: 'status', label: $t('shares.sharedWithHeader') },
 			{ key: 'expires', label: $t('shares.expires') }
 		]}
 		bind:sortField
@@ -187,7 +248,7 @@
 			{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
 		</button>
 		<button class="sort-header item-modified" onclick={() => toggleSort('status')}>
-			{$t('shares.status')}
+			{$t('shares.sharedWithHeader')}
 			{#if sortField === 'status'}<SortArrow direction={sortDirection} />{/if}
 		</button>
 		<button class="sort-header item-size" onclick={() => toggleSort('expires')}>
@@ -204,11 +265,7 @@
 						<FileIcon type={share.item.type} name={share.item.name} mimeType={share.item.mime_type} />
 					{/if}
 				</span>
-				<button
-					class="item-name"
-					disabled={!share.item || share.item.type !== 'file'}
-					onclick={() => openItem(share)}
-				>
+				<button class="item-name" disabled={!share.item} onclick={() => openItem(share)}>
 					{#if share.itemMissing}
 						{$t('shares.itemMissing')}
 					{:else if share.item?.deleted_at}
@@ -217,7 +274,16 @@
 						{share.item?.name}
 					{/if}
 				</button>
-				<span class="item-modified">{share.requires_auth ? $t('shares.loginRequired') : $t('shares.public')}</span>
+				<span class="item-modified">
+					{#if share.kind === 'person'}
+						{share.shared_with_username}
+						<span class="permission-tag">
+							{share.permission === 'edit' ? $t('dialogs.share.permissionEdit') : $t('dialogs.share.permissionView')}
+						</span>
+					{:else}
+						{share.requires_auth ? $t('shares.loginRequired') : $t('shares.public')}
+					{/if}
+				</span>
 				<span class="item-size">{share.expires_at ? formatDate(share.expires_at) : $t('shares.never')}</span>
 				<div class="row-menu">
 					<button
@@ -241,7 +307,7 @@
 						<!-- svelte-ignore a11y_interactive_supports_focus -->
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
-							{#if share.item && share.item.type === 'file'}
+							{#if share.item}
 								<button role="menuitem" onclick={() => openItem(share)}>
 									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 										<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke-linejoin="round" />
@@ -250,7 +316,7 @@
 									{$t('common.open')}
 								</button>
 							{/if}
-							<button role="menuitem" onclick={(e) => handleRevoke(share.id, e)}>
+							<button role="menuitem" onclick={(e) => handleRevoke(share, e)}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 									<path
 										d="M18 6 6 18M6 6l12 12"
@@ -268,3 +334,15 @@
 		{/each}
 	</div>
 {/if}
+
+<style>
+	.permission-tag {
+		margin-left: var(--space-2);
+		padding: 0.05em 0.5em;
+		border-radius: 1em;
+		background: var(--color-border);
+		color: var(--color-text-muted);
+		font-size: 0.85em;
+		vertical-align: middle;
+	}
+</style>

@@ -552,3 +552,62 @@ func mustGet(t *testing.T, ts *testServer, user registeredUser, path string) *ht
 	}
 	return res
 }
+
+// TestUserShareFlow_ListMineCoversEveryItemNotJustOne covers GET
+// /api/v1/user-shares — the "My shares" page's own listing of every
+// direct grant the caller has made, across all of their items, as
+// opposed to ListForItem's single-item view.
+func TestUserShareFlow_ListMineCoversEveryItemNotJustOne(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateInvite (mario): %v", err)
+	}
+	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
+
+	luigiCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateInvite (luigi): %v", err)
+	}
+	luigi := registerAndLogin(t, ts, luigiCode, "luigi", "yet-another-password")
+
+	docOne := uploadFile(t, ts, fabio, nil, "one.txt", []byte("one"))
+	docTwo := uploadFile(t, ts, fabio, nil, "two.txt", []byte("two"))
+
+	if res := createUserShareWithPermission(t, ts, fabio, docOne.ID, mario.id, "view"); res.StatusCode != http.StatusCreated {
+		t.Fatalf("share doc one with mario: got status %d", res.StatusCode)
+	}
+	if res := createUserShareWithPermission(t, ts, fabio, docTwo.ID, luigi.id, "edit"); res.StatusCode != http.StatusCreated {
+		t.Fatalf("share doc two with luigi: got status %d", res.StatusCode)
+	}
+
+	mine := decodeJSON[[]userShareResponse](t, mustGet(t, ts, fabio, "/api/v1/user-shares"))
+	if len(mine) != 2 {
+		t.Fatalf("fabio's /api/v1/user-shares = %+v, want 2 grants", mine)
+	}
+	byItem := map[string]userShareResponse{}
+	for _, g := range mine {
+		byItem[g.ItemID] = g
+	}
+	if g, ok := byItem[docOne.ID]; !ok || g.SharedWithUsername != "mario" || g.Permission != "view" {
+		t.Errorf("grant for doc one = %+v, want mario/view", g)
+	}
+	if g, ok := byItem[docTwo.ID]; !ok || g.SharedWithUsername != "luigi" || g.Permission != "edit" {
+		t.Errorf("grant for doc two = %+v, want luigi/edit", g)
+	}
+
+	// mario and luigi each made no grants of their own — this is an
+	// owner's-own listing, not "everything I can see".
+	marioMine := decodeJSON[[]userShareResponse](t, mustGet(t, ts, mario, "/api/v1/user-shares"))
+	if len(marioMine) != 0 {
+		t.Errorf("mario's /api/v1/user-shares = %+v, want empty (he received a grant, didn't make one)", marioMine)
+	}
+}

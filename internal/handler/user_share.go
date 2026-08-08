@@ -118,6 +118,22 @@ func (h *UserShareHandler) ListForItem(res http.ResponseWriter, req *http.Reques
 	httpio.WriteJSON(res, http.StatusOK, out)
 }
 
+// ListMine handles GET /api/v1/user-shares — every grant the caller has
+// made, across all of their items ("My shares" page, alongside the
+// token-link listing at GET /api/v1/shares).
+func (h *UserShareHandler) ListMine(res http.ResponseWriter, req *http.Request) {
+	grants, err := h.shares.ListMine(req.Context(), ownerID(req))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := make([]grantedShareResponse, len(grants))
+	for i, g := range grants {
+		out[i] = toGrantedShareResponse(g)
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
 // ListReceived handles GET /api/v1/shared-with-me.
 func (h *UserShareHandler) ListReceived(res http.ResponseWriter, req *http.Request) {
 	grants, err := h.shares.ListReceived(req.Context(), ownerID(req))

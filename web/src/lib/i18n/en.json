@@ -74,9 +74,9 @@
 	"trash.errors.couldNotLoad": "Could not load the trash.",
 	"trash.errors.couldNotRestore": "Could not restore this item.",
 
-	"shares.hint": "Links aren't shown again after creation — revoke and create a new one from the file browser if you've lost it.",
+	"shares.hint": "Everything you've shared — links anyone holding them can use, and files or folders shared directly with specific people.",
 	"shares.empty": "You haven't shared anything yet.",
-	"shares.status": "Status",
+	"shares.sharedWithHeader": "Shared with",
 	"shares.expires": "Expires",
 	"shares.itemMissing": "(item no longer available)",
 	"shares.itemInTrash": "{name} (in trash)",
@@ -86,6 +86,7 @@
 	"shares.genericItemName": "share",
 	"shares.revoke": "Revoke",
 	"shares.confirmRevoke": "Revoke this share link? Anyone still holding it will lose access.",
+	"shares.confirmRevokePerson": "Remove {name}'s access to this item?",
 	"shares.errors.couldNotLoad": "Could not load your shares.",
 	"shares.errors.couldNotRevoke": "Could not revoke this share.",
 

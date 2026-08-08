@@ -60,6 +60,7 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	// an item at all.
 	mux.Handle("POST /api/v1/items/{id}/user-shares", requireAuth(http.HandlerFunc(userShares.Create)))
 	mux.Handle("GET /api/v1/items/{id}/user-shares", requireAuth(http.HandlerFunc(userShares.ListForItem)))
+	mux.Handle("GET /api/v1/user-shares", requireAuth(http.HandlerFunc(userShares.ListMine)))
 	mux.Handle("PATCH /api/v1/user-shares/{id}", requireAuth(http.HandlerFunc(userShares.UpdatePermission)))
 	mux.Handle("DELETE /api/v1/user-shares/{id}", requireAuth(http.HandlerFunc(userShares.Revoke)))
 	mux.Handle("GET /api/v1/shared-with-me", requireAuth(http.HandlerFunc(userShares.ListReceived)))

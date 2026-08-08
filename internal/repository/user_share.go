@@ -57,6 +57,21 @@ func (r *UserShareRepository) ListByItem(ctx context.Context, itemID string) ([]
 	return scanAllUserShares(rows)
 }
 
+// ListByOwner lists every grant ownerID has ever made, across all of their
+// items, most recent first — the "My shares" page's own source of truth
+// for direct shares (routes/shares/+page.svelte previously only showed
+// token-based links; this is its counterpart for people-shares).
+func (r *UserShareRepository) ListByOwner(ctx context.Context, ownerID string) ([]*model.UserShare, error) {
+	sql := `SELECT id, item_id, owner_id, shared_with_id, permission, created_at
+	        FROM user_shares WHERE owner_id = ? ORDER BY created_at DESC`
+	rows, err := r.cn.QueryContext(ctx, sql, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAllUserShares(rows)
+}
+
 // ListByItems is ListByItem for many items at once — the file browser's
 // "who has access" badge on each row needs one grant list per visible
 // item, and doing that as N round trips instead of one gets slow the

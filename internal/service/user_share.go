@@ -140,6 +140,25 @@ func (s *UserShareService) ListForItem(ctx context.Context, ownerID, itemID stri
 	if err != nil {
 		return nil, err
 	}
+	return s.withUsernames(ctx, grants), nil
+}
+
+// ListMine lists every grant ownerID has made, across all of their items —
+// the "My shares" page's own counterpart to ListForItem (one item) and to
+// ShareService's token-link listing, which it's shown alongside.
+func (s *UserShareService) ListMine(ctx context.Context, ownerID string) ([]GrantedShare, error) {
+	grants, err := s.grants.ListByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	return s.withUsernames(ctx, grants), nil
+}
+
+// withUsernames pairs each grant with its recipient's username — shared by
+// ListForItem/ListMine above. A lookup failing for one grant (shouldn't
+// happen — there's no user-deletion feature, only disable) degrades that
+// one row instead of failing the whole list.
+func (s *UserShareService) withUsernames(ctx context.Context, grants []*model.UserShare) []GrantedShare {
 	out := make([]GrantedShare, len(grants))
 	for i, grant := range grants {
 		username := "?"
@@ -148,7 +167,7 @@ func (s *UserShareService) ListForItem(ctx context.Context, ownerID, itemID stri
 		}
 		out[i] = GrantedShare{Grant: grant, SharedWithUsername: username}
 	}
-	return out, nil
+	return out
 }
 
 // ListReceived lists every item directly shared with userID — the "Shared

@@ -74,9 +74,9 @@
 	"trash.errors.couldNotLoad": "Impossibile caricare il cestino.",
 	"trash.errors.couldNotRestore": "Impossibile ripristinare questo elemento.",
 
-	"shares.hint": "I link non vengono mostrati di nuovo dopo la creazione — se lo hai perso, revoca e creane uno nuovo dal file browser.",
+	"shares.hint": "Tutto ciò che hai condiviso — link che chiunque li possieda può usare, e file o cartelle condivisi direttamente con persone specifiche.",
 	"shares.empty": "Non hai ancora condiviso nulla.",
-	"shares.status": "Stato",
+	"shares.sharedWithHeader": "Condiviso con",
 	"shares.expires": "Scadenza",
 	"shares.itemMissing": "(elemento non più disponibile)",
 	"shares.itemInTrash": "{name} (nel cestino)",
@@ -86,6 +86,7 @@
 	"shares.genericItemName": "condivisione",
 	"shares.revoke": "Revoca",
 	"shares.confirmRevoke": "Revocare questo link di condivisione? Chi lo possiede perderà l'accesso.",
+	"shares.confirmRevokePerson": "Rimuovere l'accesso di {name} a questo elemento?",
 	"shares.errors.couldNotLoad": "Impossibile caricare le tue condivisioni.",
 	"shares.errors.couldNotRevoke": "Impossibile revocare questa condivisione.",
 

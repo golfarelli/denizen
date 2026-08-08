@@ -274,6 +274,11 @@ export const api = {
 
 	listUserSharesForItem: (itemId: string) => req<GrantedShare[]>(`/api/v1/items/${itemId}/user-shares`),
 
+	// Every direct grant the caller has made, across all of their items —
+	// the "My shares" page's counterpart to listShares (token links)
+	// below, shown alongside it.
+	listMyUserShares: () => req<GrantedShare[]>('/api/v1/user-shares'),
+
 	updateUserSharePermission: (id: string, permission: SharePermission) =>
 		req<GrantedShare>(`/api/v1/user-shares/${id}`, jsonInit({ permission }, 'PATCH')),
 
