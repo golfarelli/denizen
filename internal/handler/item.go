@@ -46,13 +46,27 @@ type itemResponse struct {
 	// Owned is false only when callerID reached this item through a direct
 	// share grant (model.UserShare), not ownership — every other call site
 	// below only ever deals in the caller's own items, where it's always
-	// true. The frontend's file preview page uses this to hide the
-	// mutating actions (Rename/Move/Delete/...) a grant recipient has no
-	// right to anyway — see routes/file/[id]/+page.svelte.
+	// true.
 	Owned bool `json:"owned"`
+	// CanEdit is always true when Owned is. When it isn't, this reflects
+	// the caller's own share grant (direct or inherited from a shared
+	// ancestor folder — see ItemService.CanEdit): the frontend uses it to
+	// show or hide Rename/Move/Delete/Upload/New folder/editable OnlyOffice
+	// for an item reached via a share — see routes/file/[id]/+page.svelte
+	// and routes/+page.svelte. List/Get are responsible for setting this
+	// correctly on a non-owned item; toItemResponse's own default below
+	// only covers the (common) owned case.
+	CanEdit bool `json:"can_edit"`
+	// SharedWith lists the usernames this item has been directly shared
+	// with — only ever populated on an owned item (List/Get fill it in
+	// via ItemService.SharedUsernames), the file browser's "who has
+	// access" row badge. Omitted, not just empty, when there's nothing to
+	// show, so most rows carry no extra payload at all.
+	SharedWith []string `json:"shared_with,omitempty"`
 }
 
 func toItemResponse(item *model.Item, callerID string) itemResponse {
+	owned := item.OwnerID == callerID
 	return itemResponse{
 		ID:        item.ID,
 		ParentID:  item.ParentID,
@@ -63,7 +77,8 @@ func toItemResponse(item *model.Item, callerID string) itemResponse {
 		CreatedAt: item.CreatedAt,
 		UpdatedAt: item.UpdatedAt,
 		DeletedAt: item.DeletedAt,
-		Owned:     item.OwnerID == callerID,
+		Owned:     owned,
+		CanEdit:   owned,
 	}
 }
 
@@ -119,12 +134,36 @@ func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
 		parentID = &v
 	}
 
-	items, err := h.items.ListChildren(req.Context(), ownerID(req), parentID)
+	items, canEdit, err := h.items.ListChildren(req.Context(), ownerID(req), parentID)
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items, ownerID(req)))
+	out := toItemResponses(items, ownerID(req))
+
+	var ownedIDs []string
+	for i := range out {
+		if out[i].Owned {
+			ownedIDs = append(ownedIDs, out[i].ID)
+		} else {
+			// Browsing into a shared folder: every child inherits that
+			// folder's own resolved permission (a per-child grant more
+			// specific than its parent's is still honored by every
+			// mutating endpoint itself — see ItemService.resolveGrant —
+			// just not reflected in this bulk hint).
+			out[i].CanEdit = canEdit
+		}
+	}
+	sharedWith, err := h.items.SharedUsernames(req.Context(), ownedIDs)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	for i := range out {
+		out[i].SharedWith = sharedWith[out[i].ID]
+	}
+
+	httpio.WriteJSON(res, http.StatusOK, out)
 }
 
 // Get handles GET /api/v1/items/{id} — deliberately allows a trashed item
@@ -139,7 +178,23 @@ func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
-	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
+	out := toItemResponse(item, ownerID(req))
+	if out.Owned {
+		sharedWith, err := h.items.SharedUsernames(req.Context(), []string{item.ID})
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		out.SharedWith = sharedWith[item.ID]
+	} else {
+		canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), item)
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		out.CanEdit = canEdit
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
 }
 
 // Content handles GET /api/v1/items/{id}/content — streams a file's bytes,

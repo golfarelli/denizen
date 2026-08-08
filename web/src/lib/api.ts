@@ -89,11 +89,23 @@ export interface Item {
 	created_at: number;
 	updated_at: number;
 	deleted_at?: number;
-	// False only for a file reached through someone else's direct share
-	// grant (view-only) — see internal/handler/item.go's own comment.
-	// Always true for anything returned by listItems/listTrash, which
-	// never surface anything but the caller's own items.
+	// False only for an item reached through someone else's direct share
+	// grant (a file, or one nested under a shared folder) — see
+	// internal/handler/item.go's own comment. Always true for anything
+	// returned by listTrash, which only ever surfaces the caller's own
+	// items; listItems/getItem can return either.
 	owned: boolean;
+	// Whether the caller may modify this item (rename/move/delete it, and
+	// for a folder, create/upload within it) — always true when owned is.
+	// When it isn't, this is the caller's own share grant's permission
+	// (direct or inherited from a shared ancestor folder).
+	can_edit: boolean;
+	// Usernames this item has been directly shared with — only ever
+	// populated when owned is true (it's the owner's own information to
+	// see, not a recipient's) and only some of the time even then; see
+	// ShareDialog's own "people with access" section for the full list
+	// with revoke buttons, this is just the file browser's row badge.
+	shared_with?: string[];
 }
 
 export interface Me {
@@ -123,18 +135,22 @@ export interface Share {
 	url?: string;
 }
 
-// A direct, view-only grant of one item to one specific person — distinct
-// from Share above (a link anyone holding it can use). Files only for now
-// (see internal/model.UserShare's own comment on why). The two response
-// shapes below mirror the backend's own two DTOs (internal/handler/
-// user_share.go): the owner's "who has access" view carries the
-// recipient's name, the recipient's "Shared with me" view carries the
-// owner's — never both on the same row, since which one you get already
-// tells you which side of the share you're looking at.
+// A direct grant of one item (file or folder) to one specific person, at
+// "view" or "edit" permission — distinct from Share above (a link anyone
+// holding it can use). A folder grant is inherited by everything nested
+// inside it (see internal/service/item.go's resolveGrant). The two
+// response shapes below mirror the backend's own two DTOs
+// (internal/handler/user_share.go): the owner's "who has access" view
+// carries the recipient's name, the recipient's "Shared with me" view
+// carries the owner's — never both on the same row, since which one you
+// get already tells you which side of the share you're looking at.
+export type SharePermission = 'view' | 'edit';
+
 export interface GrantedShare {
 	id: string;
 	item_id: string;
 	shared_with_username: string;
+	permission: SharePermission;
 	created_at: number;
 }
 
@@ -142,6 +158,7 @@ export interface ReceivedShare {
 	id: string;
 	item_id: string;
 	owner_username: string;
+	permission: SharePermission;
 	created_at: number;
 }
 
@@ -250,12 +267,15 @@ export const api = {
 
 	revokeShare: (id: string) => req<void>(`/api/v1/shares/${id}`, { method: 'DELETE' }),
 
-	// Direct, per-user file shares — see GrantedShare/ReceivedShare's own
+	// Direct, per-user shares — see GrantedShare/ReceivedShare's own
 	// comment for how the two listing shapes differ.
-	createUserShare: (itemId: string, userId: string) =>
-		req<GrantedShare>(`/api/v1/items/${itemId}/user-shares`, jsonInit({ user_id: userId })),
+	createUserShare: (itemId: string, userId: string, permission: SharePermission) =>
+		req<GrantedShare>(`/api/v1/items/${itemId}/user-shares`, jsonInit({ user_id: userId, permission })),
 
 	listUserSharesForItem: (itemId: string) => req<GrantedShare[]>(`/api/v1/items/${itemId}/user-shares`),
+
+	updateUserSharePermission: (id: string, permission: SharePermission) =>
+		req<GrantedShare>(`/api/v1/user-shares/${id}`, jsonInit({ permission }, 'PATCH')),
 
 	revokeUserShare: (id: string) => req<void>(`/api/v1/user-shares/${id}`, { method: 'DELETE' }),
 

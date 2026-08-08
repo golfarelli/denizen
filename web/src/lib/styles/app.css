@@ -982,6 +982,27 @@ dialog::backdrop {
 	border-color: transparent;
 }
 
+/* The "who has access" badge — sits next to the row kebab, same flat/
+   borderless treatment, just muted until hovered since it's informational
+   first and a shortcut into ShareDialog second. */
+.shared-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
+	line-height: 1;
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.shared-badge:hover {
+	background: var(--color-border);
+	color: var(--color-text);
+}
+
 /* SortMenu.svelte's own toolbar trigger — same anchoring/flat-icon
    treatment as .row-menu, just not tied to a grid row's own "menu"
    column (this sits in a toolbar, not a list row). */

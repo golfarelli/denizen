@@ -14,14 +14,17 @@ import (
 )
 
 type apiItem struct {
-	ID        string  `json:"id"`
-	ParentID  *string `json:"parent_id"`
-	Name      string  `json:"name"`
-	Type      string  `json:"type"`
-	SizeBytes int64   `json:"size_bytes"`
-	CreatedAt int64   `json:"created_at"`
-	UpdatedAt int64   `json:"updated_at"`
-	DeletedAt *int64  `json:"deleted_at,omitempty"`
+	ID         string   `json:"id"`
+	ParentID   *string  `json:"parent_id"`
+	Name       string   `json:"name"`
+	Type       string   `json:"type"`
+	SizeBytes  int64    `json:"size_bytes"`
+	CreatedAt  int64    `json:"created_at"`
+	UpdatedAt  int64    `json:"updated_at"`
+	DeletedAt  *int64   `json:"deleted_at,omitempty"`
+	Owned      bool     `json:"owned"`
+	CanEdit    bool     `json:"can_edit"`
+	SharedWith []string `json:"shared_with,omitempty"`
 }
 
 type registeredUser struct {

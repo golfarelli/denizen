@@ -79,15 +79,28 @@ type Share struct {
 	CreatedAt    int64
 }
 
-// UserShare is a direct, view-only grant of one Item to one specific User —
-// "share with a person" (like Google Drive), distinct from Share above
-// (a link anyone holding it can use). Files only for now, not folders —
-// see ItemService.GetIncludingTrashed's own comment on why. See
-// internal/db/migrations/0002_user_shares.sql.
+// SharePermission is how much a UserShare grant lets its recipient do:
+// view (read/download/preview only) or edit (also modify content, and for
+// a folder grant, create/upload/rename/move/delete within it — see
+// ItemService.CanEdit and .resolveGrant).
+type SharePermission string
+
+const (
+	SharePermissionView SharePermission = "view"
+	SharePermissionEdit SharePermission = "edit"
+)
+
+// UserShare is a direct grant of one Item to one specific User — "share
+// with a person" (like Google Drive), distinct from Share above (a link
+// anyone holding it can use). Works for folders too, not just files: a
+// grant on a folder is inherited by everything nested inside it (see
+// ItemService.resolveGrant), at the same Permission level. See
+// internal/db/migrations/0002_user_shares.sql and 0003_user_share_permission.sql.
 type UserShare struct {
 	ID           string
 	ItemID       string
 	OwnerID      string // must match the item's own OwnerID at creation time
 	SharedWithID string
+	Permission   SharePermission
 	CreatedAt    int64
 }

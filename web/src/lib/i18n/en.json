@@ -89,11 +89,13 @@
 	"shares.errors.couldNotLoad": "Could not load your shares.",
 	"shares.errors.couldNotRevoke": "Could not revoke this share.",
 
-	"sharedWithMe.hint": "Files someone else shared directly with you, view-only.",
+	"sharedWithMe.hint": "Files and folders someone else shared directly with you.",
 	"sharedWithMe.empty": "Nothing has been shared with you yet.",
 	"sharedWithMe.sharedBy": "Shared by",
 	"sharedWithMe.sharedOn": "Shared on",
 	"sharedWithMe.itemMissing": "(no longer available)",
+	"sharedWithMe.permissionView": "View only",
+	"sharedWithMe.permissionEdit": "Can edit",
 	"sharedWithMe.errors.couldNotLoad": "Could not load what's been shared with you.",
 
 	"filePreview.fallbackTitle": "File",
@@ -165,6 +167,11 @@
 	"dialogs.share.errors.couldNotLoadPeople": "Could not load people.",
 	"dialogs.share.errors.couldNotSharePerson": "Could not share with this person.",
 	"dialogs.share.errors.couldNotRemovePerson": "Could not remove this person's access.",
+	"dialogs.share.errors.couldNotChangePermission": "Could not change this person's permission.",
+	"dialogs.share.permissionView": "Can view",
+	"dialogs.share.permissionEdit": "Can edit",
+	"dialogs.share.permissionLabel": "Permission for {name}",
+	"dialogs.share.sharedWithBadge": "Shared with {names}",
 
 	"dialogs.move.heading": "Move \"{name}\"",
 	"dialogs.move.noSubfolders": "No subfolders here.",

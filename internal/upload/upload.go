@@ -105,8 +105,12 @@ func (h *hooks) preCreate(event handler.HookEvent) (handler.HTTPResponse, handle
 			handler.NewError("ERR_INVALID_METADATA", metaFilename+" metadata is required", http.StatusBadRequest)
 	}
 
+	// targetOwnerID may differ from claims.UserID: uploading into a folder
+	// shared at 'edit' permission lands in that folder owner's tree, not
+	// the uploader's own (see ValidateFolder/FinalizeUpload).
 	parentID := parentIDFromMetadata(event.Upload.MetaData)
-	if err := h.items.ValidateFolder(event.Context, claims.UserID, parentID); err != nil {
+	targetOwnerID, err := h.items.ValidateFolder(event.Context, claims.UserID, parentID)
+	if err != nil {
 		return handler.HTTPResponse{}, handler.FileInfoChanges{}, toTusError(err)
 	}
 
@@ -116,7 +120,7 @@ func (h *hooks) preCreate(event handler.HookEvent) (handler.HTTPResponse, handle
 	// check happens again in FinalizeUpload, since two uploads racing each
 	// other could both pass this one.
 	if !event.Upload.SizeIsDeferred {
-		if err := h.items.CheckQuota(event.Context, claims.UserID, event.Upload.Size); err != nil {
+		if err := h.items.CheckQuota(event.Context, targetOwnerID, event.Upload.Size); err != nil {
 			return handler.HTTPResponse{}, handler.FileInfoChanges{}, toTusError(err)
 		}
 	}

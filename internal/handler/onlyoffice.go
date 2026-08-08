@@ -33,6 +33,17 @@ func NewOnlyOfficeHandler(items *service.ItemService, oo *onlyoffice.Client, tok
 	return &OnlyOfficeHandler{items: items, oo: oo, tokens: tokens}
 }
 
+// editorMode maps a caller's write access to the Document Server's own
+// mode string — "view" renders read-only with no save affordance at all,
+// which is what a view-only share grant (or no grant, browsing as a
+// public link) should get instead of a real editor.
+func editorMode(canEdit bool) string {
+	if canEdit {
+		return "edit"
+	}
+	return "view"
+}
+
 // onlyOfficeContentTokenTTL doesn't need to be as generous as video's own
 // (internal/handler/item.go) — the Document Server fetches the document
 // once up front, not continuously the way a long video stream does.
@@ -63,7 +74,22 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 	}
 
 	id := req.PathValue("id")
-	item, err := h.items.Get(req.Context(), ownerID(req), id)
+	// GetIncludingTrashed, not Get: a share recipient (view or edit
+	// permission, direct or via a shared ancestor folder) may open this
+	// editor too now, not just the owner — canEdit below is what actually
+	// gates real editing (Mode/Permissions.Edit), not this read.
+	item, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), id)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	if item.DeletedAt != nil {
+		// GetIncludingTrashed lets the owner preview a trashed item — never
+		// editing one, though, same as the strict Get this used before.
+		httpio.WriteError(res, apperr.NotFound)
+		return
+	}
+	canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), item)
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
@@ -108,14 +134,14 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 			Title: item.Name,
 			URL:   h.oo.DocumentURL(id, contentToken),
 			Permissions: onlyoffice.Permissions{
-				Edit:     true,
+				Edit:     canEdit,
 				Download: true,
 				Print:    true,
 			},
 		},
 		DocumentType: docType,
 		EditorConfig: onlyoffice.EditorSettings{
-			Mode:        "edit",
+			Mode:        editorMode(canEdit),
 			CallbackURL: h.oo.CallbackURL(id),
 			User:        onlyoffice.UserInfo{ID: ownerID(req), Name: ownerID(req)},
 		},

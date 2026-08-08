@@ -35,6 +35,13 @@
 	// stale until the next folder change. Not worth extra reactive
 	// plumbing for a single-user app where that's a rare, harmless edge.
 	let breadcrumb = $state<Crumb[]>([{ id: null, name: $t('common.home') }]);
+	// Whether the *current folder itself* may be written to — always true
+	// at root (the caller's own), and for an owned folder anywhere, false
+	// when browsing into a folder shared with the caller at view-only
+	// permission. Gates Upload/Scan/New folder (see load, which sets this
+	// from the same GET the breadcrumb chain already does — no extra
+	// request).
+	let currentFolderCanEdit = $state(true);
 	let loading = $state(true);
 	let error = $state('');
 	let uploads = $state<UploadEntry[]>([]);
@@ -155,25 +162,41 @@
 	// reload or a shared link lands back in the same place.
 	let currentFolderId = $derived($page.url.searchParams.get('folder'));
 
-	async function buildBreadcrumb(folderId: string | null): Promise<Crumb[]> {
-		if (!folderId) return [{ id: null, name: $t('common.home') }];
+	// Also reports the target folder's own can_edit (from the same GET that
+	// already fetches it while walking the ancestor chain) — load below
+	// uses it for currentFolderCanEdit, no separate request needed.
+	async function buildBreadcrumb(folderId: string | null): Promise<{ crumbs: Crumb[]; canEdit: boolean }> {
+		if (!folderId) return { crumbs: [{ id: null, name: $t('common.home') }], canEdit: true };
 		const chain: Crumb[] = [];
 		let current: string | null = folderId;
+		let canEdit = true;
 		while (current) {
-			const item = await api.getItem(current);
+			let item: Item;
+			try {
+				item = await api.getItem(current);
+			} catch {
+				// An ancestor above the point we were actually granted access
+				// to — a shared subfolder nested inside parts of the owner's
+				// drive we can't see the rest of. Stop climbing here instead
+				// of failing the whole page; Home (prepended below) still
+				// safely takes us back to our own root either way.
+				break;
+			}
+			if (current === folderId) canEdit = item.can_edit;
 			chain.unshift({ id: item.id, name: item.name });
 			current = item.parent_id;
 		}
-		return [{ id: null, name: $t('common.home') }, ...chain];
+		return { crumbs: [{ id: null, name: $t('common.home') }, ...chain], canEdit };
 	}
 
 	async function load(folderId: string | null) {
 		loading = true;
 		error = '';
 		try {
-			const [listing, crumbs] = await Promise.all([api.listItems(folderId), buildBreadcrumb(folderId)]);
+			const [listing, folder] = await Promise.all([api.listItems(folderId), buildBreadcrumb(folderId)]);
 			items = listing ?? [];
-			breadcrumb = crumbs;
+			breadcrumb = folder.crumbs;
+			currentFolderCanEdit = folder.canEdit;
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $t('fileBrowser.errors.couldNotLoadFolder');
 		} finally {
@@ -464,11 +487,13 @@
 			</svg>
 		</button>
 	</div>
-	<div class="toolbar-actions">
-		<button class="btn" onclick={() => fileInput.click()}>{$t('fileBrowser.upload')}</button>
-		<button class="btn" onclick={() => (scanOpen = true)}>{$t('fileBrowser.scan')}</button>
-		<button class="btn btn-primary" onclick={handleNewFolder}>{$t('fileBrowser.newFolder')}</button>
-	</div>
+	{#if currentFolderCanEdit}
+		<div class="toolbar-actions">
+			<button class="btn" onclick={() => fileInput.click()}>{$t('fileBrowser.upload')}</button>
+			<button class="btn" onclick={() => (scanOpen = true)}>{$t('fileBrowser.scan')}</button>
+			<button class="btn btn-primary" onclick={handleNewFolder}>{$t('fileBrowser.newFolder')}</button>
+		</div>
+	{/if}
 </div>
 
 <input
@@ -525,6 +550,25 @@
 	{:else}
 		{#snippet rowMenu(item: Item)}
 			<div class="row-menu">
+				<!-- "Who has access" at a glance — only ever set on an owned
+				     item (see Item.shared_with's own comment); hover for the
+				     full list, click to jump straight into the dialog that
+				     manages it. -->
+				{#if item.shared_with && item.shared_with.length > 0}
+					<button
+						class="shared-badge"
+						title={item.shared_with.join(', ')}
+						aria-label={$t('dialogs.share.sharedWithBadge', { names: item.shared_with.join(', ') })}
+						onclick={(e) => handleStartShare(item, e)}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+							<circle cx="6" cy="12" r="2.2" />
+							<circle cx="17" cy="6" r="2.2" />
+							<circle cx="17" cy="18" r="2.2" />
+							<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
+						</svg>
+					</button>
+				{/if}
 				<button
 					class="btn icon-btn"
 					aria-label={$t('common.actionsFor', { name: item.name })}
@@ -554,28 +598,30 @@
 								{$t('common.download')}
 							</button>
 						{/if}
-						<button role="menuitem" onclick={(e) => handleRename(item, e)}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-								<path d="M13 6.5l4 4" stroke-linecap="round" />
-							</svg>
-							{$t('common.rename')}
-						</button>
-						<button role="menuitem" onclick={(e) => handleStartMove(item, e)}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-								<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
-							</svg>
-							{$t('common.move')}
-						</button>
+						{#if item.can_edit}
+							<button role="menuitem" onclick={(e) => handleRename(item, e)}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16v4Z"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+									<path d="M13 6.5l4 4" stroke-linecap="round" />
+								</svg>
+								{$t('common.rename')}
+							</button>
+							<button role="menuitem" onclick={(e) => handleStartMove(item, e)}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M3 7a1 1 0 0 1 1-1h4l1.5 1.5H20a1 1 0 0 1 1 1V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+									<path d="M9 13h6M12 10l3 3-3 3" stroke-linecap="round" stroke-linejoin="round" />
+								</svg>
+								{$t('common.move')}
+							</button>
+						{/if}
 						<button role="menuitem" onclick={(e) => handleCopy(item, e)}>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 								<rect x="8" y="8" width="12" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -583,35 +629,39 @@
 							</svg>
 							{$t('common.makeACopy')}
 						</button>
-						<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<circle cx="6" cy="12" r="2.2" />
-								<circle cx="17" cy="6" r="2.2" />
-								<circle cx="17" cy="18" r="2.2" />
-								<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
-							</svg>
-							{$t('common.share')}
-						</button>
-						<button role="menuitem" onclick={(e) => handleCopyLink(item, e)}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-							{$t('common.copyLink')}
-						</button>
-						<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path
-									d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-							{$t('common.delete')}
-						</button>
+						{#if item.owned}
+							<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<circle cx="6" cy="12" r="2.2" />
+									<circle cx="17" cy="6" r="2.2" />
+									<circle cx="17" cy="18" r="2.2" />
+									<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
+								</svg>
+								{$t('common.share')}
+							</button>
+							<button role="menuitem" onclick={(e) => handleCopyLink(item, e)}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M9.5 14.5 14.5 9.5M8 12.5l-2 2a3 3 0 0 0 4.24 4.24l2-2M16 11.5l2-2a3 3 0 0 0-4.24-4.24l-2 2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+								{$t('common.copyLink')}
+							</button>
+						{/if}
+						{#if item.can_edit}
+							<button role="menuitem" class="danger" onclick={(e) => handleDelete(item, e)}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+									<path
+										d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+								{$t('common.delete')}
+							</button>
+						{/if}
 						<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 					</div>
 				{/if}
@@ -675,20 +725,22 @@
 	{/if}
 </div>
 
-<button
-	class="fab"
-	aria-label={$t('fileBrowser.addAriaLabel')}
-	aria-haspopup="true"
-	aria-expanded={fabMenuOpen}
-	onclick={(e) => {
-		e.stopPropagation();
-		fabMenuOpen = !fabMenuOpen;
-	}}
->
-	<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-		<path d="M12 5v14M5 12h14" stroke-linecap="round" />
-	</svg>
-</button>
+{#if currentFolderCanEdit}
+	<button
+		class="fab"
+		aria-label={$t('fileBrowser.addAriaLabel')}
+		aria-haspopup="true"
+		aria-expanded={fabMenuOpen}
+		onclick={(e) => {
+			e.stopPropagation();
+			fabMenuOpen = !fabMenuOpen;
+		}}
+	>
+		<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+			<path d="M12 5v14M5 12h14" stroke-linecap="round" />
+		</svg>
+	</button>
+{/if}
 {#if fabMenuOpen}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
