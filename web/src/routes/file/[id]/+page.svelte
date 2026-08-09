@@ -167,7 +167,7 @@
 	// This page only ever has one item open at a time, unlike the list's
 	// per-row openMenuFor map — a single boolean is enough.
 	let menuOpen = $state(false);
-	let movingItem = $state<Item | null>(null);
+	let movingItems = $state<Item[] | null>(null);
 	let sharingItem = $state<Item | null>(null);
 	let statusMessage = $state('');
 	let statusMessageTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -218,7 +218,7 @@
 
 	function handleStartMove() {
 		closeMenu();
-		movingItem = item;
+		if (item) movingItems = [item];
 	}
 
 	async function handleCopy() {
@@ -422,5 +422,5 @@
 	</div>
 </div>
 
-<MoveDialog bind:item={movingItem} onMoved={() => showStatus($t('filePreview.moved'))} />
+<MoveDialog bind:items={movingItems} onMoved={() => showStatus($t('filePreview.moved'))} />
 <ShareDialog bind:item={sharingItem} />

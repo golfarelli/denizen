@@ -5,6 +5,7 @@
 	import { auth } from '$lib/auth';
 	import { startUpload } from '$lib/upload';
 	import ShareDialog from '$lib/ShareDialog.svelte';
+	import BulkShareDialog from '$lib/BulkShareDialog.svelte';
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import ScanDialog from '$lib/ScanDialog.svelte';
 	import FileIcon from '$lib/FileIcon.svelte';
@@ -48,8 +49,13 @@
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
 	let sharingItem = $state<Item | null>(null);
-	let movingItem = $state<Item | null>(null);
+	let movingItems = $state<Item[] | null>(null);
+	let sharingItems = $state<Item[] | null>(null);
 	let scanOpen = $state(false);
+	// Multi-select for bulk actions (Share/Move/Download/Delete) — ids
+	// rather than Items so it survives a `load()` refresh (a fresh array
+	// of Item objects each time) without losing track of what's selected.
+	let selectedIds = $state<Set<string>>(new Set());
 	// A real, whole-drive search (GET /api/v1/search — name and indexed
 	// file content, see internal/service/item.go's Search), not a filter
 	// over whatever's already loaded for the current folder. null =
@@ -76,6 +82,26 @@
 	}
 
 	let visibleItems = $derived(sortItems(searchResults ?? items, sortField, sortDirection));
+	let selectedItems = $derived(visibleItems.filter((item) => selectedIds.has(item.id)));
+
+	function toggleSelect(id: string, event?: Event) {
+		event?.stopPropagation();
+		const next = new Set(selectedIds);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		selectedIds = next;
+	}
+
+	function clearSelection() {
+		selectedIds = new Set();
+	}
+
+	function toggleSelectAll() {
+		selectedIds =
+			selectedIds.size === visibleItems.length
+				? new Set()
+				: new Set(visibleItems.map((item) => item.id));
+	}
 
 	// Debounced so every keystroke doesn't fire a request — 300ms is short
 	// enough to feel responsive, long enough that typing a whole word
@@ -232,6 +258,7 @@
 	$effect(() => {
 		if ($auth) load(currentFolderId);
 		searchQuery = ''; // a filter scoped to the folder you were just in shouldn't silently apply to the one you navigate to next
+		clearSelection(); // a selection from the folder you were just in shouldn't silently apply to the one you navigate to next either
 	});
 
 	function openFolder(id: string) {
@@ -294,7 +321,7 @@
 	function handleStartMove(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		movingItem = item;
+		movingItems = [item];
 	}
 
 	function handleStartShare(item: Item, event: MouseEvent) {
@@ -359,6 +386,52 @@
 		} catch {
 			error = $t('common.errors.couldNotDownload');
 		}
+	}
+
+	// --- bulk actions (selection toolbar) --------------------------------------
+
+	async function handleBulkDelete() {
+		const targets = selectedItems;
+		if (targets.length === 0) return;
+		if (!confirm($t('common.confirmTrashMultiple', { count: targets.length }))) return;
+		const results = await Promise.allSettled(targets.map((item) => api.deleteItem(item.id)));
+		const failed = results.filter((r) => r.status === 'rejected').length;
+		clearSelection();
+		await load(currentFolderId);
+		if (failed > 0) error = $t('common.errors.couldNotDeleteSome', { count: failed });
+	}
+
+	// Each file triggers its own real browser download (same blob+<a>
+	// trick as the single-file handleDownload above) — there's no backend
+	// support for bundling several files into one zip, so a browser may
+	// still show its own "this site is downloading multiple files"
+	// permission prompt after the first couple. Folders are skipped
+	// outright (downloading a whole folder isn't supported anywhere else
+	// in this app either — see the file-preview page's own comment on the
+	// public share landing page).
+	async function handleBulkDownload() {
+		for (const item of selectedItems) {
+			if (item.type !== 'file') continue;
+			try {
+				const blob = await api.downloadContent(item.id);
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = item.name;
+				a.click();
+				URL.revokeObjectURL(url);
+			} catch {
+				error = $t('common.errors.couldNotDownload');
+			}
+		}
+	}
+
+	function handleBulkMove() {
+		if (selectedItems.length > 0) movingItems = selectedItems;
+	}
+
+	function handleBulkShare() {
+		if (selectedItems.length > 0) sharingItems = selectedItems;
 	}
 
 	function uploadFiles(fileList: FileList | File[]) {
@@ -523,6 +596,36 @@
 
 {#if searchResults !== null}
 	<p class="hint">{$t('fileBrowser.searchResultsHint', { query: searchQuery.trim(), count: searchResults.length })}</p>
+{/if}
+
+{#if selectedIds.size > 0}
+	<div class="selection-toolbar">
+		<button class="btn icon-btn" aria-label={$t('common.cancel')} onclick={clearSelection}>✕</button>
+		<span>{$t('fileBrowser.selection.count', { count: selectedIds.size })}</span>
+		<button class="btn" onclick={toggleSelectAll}>
+			{selectedIds.size === visibleItems.length
+				? $t('fileBrowser.selection.deselectAll')
+				: $t('fileBrowser.selection.selectAll')}
+		</button>
+		<div class="selection-toolbar-actions">
+			<button class="btn" onclick={handleBulkDownload} disabled={!selectedItems.some((i) => i.type === 'file')}>
+				{$t('common.download')}
+			</button>
+			<button class="btn" onclick={handleBulkMove} disabled={!selectedItems.every((i) => i.can_edit)}>
+				{$t('common.move')}
+			</button>
+			<button class="btn" onclick={handleBulkShare} disabled={!selectedItems.every((i) => i.owned)}>
+				{$t('common.share')}
+			</button>
+			<button
+				class="btn danger"
+				onclick={handleBulkDelete}
+				disabled={!selectedItems.every((i) => i.can_edit)}
+			>
+				{$t('common.delete')}
+			</button>
+		</div>
+	</div>
 {/if}
 
 <input
@@ -699,7 +802,16 @@
 
 		{#if $viewMode === 'list'}
 			<div class="item-list-header">
-				<span class="item-icon"></span>
+				<span class="item-icon">
+					<input
+						type="checkbox"
+						checked={visibleItems.length > 0 && selectedIds.size === visibleItems.length}
+						aria-label={selectedIds.size === visibleItems.length
+							? $t('fileBrowser.selection.deselectAll')
+							: $t('fileBrowser.selection.selectAll')}
+						onchange={toggleSelectAll}
+					/>
+				</span>
 				<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
 					{$t('common.name')}
 					{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
@@ -716,8 +828,15 @@
 			</div>
 			<div class="item-list">
 				{#each visibleItems as item (item.id)}
-				<div class="item-row">
+				<div class="item-row" class:item-row-selected={selectedIds.has(item.id)}>
 					<span class="item-icon">
+						<input
+							type="checkbox"
+							class="row-checkbox"
+							checked={selectedIds.has(item.id)}
+							aria-label={$t('fileBrowser.selection.selectAriaLabel', { name: item.name })}
+							onclick={(e) => toggleSelect(item.id, e)}
+						/>
 						<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
 					</span>
 					<button
@@ -735,7 +854,14 @@
 		{:else}
 			<div class="item-grid">
 				{#each visibleItems as item (item.id)}
-					<div class="item-tile">
+					<div class="item-tile" class:item-row-selected={selectedIds.has(item.id)}>
+						<input
+							type="checkbox"
+							class="row-checkbox tile-checkbox"
+							checked={selectedIds.has(item.id)}
+							aria-label={$t('fileBrowser.selection.selectAriaLabel', { name: item.name })}
+							onclick={(e) => toggleSelect(item.id, e)}
+						/>
 						{@render rowMenu(item)}
 						<button
 							class="item-tile-main"
@@ -824,5 +950,12 @@
 {/if}
 
 <ShareDialog bind:item={sharingItem} />
-<MoveDialog bind:item={movingItem} onMoved={() => load(currentFolderId)} />
+<BulkShareDialog bind:items={sharingItems} />
+<MoveDialog
+	bind:items={movingItems}
+	onMoved={() => {
+		clearSelection();
+		load(currentFolderId);
+	}}
+/>
 <ScanDialog bind:open={scanOpen} onScanned={handleScanned} />

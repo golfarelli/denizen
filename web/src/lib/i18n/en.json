@@ -26,6 +26,7 @@
 	"common.somethingWentWrong": "Something went wrong.",
 	"common.newNamePrompt": "New name",
 	"common.confirmTrash": "Move \"{name}\" to trash?",
+	"common.confirmTrashMultiple": "Move {count} items to trash?",
 	"common.linkCreatedManualCopy": "Link created (couldn't copy automatically): {url}",
 	"common.errors.couldNotRename": "Could not rename this item.",
 	"common.errors.couldNotDelete": "Could not delete this item.",
@@ -33,6 +34,7 @@
 	"common.errors.couldNotMove": "Could not move this item.",
 	"common.errors.couldNotCreateShareLink": "Could not create a share link.",
 	"common.errors.couldNotDownload": "Could not download this file.",
+	"common.errors.couldNotDeleteSome": "{count} item(s) could not be deleted.",
 
 	"nav.myShares": "My shares",
 	"nav.sharedWithMe": "Shared with me",
@@ -67,6 +69,10 @@
 	"fileBrowser.errors.couldNotLoadFolder": "Could not load this folder.",
 	"fileBrowser.errors.couldNotCreateFolder": "Could not create the folder.",
 	"fileBrowser.errors.couldNotSearch": "Could not search.",
+	"fileBrowser.selection.count": "{count} selected",
+	"fileBrowser.selection.selectAll": "Select all",
+	"fileBrowser.selection.deselectAll": "Deselect all",
+	"fileBrowser.selection.selectAriaLabel": "Select {name}",
 
 	"trash.hint": "Items here are permanently deleted automatically after 30 days. Trashed items still count against your storage quota until then.",
 	"trash.empty": "Trash is empty.",
@@ -177,10 +183,16 @@
 	"dialogs.share.sharedWithBadge": "Shared with {names}",
 
 	"dialogs.move.heading": "Move \"{name}\"",
+	"dialogs.move.headingMultiple": "Move {count} items",
 	"dialogs.move.noSubfolders": "No subfolders here.",
 	"dialogs.move.moving": "Moving…",
 	"dialogs.move.moveHere": "Move here",
 	"dialogs.move.errors.couldNotLoadFolders": "Could not load folders.",
+	"dialogs.move.errors.someFailed": "{count} item(s) could not be moved.",
+
+	"dialogs.bulkShare.heading": "Share {count} items",
+	"dialogs.bulkShare.allSucceeded": "Shared {count} item(s).",
+	"dialogs.bulkShare.someFailed": "Shared {succeeded} item(s); {failed} failed (maybe already shared with that person).",
 
 	"dialogs.scan.heading": "Scan document",
 	"dialogs.scan.hint": "Capture at least one page with your camera.",

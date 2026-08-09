@@ -8,10 +8,13 @@
 		name: string;
 	}
 
-	// null = closed. onMoved lets the caller refresh its own listing after a
-	// successful move — unlike ShareDialog, this actually changes the
-	// current folder's contents.
-	let { item = $bindable(null), onMoved }: { item: Item | null; onMoved: () => void } = $props();
+	// null/empty = closed. An array, not a single item, so the same dialog
+	// covers both "Move" on one row and a bulk-selection "Move" — a rename
+	// never happens here either way (see handleMoveHere), only relocation.
+	// onMoved lets the caller refresh its own listing after a successful
+	// move — unlike ShareDialog, this actually changes the current
+	// folder's contents.
+	let { items = $bindable(null), onMoved }: { items: Item[] | null; onMoved: () => void } = $props();
 
 	let dialogEl: HTMLDialogElement;
 	let currentFolderId = $state<string | null>(null);
@@ -21,8 +24,10 @@
 	let error = $state('');
 	let moving = $state(false);
 
+	let movingIds = $derived(new Set((items ?? []).map((i) => i.id)));
+
 	$effect(() => {
-		if (item) {
+		if (items && items.length > 0) {
 			currentFolderId = null;
 			breadcrumb = [{ id: null, name: $t('common.home') }];
 			error = '';
@@ -37,12 +42,12 @@
 		loading = true;
 		try {
 			const all = await api.listItems(folderId);
-			// Only folders are valid destinations, and the item being moved
-			// can't be moved into itself — the backend also rejects moving it
-			// into one of its own descendants, surfaced as an error if
-			// someone navigates there and hits "Move here" anyway rather than
-			// pre-computed here.
-			folders = all.filter((i) => i.type === 'folder' && i.id !== item?.id);
+			// Only folders are valid destinations, and none of the items
+			// being moved can be a valid destination for themselves — the
+			// backend also rejects moving a folder into one of its own
+			// descendants, surfaced as an error if someone navigates there
+			// and hits "Move here" anyway rather than pre-computed here.
+			folders = all.filter((i) => i.type === 'folder' && !movingIds.has(i.id));
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $t('dialogs.move.errors.couldNotLoadFolders');
 		} finally {
@@ -64,28 +69,38 @@
 	}
 
 	function close() {
-		item = null;
+		items = null;
 	}
 
 	async function handleMoveHere() {
-		if (!item) return;
+		if (!items || items.length === 0) return;
 		moving = true;
 		error = '';
-		try {
-			await api.move(item.id, item.name, currentFolderId);
-			onMoved();
-			close();
-		} catch (err) {
-			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotMove');
-		} finally {
-			moving = false;
+		// Every item keeps its own name — a bulk move never renames, same
+		// as dragging a multi-selection onto a folder in Drive/Nextcloud.
+		// One item's failure (e.g. a name collision the backend rejects)
+		// doesn't stop the rest from moving.
+		const results = await Promise.allSettled(items.map((item) => api.move(item.id, item.name, currentFolderId)));
+		const failed = results.filter((r) => r.status === 'rejected').length;
+		moving = false;
+		if (failed > 0) {
+			error =
+				failed === items.length
+					? $t('common.errors.couldNotMove')
+					: $t('dialogs.move.errors.someFailed', { count: failed });
 		}
+		onMoved();
+		if (failed < items.length) close();
 	}
 </script>
 
 <dialog bind:this={dialogEl} onclose={close} class="card">
-	{#if item}
-		<h2>{$t('dialogs.move.heading', { name: item.name })}</h2>
+	{#if items && items.length > 0}
+		<h2>
+			{items.length === 1
+				? $t('dialogs.move.heading', { name: items[0].name })
+				: $t('dialogs.move.headingMultiple', { count: items.length })}
+		</h2>
 
 		<nav class="breadcrumb">
 			{#each breadcrumb as crumb, i (crumb.id ?? 'root')}
