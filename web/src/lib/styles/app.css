@@ -580,7 +580,18 @@ main.fullscreen {
 .item-icon {
 	grid-area: icon;
 	display: flex;
+	align-items: center;
+	gap: var(--space-2);
 	flex-shrink: 0;
+}
+
+.row-checkbox {
+	flex-shrink: 0;
+	cursor: pointer;
+}
+
+.item-row-selected {
+	background: var(--color-surface);
 }
 
 .item-size {
@@ -734,6 +745,13 @@ main.fullscreen {
 	right: var(--space-1);
 }
 
+.tile-checkbox {
+	position: absolute;
+	top: var(--space-1);
+	left: var(--space-1);
+	z-index: 1;
+}
+
 .item-tile-main {
 	display: flex;
 	flex-direction: column;
@@ -776,9 +794,32 @@ main.fullscreen {
 	gap: var(--space-2);
 }
 
-/* Filters the current folder's own listing client-side (see
-   routes/+page.svelte) — not a real recursive search across the whole
-   tree, which would need a backend endpoint this app doesn't have yet. */
+/* The bulk-action bar that replaces the search-results hint when one or
+   more rows are selected (routes/+page.svelte) — same flex-wrap shape as
+   .toolbar itself, just with a leading "clear selection" button and a
+   trailing action group instead of search/sort/view controls. */
+.selection-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin-bottom: var(--space-4);
+	flex-wrap: wrap;
+}
+
+.selection-toolbar-actions {
+	display: flex;
+	gap: var(--space-2);
+	margin-left: auto;
+}
+
+.selection-toolbar-actions .danger {
+	color: var(--color-danger);
+	border-color: var(--color-danger);
+}
+
+/* GET /api/v1/search (name + indexed file content) across the caller's
+   whole drive, not a per-folder filter — see routes/+page.svelte's own
+   debounced $effect. */
 .search-box {
 	position: relative;
 	flex: 1;

@@ -26,6 +26,7 @@
 	"common.somethingWentWrong": "Qualcosa è andato storto.",
 	"common.newNamePrompt": "Nuovo nome",
 	"common.confirmTrash": "Spostare \"{name}\" nel cestino?",
+	"common.confirmTrashMultiple": "Spostare {count} elementi nel cestino?",
 	"common.linkCreatedManualCopy": "Link creato (copia automatica non riuscita): {url}",
 	"common.errors.couldNotRename": "Impossibile rinominare questo elemento.",
 	"common.errors.couldNotDelete": "Impossibile eliminare questo elemento.",
@@ -33,6 +34,7 @@
 	"common.errors.couldNotMove": "Impossibile spostare questo elemento.",
 	"common.errors.couldNotCreateShareLink": "Impossibile creare il link di condivisione.",
 	"common.errors.couldNotDownload": "Impossibile scaricare questo file.",
+	"common.errors.couldNotDeleteSome": "{count} elemento/i non è stato possibile eliminare.",
 
 	"nav.myShares": "Condivisioni",
 	"nav.sharedWithMe": "Condiviso con me",
@@ -67,6 +69,10 @@
 	"fileBrowser.errors.couldNotLoadFolder": "Impossibile caricare questa cartella.",
 	"fileBrowser.errors.couldNotCreateFolder": "Impossibile creare la cartella.",
 	"fileBrowser.errors.couldNotSearch": "Impossibile eseguire la ricerca.",
+	"fileBrowser.selection.count": "{count} selezionati",
+	"fileBrowser.selection.selectAll": "Seleziona tutto",
+	"fileBrowser.selection.deselectAll": "Deseleziona tutto",
+	"fileBrowser.selection.selectAriaLabel": "Seleziona {name}",
 
 	"trash.hint": "Gli elementi qui vengono eliminati definitivamente in automatico dopo 30 giorni. Fino ad allora continuano a contare nello spazio di archiviazione.",
 	"trash.empty": "Il cestino è vuoto.",
@@ -177,10 +183,16 @@
 	"dialogs.share.sharedWithBadge": "Condiviso con {names}",
 
 	"dialogs.move.heading": "Sposta \"{name}\"",
+	"dialogs.move.headingMultiple": "Sposta {count} elementi",
 	"dialogs.move.noSubfolders": "Nessuna sottocartella qui.",
 	"dialogs.move.moving": "Spostamento…",
 	"dialogs.move.moveHere": "Sposta qui",
 	"dialogs.move.errors.couldNotLoadFolders": "Impossibile caricare le cartelle.",
+	"dialogs.move.errors.someFailed": "{count} elemento/i non è stato possibile spostare.",
+
+	"dialogs.bulkShare.heading": "Condividi {count} elementi",
+	"dialogs.bulkShare.allSucceeded": "{count} elemento/i condivisi.",
+	"dialogs.bulkShare.someFailed": "{succeeded} elemento/i condivisi; {failed} falliti (forse già condivisi con quella persona).",
 
 	"dialogs.scan.heading": "Scansiona documento",
 	"dialogs.scan.hint": "Cattura almeno una pagina con la fotocamera.",
