@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/golfarelli/denizen/internal/model"
 	"github.com/golfarelli/denizen/internal/repository"
 	"github.com/golfarelli/denizen/internal/storage"
+	"github.com/golfarelli/denizen/internal/textextract"
 )
 
 // ItemService covers folders and (once upload lands) files: creating,
@@ -24,12 +26,13 @@ type ItemService struct {
 	items   *repository.ItemRepository
 	users   *repository.UserRepository
 	grants  *repository.UserShareRepository // direct per-user file shares — see GetIncludingTrashed
+	search  *repository.SearchRepository    // content search index — see indexContent/Search
 	storage *storage.Store
 	now     func() time.Time // swappable in tests; defaults to time.Now
 }
 
-func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, store *storage.Store) *ItemService {
-	return &ItemService{items: items, users: users, grants: grants, storage: store, now: time.Now}
+func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, store *storage.Store) *ItemService {
+	return &ItemService{items: items, users: users, grants: grants, search: search, storage: store, now: time.Now}
 }
 
 // --- name/path helpers -----------------------------------------------------
@@ -411,6 +414,82 @@ func (s *ItemService) ListChildren(ctx context.Context, callerID string, parentI
 	return items, canEdit, err
 }
 
+// searchResultLimit caps how many rows Search ever returns — plenty for a
+// personal drive's "did I name it X" / "what mentions Y" lookup, and a
+// hard ceiling on how much a single query makes the FTS5/LIKE scan (and
+// the client rendering the results) do.
+const searchResultLimit = 50
+
+// Search finds ownerID's own active items whose name or indexed content
+// matches query — GET /api/v1/search's own logic. Name matches (someone
+// searching almost always remembers roughly what they called a file) rank
+// first, then content matches by FTS5 relevance; each item appears once
+// even if it matched both ways.
+//
+// Scoped to the caller's own items only, not anything shared with them —
+// a deliberate v1 scope cut, not an oversight: "Shared with me" is
+// already its own explicit view (routes/shared-with-me), unlike a normal
+// folder a share grant lets someone browse into. Searching across
+// somewhere-nested shared subtrees the caller may only partially be able
+// to see raises real design questions (whose ranking? whose relevance?)
+// this pass doesn't need to answer yet.
+func (s *ItemService) Search(ctx context.Context, ownerID, query string) ([]*model.Item, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+
+	nameMatches, err := s.items.SearchByName(ctx, ownerID, query, searchResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(nameMatches))
+	results := make([]*model.Item, 0, len(nameMatches))
+	for _, item := range nameMatches {
+		seen[item.ID] = true
+		results = append(results, item)
+	}
+	if len(results) >= searchResultLimit {
+		return results, nil
+	}
+
+	contentIDs, err := s.search.SearchContent(ctx, query, searchResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	var wantIDs []string
+	for _, id := range contentIDs {
+		if !seen[id] {
+			wantIDs = append(wantIDs, id)
+		}
+	}
+	if len(wantIDs) == 0 {
+		return results, nil
+	}
+	contentItems, err := s.items.GetByIDs(ctx, wantIDs)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*model.Item, len(contentItems))
+	for _, item := range contentItems {
+		byID[item.ID] = item
+	}
+	// Re-apply SearchContent's own rank order (GetByIDs doesn't preserve
+	// it) and the ownership/trash filter a standalone FTS5 index can't
+	// enforce on its own (see SearchRepository's own doc comment).
+	for _, id := range wantIDs {
+		item, ok := byID[id]
+		if !ok || item.OwnerID != ownerID || item.DeletedAt != nil {
+			continue
+		}
+		if len(results) >= searchResultLimit {
+			break
+		}
+		results = append(results, item)
+	}
+	return results, nil
+}
+
 // ListTrash lists only the top-level entry of each trashed subtree — e.g.
 // deleting a folder with files in it shows one row (the folder), not one
 // per file, matching what a user actually did.
@@ -624,6 +703,7 @@ func (s *ItemService) FinalizeUpload(ctx context.Context, callerID string, paren
 	if err := s.users.IncrementStorageUsed(ctx, ownerID, sizeBytes); err != nil {
 		return nil, err
 	}
+	s.indexContent(ctx, item.ID, item.Name, targetPath)
 	return item, nil
 }
 
@@ -698,11 +778,33 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 	if err := s.users.IncrementStorageUsed(ctx, item.OwnerID, written-item.SizeBytes); err != nil {
 		return nil, err
 	}
+	s.indexContent(ctx, item.ID, item.Name, targetPath)
 
 	item.SizeBytes = written
 	item.Checksum = &checksum
 	item.UpdatedAt = now
 	return item, nil
+}
+
+// indexContent (re-)builds the search index for a file that was just
+// uploaded or edited (FinalizeUpload/ReplaceContent above, after the item
+// row itself has already been committed) — best-effort: extraction
+// failing (unsupported type, corrupt file, pdftotext missing, ...) never
+// fails the upload/edit itself, that file just won't turn up in a content
+// search. See internal/textextract's own doc comment.
+func (s *ItemService) indexContent(ctx context.Context, itemID, name, path string) {
+	ext := textextract.ExtFor(name)
+	if !textextract.Supported(ext) {
+		return
+	}
+	text, err := textextract.Extract(path, ext)
+	if err != nil {
+		log.Printf("search index: extract %s (%s): %v", itemID, ext, err)
+		return
+	}
+	if err := s.search.IndexContent(ctx, itemID, text); err != nil {
+		log.Printf("search index: store %s: %v", itemID, err)
+	}
 }
 
 // --- move / rename ----------------------------------------------------------
@@ -1145,8 +1247,14 @@ func (s *ItemService) hardDeleteSubtreeRows(ctx context.Context, ownerID, id str
 	if err := s.items.HardDelete(ctx, id); err != nil {
 		return err
 	}
-	if item.Type == model.ItemTypeFile {
-		return s.users.IncrementStorageUsed(ctx, ownerID, -item.SizeBytes)
+	if item.Type != model.ItemTypeFile {
+		return nil
 	}
-	return nil
+	// Best-effort, same as indexContent's own build side — a file that was
+	// never actually indexed (unsupported type, or indexing itself once
+	// failed) has nothing to remove here anyway.
+	if err := s.search.RemoveContent(ctx, id); err != nil {
+		log.Printf("search index: remove %s: %v", id, err)
+	}
+	return s.users.IncrementStorageUsed(ctx, ownerID, -item.SizeBytes)
 }

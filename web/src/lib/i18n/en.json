@@ -46,7 +46,7 @@
 	"layout.languageEnglish": "English",
 
 	"fileBrowser.title": "Files",
-	"fileBrowser.searchPlaceholder": "Search this folder…",
+	"fileBrowser.searchPlaceholder": "Search your whole drive…",
 	"fileBrowser.searchAriaLabel": "Search files",
 	"fileBrowser.viewGroupLabel": "View",
 	"fileBrowser.listView": "List view",
@@ -60,11 +60,13 @@
 	"fileBrowser.dismiss": "Dismiss",
 	"fileBrowser.addAriaLabel": "Add",
 	"fileBrowser.emptyFolder": "This folder is empty. Drop files here, or use \"+ Upload\".",
-	"fileBrowser.noSearchMatches": "No files match \"{query}\" in this folder.",
+	"fileBrowser.noSearchMatches": "Nothing matches \"{query}\" — by name or by content.",
+	"fileBrowser.searchResultsHint": "{count} result(s) for \"{query}\" — by name or by content, across your whole drive.",
 	"fileBrowser.folderNamePrompt": "Folder name",
 	"fileBrowser.linkCopied": "Link to \"{name}\" copied.",
 	"fileBrowser.errors.couldNotLoadFolder": "Could not load this folder.",
 	"fileBrowser.errors.couldNotCreateFolder": "Could not create the folder.",
+	"fileBrowser.errors.couldNotSearch": "Could not search.",
 
 	"trash.hint": "Items here are permanently deleted automatically after 30 days. Trashed items still count against your storage quota until then.",
 	"trash.empty": "Trash is empty.",

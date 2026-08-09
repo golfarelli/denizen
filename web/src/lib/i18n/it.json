@@ -46,7 +46,7 @@
 	"layout.languageEnglish": "English",
 
 	"fileBrowser.title": "File",
-	"fileBrowser.searchPlaceholder": "Cerca in questa cartella…",
+	"fileBrowser.searchPlaceholder": "Cerca in tutto il drive…",
 	"fileBrowser.searchAriaLabel": "Cerca file",
 	"fileBrowser.viewGroupLabel": "Visualizzazione",
 	"fileBrowser.listView": "Vista elenco",
@@ -60,11 +60,13 @@
 	"fileBrowser.dismiss": "Chiudi",
 	"fileBrowser.addAriaLabel": "Aggiungi",
 	"fileBrowser.emptyFolder": "Questa cartella è vuota. Trascina qui i file, oppure usa \"+ Carica\".",
-	"fileBrowser.noSearchMatches": "Nessun file corrisponde a \"{query}\" in questa cartella.",
+	"fileBrowser.noSearchMatches": "Nulla corrisponde a \"{query}\" — né per nome né per contenuto.",
+	"fileBrowser.searchResultsHint": "{count} risultati per \"{query}\" — per nome o contenuto, in tutto il drive.",
 	"fileBrowser.folderNamePrompt": "Nome della cartella",
 	"fileBrowser.linkCopied": "Link a \"{name}\" copiato.",
 	"fileBrowser.errors.couldNotLoadFolder": "Impossibile caricare questa cartella.",
 	"fileBrowser.errors.couldNotCreateFolder": "Impossibile creare la cartella.",
+	"fileBrowser.errors.couldNotSearch": "Impossibile eseguire la ricerca.",
 
 	"trash.hint": "Gli elementi qui vengono eliminati definitivamente in automatico dopo 30 giorni. Fino ad allora continuano a contare nello spazio di archiviazione.",
 	"trash.empty": "Il cestino è vuoto.",

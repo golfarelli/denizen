@@ -4,6 +4,7 @@ import (
 	"context"
 	stdsql "database/sql"
 	"errors"
+	"strings"
 
 	"github.com/golfarelli/denizen/internal/model"
 )
@@ -34,6 +35,49 @@ func (r *ItemRepository) GetByID(ctx context.Context, id string) (*model.Item, e
 	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
 	        FROM items WHERE id = ?`
 	return r.scanOne(r.cn.QueryRowContext(ctx, sql, id))
+}
+
+// GetByIDs is GetByID for many ids at once, silently skipping any that
+// don't exist (a content search hit whose item was since hard-deleted —
+// see ItemService.Search) rather than erroring the whole batch over it.
+// Order isn't guaranteed to match ids; callers that care (Search does, for
+// content-match ranking) re-order after the fact.
+func (r *ItemRepository) GetByIDs(ctx context.Context, ids []string) ([]*model.Item, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	        FROM items WHERE id IN (` + placeholders + `)`
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := r.cn.QueryContext(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanAll(rows)
+}
+
+// SearchByName lists ownerID's own active items whose name contains query
+// (case-insensitive — SQLite's LIKE already folds ASCII case by default),
+// most-recently-modified first. The whole-tree counterpart to
+// ListChildren's one-folder-at-a-time listing — GET /api/v1/search's name-
+// match half (see ItemService.Search for how it's combined with a content
+// match via internal/repository/search.go).
+func (r *ItemRepository) SearchByName(ctx context.Context, ownerID, query string, limit int) ([]*model.Item, error) {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	        FROM items WHERE owner_id = ? AND deleted_at IS NULL AND name LIKE ? ESCAPE '\'
+	        ORDER BY updated_at DESC LIMIT ?`
+	rows, err := r.cn.QueryContext(ctx, sql, ownerID, "%"+escaped+"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanAll(rows)
 }
 
 // ListChildren lists the active (non-trashed) direct children of parentID

@@ -50,12 +50,15 @@
 	let sharingItem = $state<Item | null>(null);
 	let movingItem = $state<Item | null>(null);
 	let scanOpen = $state(false);
-	// Filters the *current folder's own* listing only — a real search
-	// across the whole tree would need a backend endpoint (and a decision
-	// about how deep/fast that should be) this app doesn't have yet, so
-	// this stays a client-side, current-folder-only filter rather than
-	// pretending to be more than that.
+	// A real, whole-drive search (GET /api/v1/search — name and indexed
+	// file content, see internal/service/item.go's Search), not a filter
+	// over whatever's already loaded for the current folder. null =
+	// showing the current folder's own `items` as normal; non-null =
+	// showing these search results instead (see the debounced $effect
+	// below, and searchResultsFor's own comment on the staleness guard).
 	let searchQuery = $state('');
+	let searchResults = $state<Item[] | null>(null);
+	let searching = $state(false);
 
 	// Not persisted (unlike $viewMode, see lib/viewMode.ts) — resets to
 	// name/ascending each visit, same as most desktop file managers do
@@ -72,15 +75,37 @@
 		}
 	}
 
-	let visibleItems = $derived(
-		sortItems(
-			searchQuery.trim()
-				? items.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-				: items,
-			sortField,
-			sortDirection
-		)
-	);
+	let visibleItems = $derived(sortItems(searchResults ?? items, sortField, sortDirection));
+
+	// Debounced so every keystroke doesn't fire a request — 300ms is short
+	// enough to feel responsive, long enough that typing a whole word
+	// only actually searches once. The `current === searchQuery.trim()`
+	// checks below guard against a slower, earlier request's response
+	// landing after a faster, later one's and clobbering it — no
+	// AbortController: a personal-scale SQLite query is fast enough that
+	// this is a defensive nicety, not something that actually races often.
+	$effect(() => {
+		const current = searchQuery.trim();
+		if (!current) {
+			searchResults = null;
+			searching = false;
+			return;
+		}
+		searching = true;
+		const timer = setTimeout(async () => {
+			try {
+				const results = await api.search(current);
+				if (searchQuery.trim() === current) searchResults = results;
+			} catch (err) {
+				if (searchQuery.trim() === current) {
+					error = err instanceof ApiError ? err.message : $t('fileBrowser.errors.couldNotSearch');
+				}
+			} finally {
+				if (searchQuery.trim() === current) searching = false;
+			}
+		}, 300);
+		return () => clearTimeout(timer);
+	});
 
 	// Which row's action menu is open, by item id — null means none. Only
 	// one at a time, mirroring how a real menu behaves (opening another
@@ -496,6 +521,10 @@
 	{/if}
 </div>
 
+{#if searchResults !== null}
+	<p class="hint">{$t('fileBrowser.searchResultsHint', { query: searchQuery.trim(), count: searchResults.length })}</p>
+{/if}
+
 <input
 	bind:this={fileInput}
 	type="file"
@@ -541,12 +570,12 @@
 	ondrop={handleDrop}
 	class:dropzone-active={dragging}
 >
-	{#if loading}
+	{#if loading || (searching && searchResults === null)}
 		<p>{$t('common.loading')}</p>
-	{:else if items.length === 0}
-		<div class="empty-state">{$t('fileBrowser.emptyFolder')}</div>
 	{:else if visibleItems.length === 0}
-		<div class="empty-state">{$t('fileBrowser.noSearchMatches', { query: searchQuery })}</div>
+		<div class="empty-state">
+			{searchQuery.trim() ? $t('fileBrowser.noSearchMatches', { query: searchQuery }) : $t('fileBrowser.emptyFolder')}
+		</div>
 	{:else}
 		{#snippet rowMenu(item: Item)}
 			<div class="row-menu">
