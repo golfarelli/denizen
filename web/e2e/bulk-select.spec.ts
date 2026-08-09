@@ -78,6 +78,30 @@ test('long-pressing an item selects it instead of opening it; a normal click sti
 	await expect(page.locator('.selection-toolbar')).toContainText('2 selected');
 });
 
+test('the native long-press context menu is suppressed on an item row', async ({ page }) => {
+	// A real touch-and-hold on Android fires the browser's own
+	// contextmenu event alongside our timer-based selection — left
+	// unprevented, it leaves the gesture half-handled by native code and
+	// every *subsequent* tap on another row stops registering (the bug
+	// Fabio actually hit; not reproducible via mouse-only interaction, so
+	// it needs its own direct check here rather than another click-based
+	// scenario like the test above).
+	await page.goto('/');
+
+	const folderName = `E2E Context Menu ${Date.now()}`;
+	page.once('dialog', (dialog) => dialog.accept(folderName));
+	await page.getByRole('button', { name: '+ New folder' }).click();
+	const row = page.locator('.item-row', { hasText: folderName });
+	await expect(row).toBeVisible();
+
+	const defaultPrevented = await row.locator('.item-name').evaluate((el) => {
+		const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+		el.dispatchEvent(event);
+		return event.defaultPrevented;
+	});
+	expect(defaultPrevented).toBe(true);
+});
+
 test('the bulk Share button opens a dialog scoped to the whole selection', async ({ page }) => {
 	await page.goto('/');
 

@@ -108,6 +108,15 @@
 	// why it's hidden below 640px until a selection is already active.
 	// Pointer events (not touch-specific ones) so this works identically
 	// with a mouse's own "press and hold", not just a finger.
+	//
+	// The buttons below also cancel the browser's own contextmenu event
+	// (fired on a real touch-and-hold, separately from anything here) —
+	// without that, Android in particular leaves the gesture half-eaten
+	// by its native long-press handling even after our own timer-based
+	// selection has already fired, and every *subsequent* tap on another
+	// row stops registering at all. Confirmed this was the actual gap:
+	// e2e (mouse-only, via Playwright's click({ delay })) never exercises
+	// a real contextmenu event, so it looked fine in tests despite this.
 	const LONG_PRESS_MS = 500;
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
 	let longPressTriggered = false;
@@ -888,6 +897,7 @@
 						onpointerleave={cancelLongPress}
 						onpointercancel={cancelLongPress}
 						onpointermove={cancelLongPress}
+						oncontextmenu={(e) => e.preventDefault()}
 						onclick={() => handleItemActivate(item)}
 					>
 						{item.name}
@@ -917,6 +927,7 @@
 							onpointerleave={cancelLongPress}
 							onpointercancel={cancelLongPress}
 							onpointermove={cancelLongPress}
+							oncontextmenu={(e) => e.preventDefault()}
 							onclick={() => handleItemActivate(item)}
 						>
 							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
