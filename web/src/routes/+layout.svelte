@@ -47,6 +47,17 @@
 		}
 	});
 
+	// app.html hardcodes lang="en" (SvelteKit needs a static value there;
+	// this app's own locale is a runtime choice — see lib/i18n's own
+	// comment on why 'it' is actually the default). Left uncorrected, a
+	// browser sees an Italian-language page declared as English and
+	// reliably offers to auto-translate it — which then sweeps up the
+	// "Denizen" brand name itself into translation along with everything
+	// else, not something proper-noun content should ever go through.
+	$effect(() => {
+		document.documentElement.lang = $locale;
+	});
+
 	// The drawer (mobile sidebar) has no reason to stay open across a
 	// navigation — closing it here, rather than relying on each nav link's
 	// own onclick, catches every way the route can change (a link inside
@@ -106,7 +117,7 @@
 						d="M6.5 7a1 1 0 0 1 1-1h3.2l1.3 1.3H17a1 1 0 0 1 1 1v7.2a1 1 0 0 1-1 1H7.5a1 1 0 0 1-1-1V7Z"
 					/>
 				</svg>
-				Denizen
+				<span class="notranslate" translate="no">Denizen</span>
 			</a>
 
 			<nav class="sidebar-nav">
@@ -209,7 +220,7 @@
 						<path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
 					</svg>
 				</button>
-				<a class="brand mobile-brand" href="/">Denizen</a>
+				<a class="brand mobile-brand notranslate" href="/" translate="no">Denizen</a>
 				<div class="topbar-spacer"></div>
 				{#if $me}
 					<span class="user-chip">

@@ -44,7 +44,7 @@
 
 <div class="auth-page">
 	<div class="card">
-		<h1>Denizen</h1>
+		<h1 class="notranslate" translate="no">Denizen</h1>
 		<p class="error-text" style:visibility={error ? 'visible' : 'hidden'}>{error || ' '}</p>
 		<form onsubmit={handleSubmit}>
 			<div class="field">

@@ -2,6 +2,13 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
+		<!-- The app manages its own bilingual UI (lib/i18n) — a browser's
+		     own auto-translate should never kick in on top of that (it
+		     would also sweep up the "Denizen" brand name into translation,
+		     not just the UI text — see routes/+layout.svelte's own comment
+		     on the lang= mismatch that used to invite it in the first
+		     place). -->
+		<meta name="google" content="notranslate" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<link rel="manifest" href="/manifest.json" />
