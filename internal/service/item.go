@@ -420,73 +420,108 @@ func (s *ItemService) ListChildren(ctx context.Context, callerID string, parentI
 // the client rendering the results) do.
 const searchResultLimit = 50
 
-// Search finds ownerID's own active items whose name or indexed content
-// matches query — GET /api/v1/search's own logic. Name matches (someone
-// searching almost always remembers roughly what they called a file) rank
-// first, then content matches by FTS5 relevance; each item appears once
-// even if it matched both ways.
-//
-// Scoped to the caller's own items only, not anything shared with them —
-// a deliberate v1 scope cut, not an oversight: "Shared with me" is
-// already its own explicit view (routes/shared-with-me), unlike a normal
-// folder a share grant lets someone browse into. Searching across
-// somewhere-nested shared subtrees the caller may only partially be able
-// to see raises real design questions (whose ranking? whose relevance?)
-// this pass doesn't need to answer yet.
+// Search finds every active item ownerID may read — their own, or
+// reached through a direct/inherited share grant, same reach as
+// GetIncludingTrashed — whose name or indexed content matches query.
+// GET /api/v1/search's own logic. Own name matches rank first (someone
+// searching almost always remembers roughly what they called a file),
+// then shared-subtree name matches, then content matches by FTS5
+// relevance; each item appears once even if it matched more than one way.
 func (s *ItemService) Search(ctx context.Context, ownerID, query string) ([]*model.Item, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, nil
 	}
 
-	nameMatches, err := s.items.SearchByName(ctx, ownerID, query, searchResultLimit)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[string]bool, len(nameMatches))
-	results := make([]*model.Item, 0, len(nameMatches))
-	for _, item := range nameMatches {
+	seen := make(map[string]bool)
+	var results []*model.Item
+	add := func(item *model.Item) {
+		if seen[item.ID] || len(results) >= searchResultLimit {
+			return
+		}
 		seen[item.ID] = true
 		results = append(results, item)
 	}
-	if len(results) >= searchResultLimit {
-		return results, nil
+
+	ownMatches, err := s.items.SearchByName(ctx, ownerID, query, searchResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range ownMatches {
+		add(item)
 	}
 
-	contentIDs, err := s.search.SearchContent(ctx, query, searchResultLimit)
-	if err != nil {
-		return nil, err
-	}
-	var wantIDs []string
-	for _, id := range contentIDs {
-		if !seen[id] {
-			wantIDs = append(wantIDs, id)
+	// A grant on a folder is inherited by everything nested inside it,
+	// same as browsing (resolveGrant) — SearchByNameInSubtree is the
+	// name-search equivalent of that same walk, downward from each
+	// directly-shared root instead of upward from one target item.
+	if len(results) < searchResultLimit {
+		grants, err := s.grants.ListReceivedBy(ctx, ownerID)
+		if err != nil {
+			return nil, err
+		}
+		for _, grant := range grants {
+			if len(results) >= searchResultLimit {
+				break
+			}
+			subtreeMatches, err := s.items.SearchByNameInSubtree(ctx, grant.ItemID, query, searchResultLimit)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range subtreeMatches {
+				add(item)
+			}
 		}
 	}
-	if len(wantIDs) == 0 {
-		return results, nil
-	}
-	contentItems, err := s.items.GetByIDs(ctx, wantIDs)
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[string]*model.Item, len(contentItems))
-	for _, item := range contentItems {
-		byID[item.ID] = item
-	}
-	// Re-apply SearchContent's own rank order (GetByIDs doesn't preserve
-	// it) and the ownership/trash filter a standalone FTS5 index can't
-	// enforce on its own (see SearchRepository's own doc comment).
-	for _, id := range wantIDs {
-		item, ok := byID[id]
-		if !ok || item.OwnerID != ownerID || item.DeletedAt != nil {
-			continue
+
+	if len(results) < searchResultLimit {
+		contentIDs, err := s.search.SearchContent(ctx, query, searchResultLimit)
+		if err != nil {
+			return nil, err
 		}
-		if len(results) >= searchResultLimit {
-			break
+		var unresolved []string
+		for _, id := range contentIDs {
+			if !seen[id] {
+				unresolved = append(unresolved, id)
+			}
 		}
-		results = append(results, item)
+		if len(unresolved) > 0 {
+			contentItems, err := s.items.GetByIDs(ctx, unresolved)
+			if err != nil {
+				return nil, err
+			}
+			byID := make(map[string]*model.Item, len(contentItems))
+			for _, item := range contentItems {
+				byID[item.ID] = item
+			}
+			// Re-apply SearchContent's own rank order (GetByIDs doesn't
+			// preserve it) and check read access the same way any other
+			// item read does — a standalone FTS5 index enforces neither
+			// ownership nor trash state on its own (see SearchRepository's
+			// own doc comment).
+			for _, id := range unresolved {
+				if len(results) >= searchResultLimit {
+					break
+				}
+				item, ok := byID[id]
+				if !ok || item.DeletedAt != nil {
+					continue
+				}
+				if item.OwnerID == ownerID {
+					add(item)
+					continue
+				}
+				grant, err := s.resolveGrant(ctx, item, ownerID)
+				if err != nil {
+					return nil, err
+				}
+				if grant != nil {
+					add(item)
+				}
+			}
+		}
 	}
+
 	return results, nil
 }
 

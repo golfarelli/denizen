@@ -61,18 +61,54 @@ func (r *ItemRepository) GetByIDs(ctx context.Context, ids []string) ([]*model.I
 	return r.scanAll(rows)
 }
 
+// likeEscape escapes query for a LIKE ... ESCAPE '\' pattern (SQLite's own
+// LIKE has no special handling of these, they'd otherwise be interpreted
+// as wildcards or break the pattern) — shared by SearchByName and
+// SearchByNameInSubtree below.
+func likeEscape(query string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+}
+
 // SearchByName lists ownerID's own active items whose name contains query
 // (case-insensitive — SQLite's LIKE already folds ASCII case by default),
 // most-recently-modified first. The whole-tree counterpart to
 // ListChildren's one-folder-at-a-time listing — GET /api/v1/search's name-
 // match half (see ItemService.Search for how it's combined with a content
-// match via internal/repository/search.go).
+// match via internal/repository/search.go, and with SearchByNameInSubtree
+// below for anything shared with the caller rather than owned by them).
 func (r *ItemRepository) SearchByName(ctx context.Context, ownerID, query string, limit int) ([]*model.Item, error) {
-	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
 	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
 	        FROM items WHERE owner_id = ? AND deleted_at IS NULL AND name LIKE ? ESCAPE '\'
 	        ORDER BY updated_at DESC LIMIT ?`
-	rows, err := r.cn.QueryContext(ctx, sql, ownerID, "%"+escaped+"%", limit)
+	rows, err := r.cn.QueryContext(ctx, sql, ownerID, "%"+likeEscape(query)+"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanAll(rows)
+}
+
+// SearchByNameInSubtree is SearchByName scoped to one subtree instead of
+// one owner: rootID itself plus every active descendant of it (a
+// recursive walk down parent_id, the mirror image of resolveGrant's own
+// walk up it), filtered by name. rootID works whether it's a file (the
+// recursive step just adds nothing, the base case still checks rootID
+// itself) or a folder — ItemService.Search calls this once per item
+// directly shared with the caller (UserShareRepository.ListReceivedBy),
+// since a folder grant is inherited by everything nested inside it, same
+// as browsing.
+func (r *ItemRepository) SearchByNameInSubtree(ctx context.Context, rootID, query string, limit int) ([]*model.Item, error) {
+	sql := `WITH RECURSIVE subtree(id) AS (
+	            SELECT ?
+	            UNION ALL
+	            SELECT items.id FROM items JOIN subtree ON items.parent_id = subtree.id WHERE items.deleted_at IS NULL
+	        )
+	        SELECT items.id, items.owner_id, items.parent_id, items.name, items.type, items.size_bytes,
+	               items.mime_type, items.checksum, items.deleted_at, items.created_at, items.updated_at
+	        FROM items JOIN subtree ON items.id = subtree.id
+	        WHERE items.deleted_at IS NULL AND items.name LIKE ? ESCAPE '\'
+	        ORDER BY items.updated_at DESC LIMIT ?`
+	rows, err := r.cn.QueryContext(ctx, sql, rootID, "%"+likeEscape(query)+"%", limit)
 	if err != nil {
 		return nil, err
 	}
