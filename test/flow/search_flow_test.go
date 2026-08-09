@@ -123,3 +123,51 @@ func TestSearchFlow_EmptyQueryReturnsNoResultsNotAnError(t *testing.T) {
 		t.Errorf("search('   ') = %+v, want empty", results)
 	}
 }
+
+// TestSearchFlow_FindsSharedItemsTooNotJustOwnedOnes covers the follow-up
+// to the v1 cut documented on ItemService.Search: a folder shared with the
+// caller is now searched too — both by name (SearchByNameInSubtree) and
+// by content (the resolveGrant check in Search's content-match branch) —
+// same reach as browsing into it, not just the top-level grant itself.
+func TestSearchFlow_FindsSharedItemsTooNotJustOwnedOnes(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := t.Context()
+
+	code, created, err := ts.app.Auth.EnsureBootstrapInvite(ctx, time.Hour)
+	if err != nil || !created {
+		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
+	}
+	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateInvite: %v", err)
+	}
+	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
+
+	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+		"type": "folder", "name": "Team", "parent_id": nil,
+	})
+	folder := decodeJSON[apiItem](t, folderRes)
+	byName := uploadFile(t, ts, fabio, &folder.ID, "bolletta gas.txt", []byte("consumo del mese"))
+	byContent := uploadFile(t, ts, fabio, &folder.ID, "nota.txt", []byte("il preventivo per il tetto è pronto"))
+	// Not shared — must never show up in mario's results.
+	uploadFile(t, ts, fabio, nil, "privato.txt", []byte("preventivo riservato, non condiviso"))
+
+	if res := createUserShareWithPermission(t, ts, fabio, folder.ID, mario.id, "view"); res.StatusCode != http.StatusCreated {
+		t.Fatalf("share folder: got status %d", res.StatusCode)
+	}
+
+	nameResults := search(t, ts, mario, "bolletta")
+	if len(nameResults) != 1 || nameResults[0].ID != byName.ID || nameResults[0].Owned {
+		t.Errorf("mario's search(bolletta) = %+v, want exactly [%s], owned=false", nameResults, byName.ID)
+	}
+	if nameResults[0].CanEdit {
+		t.Errorf("mario's search(bolletta) can_edit = true, want false (view-only grant)")
+	}
+
+	contentResults := search(t, ts, mario, "preventivo")
+	if len(contentResults) != 1 || contentResults[0].ID != byContent.ID {
+		t.Errorf("mario's search(preventivo) = %+v, want exactly fabio's shared nota.txt (not the unshared privato.txt)", contentResults)
+	}
+}

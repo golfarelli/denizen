@@ -181,9 +181,8 @@ func (h *ItemHandler) enrichSharedWith(ctx context.Context, out []itemResponse) 
 }
 
 // Search handles GET /api/v1/search?q=... — a name/content match across
-// the caller's whole drive, not just one folder (see ItemService.Search's
-// own doc comment on why it's scoped to the caller's own items only, not
-// anything shared with them, for now).
+// everything the caller may read, own or shared with them (see
+// ItemService.Search's own doc comment).
 func (h *ItemHandler) Search(res http.ResponseWriter, req *http.Request) {
 	q := req.URL.Query().Get("q")
 	items, err := h.items.Search(req.Context(), ownerID(req), q)
@@ -192,6 +191,16 @@ func (h *ItemHandler) Search(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	out := toItemResponses(items, ownerID(req))
+	for i := range out {
+		if !out[i].Owned {
+			canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), items[i])
+			if err != nil {
+				httpio.WriteError(res, err)
+				return
+			}
+			out[i].CanEdit = canEdit
+		}
+	}
 	if err := h.enrichSharedWith(req.Context(), out); err != nil {
 		httpio.WriteError(res, err)
 		return
