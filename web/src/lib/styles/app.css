@@ -571,6 +571,12 @@ main.fullscreen {
 	color: inherit;
 	cursor: pointer;
 	padding: 0;
+	/* Long-press-to-select (see .row-checkbox's own comment) needs a real
+	   hold without the browser's own long-press gestures — text-selection
+	   callout, "save/copy" menu — jumping in first and eating the touch. */
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
 }
 
 .item-name:disabled {
@@ -588,6 +594,25 @@ main.fullscreen {
 .row-checkbox {
 	flex-shrink: 0;
 	cursor: pointer;
+}
+
+/* Long-press (routes/+page.svelte's startLongPress/handleItemActivate) is
+   how a selection starts on mobile — a checkbox sitting on every row all
+   the time would eat into space that's already tight below 640px for no
+   benefit most of the time. Once a selection actually exists
+   (.has-selection, set from selectedIds.size > 0), checkboxes reappear
+   so further items can be added to it with an ordinary tap instead of
+   another long-press each time — same "selection mode" behavior Drive/
+   Google Photos use on mobile. */
+@media (max-width: 640px) {
+	.row-checkbox {
+		display: none;
+	}
+
+	.item-list.has-selection .row-checkbox,
+	.item-grid.has-selection .row-checkbox {
+		display: inline-block;
+	}
 }
 
 .item-row-selected {
@@ -764,6 +789,10 @@ main.fullscreen {
 	color: inherit;
 	cursor: pointer;
 	padding: var(--space-5) var(--space-3) var(--space-3);
+	/* See .item-name's own comment — same long-press-to-select need. */
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
 }
 
 .item-tile-name {

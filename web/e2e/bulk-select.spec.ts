@@ -35,6 +35,49 @@ test('selecting rows shows the bulk toolbar with the right count, and "select al
 	await expect(page.locator('.selection-toolbar')).toHaveCount(0);
 });
 
+test('long-pressing an item selects it instead of opening it; a normal click still opens it', async ({ page }) => {
+	await page.goto('/');
+
+	const folderName = `E2E Long Press ${Date.now()}`;
+	page.once('dialog', (dialog) => dialog.accept(folderName));
+	await page.getByRole('button', { name: '+ New folder' }).click();
+	const row = page.locator('.item-row', { hasText: folderName });
+	await expect(row).toBeVisible();
+
+	// A quick click (well under the 500ms hold threshold) still opens it
+	// normally — long-press-to-select must not get in the way of the
+	// ordinary open gesture.
+	await row.locator('.item-name').click();
+	await expect(page).toHaveURL(/\?folder=/);
+	await page.goto('/');
+
+	// Holding past the threshold selects it instead of navigating —
+	// Playwright's click `delay` holds the mouse down for that long
+	// before releasing, which fires the same pointerdown/pointerup pair a
+	// touch long-press would (see routes/+page.svelte's startLongPress).
+	await row.locator('.item-name').click({ delay: 600 });
+	await expect(page).toHaveURL('/'); // never navigated away
+	await expect(page.locator('.selection-toolbar')).toContainText('1 selected');
+	await expect(row.locator('.row-checkbox')).toBeChecked();
+
+	// Selection mode is now active — an ordinary tap on a second item
+	// adds to the selection instead of opening it too.
+	const secondFolderName = `E2E Long Press Second ${Date.now()}`;
+	page.once('dialog', (dialog) => dialog.accept(secondFolderName));
+	// Deselect first so "+ New folder" is reachable (the selection
+	// toolbar sits where it'd otherwise be covered — this just confirms
+	// state, not a real workflow step).
+	await row.locator('.row-checkbox').click();
+	await page.getByRole('button', { name: '+ New folder' }).click();
+	const secondRow = page.locator('.item-row', { hasText: secondFolderName });
+	await expect(secondRow).toBeVisible();
+
+	await row.locator('.item-name').click({ delay: 600 });
+	await secondRow.locator('.item-name').click();
+	await expect(page).toHaveURL('/');
+	await expect(page.locator('.selection-toolbar')).toContainText('2 selected');
+});
+
 test('the bulk Share button opens a dialog scoped to the whole selection', async ({ page }) => {
 	await page.goto('/');
 

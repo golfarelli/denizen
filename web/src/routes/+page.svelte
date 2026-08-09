@@ -103,6 +103,48 @@
 				: new Set(visibleItems.map((item) => item.id));
 	}
 
+	// Long-press to select on mobile, instead of a checkbox sitting on
+	// every row all the time — see .row-checkbox's own CSS comment for
+	// why it's hidden below 640px until a selection is already active.
+	// Pointer events (not touch-specific ones) so this works identically
+	// with a mouse's own "press and hold", not just a finger.
+	const LONG_PRESS_MS = 500;
+	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+	let longPressTriggered = false;
+
+	function startLongPress(id: string) {
+		longPressTriggered = false;
+		clearTimeout(longPressTimer);
+		longPressTimer = setTimeout(() => {
+			longPressTriggered = true;
+			toggleSelect(id);
+		}, LONG_PRESS_MS);
+	}
+
+	function cancelLongPress() {
+		clearTimeout(longPressTimer);
+	}
+
+	// The shared click handler for both the list row's .item-name button
+	// and the grid tile's .item-tile-main button: a long-press just
+	// finished selecting this item (longPressTriggered, reset here so it
+	// doesn't leak into the next click), or a selection is already active
+	// (any further tap keeps selecting instead of navigating away from
+	// it) — either way, don't open. A plain tap with nothing selected
+	// opens normally.
+	function handleItemActivate(item: Item) {
+		if (longPressTriggered) {
+			longPressTriggered = false;
+			return;
+		}
+		if (selectedIds.size > 0) {
+			toggleSelect(item.id);
+			return;
+		}
+		if (item.type === 'folder') openFolder(item.id);
+		else openFile(item.id);
+	}
+
 	// Debounced so every keystroke doesn't fire a request — 300ms is short
 	// enough to feel responsive, long enough that typing a whole word
 	// only actually searches once. The `current === searchQuery.trim()`
@@ -826,7 +868,7 @@
 				</button>
 				<span class="row-menu"></span>
 			</div>
-			<div class="item-list">
+			<div class="item-list" class:has-selection={selectedIds.size > 0}>
 				{#each visibleItems as item (item.id)}
 				<div class="item-row" class:item-row-selected={selectedIds.has(item.id)}>
 					<span class="item-icon">
@@ -841,7 +883,12 @@
 					</span>
 					<button
 						class="item-name"
-						onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}
+						onpointerdown={() => startLongPress(item.id)}
+						onpointerup={cancelLongPress}
+						onpointerleave={cancelLongPress}
+						onpointercancel={cancelLongPress}
+						onpointermove={cancelLongPress}
+						onclick={() => handleItemActivate(item)}
 					>
 						{item.name}
 					</button>
@@ -852,7 +899,7 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="item-grid">
+			<div class="item-grid" class:has-selection={selectedIds.size > 0}>
 				{#each visibleItems as item (item.id)}
 					<div class="item-tile" class:item-row-selected={selectedIds.has(item.id)}>
 						<input
@@ -865,7 +912,12 @@
 						{@render rowMenu(item)}
 						<button
 							class="item-tile-main"
-							onclick={() => (item.type === 'folder' ? openFolder(item.id) : openFile(item.id))}
+							onpointerdown={() => startLongPress(item.id)}
+							onpointerup={cancelLongPress}
+							onpointerleave={cancelLongPress}
+							onpointercancel={cancelLongPress}
+							onpointermove={cancelLongPress}
+							onclick={() => handleItemActivate(item)}
 						>
 							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
 							<span class="item-tile-name">{item.name}</span>
