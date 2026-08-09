@@ -208,6 +208,10 @@ export const api = {
 
 	getItem: (id: string) => req<Item>(`/api/v1/items/${id}`),
 
+	// Name/content search across the caller's whole drive — see
+	// ItemService.Search's own comment for scope and ranking.
+	search: (q: string) => req<Item[]>(`/api/v1/search?q=${encodeURIComponent(q)}`),
+
 	createFolder: (name: string, parentId: string | null) =>
 		req<Item>('/api/v1/items', jsonInit({ type: 'folder', name, parent_id: parentId })),
 
