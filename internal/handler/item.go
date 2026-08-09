@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -141,11 +142,8 @@ func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
 	}
 	out := toItemResponses(items, ownerID(req))
 
-	var ownedIDs []string
 	for i := range out {
-		if out[i].Owned {
-			ownedIDs = append(ownedIDs, out[i].ID)
-		} else {
+		if !out[i].Owned {
 			// Browsing into a shared folder: every child inherits that
 			// folder's own resolved permission (a per-child grant more
 			// specific than its parent's is still honored by every
@@ -154,15 +152,50 @@ func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
 			out[i].CanEdit = canEdit
 		}
 	}
-	sharedWith, err := h.items.SharedUsernames(req.Context(), ownedIDs)
-	if err != nil {
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
 		httpio.WriteError(res, err)
 		return
+	}
+
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
+// enrichSharedWith fills SharedWith on every owned row in out — the badge
+// data List and Search both need, only ever meaningful for an item the
+// caller actually owns (see itemResponse.SharedWith's own comment).
+func (h *ItemHandler) enrichSharedWith(ctx context.Context, out []itemResponse) error {
+	var ownedIDs []string
+	for i := range out {
+		if out[i].Owned {
+			ownedIDs = append(ownedIDs, out[i].ID)
+		}
+	}
+	sharedWith, err := h.items.SharedUsernames(ctx, ownedIDs)
+	if err != nil {
+		return err
 	}
 	for i := range out {
 		out[i].SharedWith = sharedWith[out[i].ID]
 	}
+	return nil
+}
 
+// Search handles GET /api/v1/search?q=... — a name/content match across
+// the caller's whole drive, not just one folder (see ItemService.Search's
+// own doc comment on why it's scoped to the caller's own items only, not
+// anything shared with them, for now).
+func (h *ItemHandler) Search(res http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query().Get("q")
+	items, err := h.items.Search(req.Context(), ownerID(req), q)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
 	httpio.WriteJSON(res, http.StatusOK, out)
 }
 
