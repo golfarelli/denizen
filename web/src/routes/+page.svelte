@@ -84,39 +84,12 @@
 	let visibleItems = $derived(sortItems(searchResults ?? items, sortField, sortDirection));
 	let selectedItems = $derived(visibleItems.filter((item) => selectedIds.has(item.id)));
 
-	// TEMPORARY — diagnosing a real-device-only long-press bug (2026-08-10)
-	// that hasn't reproduced under any synthetic touch simulation tried so
-	// far. ?debug=1 shows a live event log on-screen so Fabio can screenshot
-	// exactly what his phone actually does. Remove once that's resolved.
-	//
-	// Sticky via localStorage, not just the query param: this is an SPA —
-	// opening a folder calls goto("/?folder=...") which replaces the query
-	// string entirely, silently dropping ?debug=1 the moment anyone
-	// navigates anywhere. Once seen in the URL, it stays on until cleared
-	// by hand (there's no UI for that on purpose — this is a throwaway
-	// debug aid, not a feature).
-	let debugMode = $state(false);
-	$effect(() => {
-		if ($page.url.searchParams.get('debug') === '1') {
-			localStorage.setItem('denizen.debug', '1');
-		}
-		debugMode = localStorage.getItem('denizen.debug') === '1';
-	});
-	let debugLog = $state<string[]>([]);
-	function logDebug(msg: string) {
-		if (!debugMode) return;
-		const ts = new Date().toISOString().slice(11, 23);
-		debugLog = [...debugLog, `${ts} ${msg}`].slice(-30);
-	}
-
 	function toggleSelect(id: string, event?: Event) {
 		event?.stopPropagation();
 		const next = new Set(selectedIds);
-		const wasSelected = next.has(id);
-		if (wasSelected) next.delete(id);
+		if (next.has(id)) next.delete(id);
 		else next.add(id);
 		selectedIds = next;
-		logDebug(`toggleSelect id=${id.slice(0, 6)} ${wasSelected ? 'REMOVED' : 'ADDED'} → size=${next.size}`);
 	}
 
 	function clearSelection() {
@@ -144,20 +117,14 @@
 	// on .item-name — an earlier version only wired them to the name text,
 	// a fairly narrow column, and a real device's long-press landing
 	// anywhere else in the row (the icon, the padding, ...) reached
-	// nothing at all. Found via an on-screen ?debug=1 event log Fabio
-	// reproduced with (2026-08-10): a stationary hold logged literally
-	// nothing, while a scroll starting near the name text logged a
-	// pointerdown — the tell that the hit target was too small, not that
-	// events weren't firing at all.
+	// nothing at all.
+	//
 	// MOVE_TOLERANCE_PX matters as much as the timer itself: a finger held
 	// "still" for 500ms never actually reads as zero movement (hand tremor
 	// alone produces several pointermove events), so cancelling on *any*
-	// pointermove — which is what this used to do — cancelled nearly every
-	// real long-press before its timer could fire. Found via Fabio
-	// reproducing it live (2026-08-10): the first row's long-press would
-	// work, the next one's wouldn't, purely down to how still that
-	// particular hold happened to be. Only a real drag/scroll (movement
-	// past this tolerance) should still cancel it.
+	// pointermove cancelled nearly every real long-press before its timer
+	// could fire. Only a real drag/scroll (movement past this tolerance)
+	// should cancel it.
 	const LONG_PRESS_MS = 500;
 	const MOVE_TOLERANCE_PX = 10;
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -166,14 +133,12 @@
 	let longPressStartY = 0;
 
 	function startLongPress(id: string, e: PointerEvent) {
-		logDebug(`pointerdown id=${id.slice(0, 6)}`);
 		longPressTriggered = false;
 		longPressStartX = e.clientX;
 		longPressStartY = e.clientY;
 		clearTimeout(longPressTimer);
 		longPressTimer = setTimeout(() => {
 			longPressTriggered = true;
-			logDebug(`LONG-PRESS FIRED id=${id.slice(0, 6)}`);
 			toggleSelect(id);
 		}, LONG_PRESS_MS);
 	}
@@ -183,9 +148,6 @@
 			const { clientX, clientY } = e as PointerEvent;
 			const moved = Math.hypot(clientX - longPressStartX, clientY - longPressStartY);
 			if (moved < MOVE_TOLERANCE_PX) return;
-		}
-		if (longPressTimer !== undefined) {
-			logDebug(`cancelLongPress via ${e?.type ?? 'manual'} (a timer was pending)`);
 		}
 		clearTimeout(longPressTimer);
 		longPressTimer = undefined;
@@ -199,20 +161,14 @@
 	// it) — either way, don't open. A plain tap with nothing selected
 	// opens normally.
 	function handleItemActivate(item: Item) {
-		logDebug(
-			`click id=${item.id.slice(0, 6)} longPressTriggered=${longPressTriggered} selectedIds.size=${selectedIds.size}`
-		);
 		if (longPressTriggered) {
 			longPressTriggered = false;
-			logDebug('  → suppressed (follows a long-press)');
 			return;
 		}
 		if (selectedIds.size > 0) {
-			logDebug('  → toggling (selection already active)');
 			toggleSelect(item.id);
 			return;
 		}
-		logDebug('  → opening normally');
 		if (item.type === 'folder') openFolder(item.id);
 		else openFile(item.id);
 	}
@@ -640,14 +596,6 @@
 	<title>Denizen</title>
 </svelte:head>
 
-<!-- TEMPORARY (?debug=1) — see logDebug's own comment above. -->
-{#if debugMode}
-	<div class="debug-panel">
-		<strong>selectedIds: {[...selectedIds].map((id) => id.slice(0, 6)).join(', ') || '(none)'}</strong>
-		{#each debugLog as line, i (i)}<div>{line}</div>{/each}
-	</div>
-{/if}
-
 <nav class="breadcrumb">
 	{#each breadcrumb as crumb, i (crumb.id ?? 'root')}
 		{#if i > 0}<span>/</span>{/if}
@@ -963,10 +911,7 @@
 					onpointerleave={cancelLongPress}
 					onpointercancel={cancelLongPress}
 					onpointermove={cancelLongPress}
-					oncontextmenu={(e) => {
-						logDebug(`contextmenu id=${item.id.slice(0, 6)} (prevented)`);
-						e.preventDefault();
-					}}
+					oncontextmenu={(e) => e.preventDefault()}
 					onclick={() => handleItemActivate(item)}
 					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
@@ -1012,10 +957,7 @@
 							onpointerleave={cancelLongPress}
 							onpointercancel={cancelLongPress}
 							onpointermove={cancelLongPress}
-							oncontextmenu={(e) => {
-							logDebug(`contextmenu id=${item.id.slice(0, 6)} (prevented)`);
-							e.preventDefault();
-						}}
+							oncontextmenu={(e) => e.preventDefault()}
 							onclick={() => handleItemActivate(item)}
 						>
 							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
