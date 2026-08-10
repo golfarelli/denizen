@@ -149,13 +149,27 @@
 	// nothing, while a scroll starting near the name text logged a
 	// pointerdown — the tell that the hit target was too small, not that
 	// events weren't firing at all.
+	// MOVE_TOLERANCE_PX matters as much as the timer itself: a finger held
+	// "still" for 500ms never actually reads as zero movement (hand tremor
+	// alone produces several pointermove events), so cancelling on *any*
+	// pointermove — which is what this used to do — cancelled nearly every
+	// real long-press before its timer could fire. Found via Fabio
+	// reproducing it live (2026-08-10): the first row's long-press would
+	// work, the next one's wouldn't, purely down to how still that
+	// particular hold happened to be. Only a real drag/scroll (movement
+	// past this tolerance) should still cancel it.
 	const LONG_PRESS_MS = 500;
+	const MOVE_TOLERANCE_PX = 10;
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
 	let longPressTriggered = false;
+	let longPressStartX = 0;
+	let longPressStartY = 0;
 
-	function startLongPress(id: string) {
+	function startLongPress(id: string, e: PointerEvent) {
 		logDebug(`pointerdown id=${id.slice(0, 6)}`);
 		longPressTriggered = false;
+		longPressStartX = e.clientX;
+		longPressStartY = e.clientY;
 		clearTimeout(longPressTimer);
 		longPressTimer = setTimeout(() => {
 			longPressTriggered = true;
@@ -165,7 +179,12 @@
 	}
 
 	function cancelLongPress(e?: Event) {
-		if (longPressTimer !== undefined && e?.type !== 'pointermove') {
+		if (e?.type === 'pointermove') {
+			const { clientX, clientY } = e as PointerEvent;
+			const moved = Math.hypot(clientX - longPressStartX, clientY - longPressStartY);
+			if (moved < MOVE_TOLERANCE_PX) return;
+		}
+		if (longPressTimer !== undefined) {
 			logDebug(`cancelLongPress via ${e?.type ?? 'manual'} (a timer was pending)`);
 		}
 		clearTimeout(longPressTimer);
@@ -939,7 +958,7 @@
 					class:item-row-selected={selectedIds.has(item.id)}
 					role="button"
 					tabindex="0"
-					onpointerdown={() => startLongPress(item.id)}
+					onpointerdown={(e) => startLongPress(item.id, e)}
 					onpointerup={cancelLongPress}
 					onpointerleave={cancelLongPress}
 					onpointercancel={cancelLongPress}
@@ -988,7 +1007,7 @@
 						{@render rowMenu(item)}
 						<button
 							class="item-tile-main"
-							onpointerdown={() => startLongPress(item.id)}
+							onpointerdown={(e) => startLongPress(item.id, e)}
 							onpointerup={cancelLongPress}
 							onpointerleave={cancelLongPress}
 							onpointercancel={cancelLongPress}
