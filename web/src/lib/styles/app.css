@@ -823,22 +823,46 @@ main.fullscreen {
 	gap: var(--space-2);
 }
 
-/* The bulk-action bar that replaces the search-results hint when one or
-   more rows are selected (routes/+page.svelte) — same flex-wrap shape as
-   .toolbar itself, just with a leading "clear selection" button and a
-   trailing action group instead of search/sort/view controls. */
+/* The bulk-action bar shown when one or more rows are selected
+   (routes/+page.svelte) — fixed to the bottom of the viewport, not laid
+   out inline above the list. It used to sit in normal flow there, which
+   pushed the whole list down the moment a selection started; a real
+   finger tapping a *second* row right after long-pressing the first
+   landed wherever that row used to be before the shift, not where it
+   ended up — confirmed by reproducing it with real touch events (not
+   just mouse) before landing on this fix. Fixed positioning removes it
+   from flow entirely, so selecting never moves anything above it.
+   .item-list.has-selection/.item-grid.has-selection (below) reserve
+   enough bottom padding so the fixed bar never covers the last row
+   either. */
 .selection-toolbar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 25;
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
-	margin-bottom: var(--space-4);
 	flex-wrap: wrap;
+	padding: var(--space-3) var(--space-6);
+	background: var(--color-bg);
+	border-top: 1px solid var(--color-border);
+	box-shadow: var(--shadow-md);
 }
 
 .selection-toolbar-actions {
 	display: flex;
 	gap: var(--space-2);
 	margin-left: auto;
+}
+
+/* Enough room for the fixed .selection-toolbar not to cover the last row
+   — a little more than its own typical height, since it can wrap to two
+   lines on a narrow screen with every action button showing full text. */
+.item-list.has-selection,
+.item-grid.has-selection {
+	padding-bottom: 5.5rem;
 }
 
 .selection-toolbar-actions .danger {

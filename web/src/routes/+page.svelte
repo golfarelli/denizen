@@ -943,7 +943,7 @@
 	{/if}
 </div>
 
-{#if currentFolderCanEdit}
+{#if currentFolderCanEdit && selectedIds.size === 0}
 	<button
 		class="fab"
 		aria-label={$t('fileBrowser.addAriaLabel')}

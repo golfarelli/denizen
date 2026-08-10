@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, devices } from '@playwright/test';
 
 function uniqueName(base: string): string {
 	return `${base}-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`;
@@ -176,4 +176,92 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 		.click();
 	await expect(page.locator('.item-row', { hasText: toMoveA })).toBeVisible();
 	await expect(page.locator('.item-row', { hasText: toMoveB })).toBeVisible();
+});
+
+// A regression test for the real bug Fabio hit on his phone (not caught by
+// the click({ delay })-based test above, which never moves the target
+// element under a stale tap the way an appearing-and-shifting layout can):
+// the selection toolbar used to sit in normal document flow above the
+// list, so the instant a first item got selected, the whole list jumped
+// down underneath it. A real finger tapping a *second* row — aimed at
+// wherever that row was a moment ago, before the shift, the way an actual
+// person taps without re-checking mid-gesture — landed on nothing.
+// Reproduced with real touch events (CDP Input.dispatchTouchEvent, not
+// Playwright's mouse-based click()) against coordinates captured *before*
+// the first selection, mimicking exactly that "aim once, tap twice"
+// motion. Fixed by taking .selection-toolbar out of flow entirely
+// (position: fixed) — this test pins that down so it can't regress.
+//
+// Deliberately last in this file: it (like every test here) leaves items
+// in the root folder behind, and the "select all" test above assumes it's
+// the first to touch a clean root — moving this one after it avoids that
+// pre-existing assumption breaking, rather than trying to fix it here too.
+test('selecting a second row still works when tapping where it was *before* the first selection shifted anything', async ({
+	browser
+}) => {
+	// storageState carries over the already-authenticated admin session the
+	// "chromium" project's own context would otherwise provide — a fresh
+	// context needs it explicitly since this test builds its own (for the
+	// touch-capable device profile the shared context doesn't use).
+	const context = await browser.newContext({
+		...devices['Pixel 7'],
+		hasTouch: true,
+		isMobile: true,
+		storageState: 'e2e/.auth/admin.json'
+	});
+	const page = await context.newPage();
+	const cdp = await context.newCDPSession(page);
+
+	async function touchTap(x: number, y: number) {
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+		await page.waitForTimeout(50);
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+	}
+
+	async function touchLongPress(x: number, y: number) {
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+		await page.waitForTimeout(700); // past the 500ms long-press threshold
+		await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+	}
+
+	await page.goto('/');
+	// A fresh, empty folder — not root — so rowA/rowB's screen position is
+	// deterministic regardless of everything every other test in this
+	// shared-backend file has already left lying around in root by the
+	// time this one (deliberately last) runs. Via the FAB, not the
+	// toolbar's own "+ New folder" (display:none below 640px — see
+	// app.css — and this context's own device profile is phone-width).
+	const folderName = `E2E Regress Shift ${Date.now()}`;
+	page.once('dialog', (dialog) => dialog.accept(folderName));
+	await page.getByRole('button', { name: 'Add' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await page.locator('.item-row', { hasText: folderName }).locator('.item-name').click();
+	await expect(page).toHaveURL(/\?folder=/);
+
+	const nameA = `regress-shift-a-${Date.now()}.txt`;
+	const nameB = `regress-shift-b-${Date.now()}.txt`;
+	await page.locator('input[type="file"]').setInputFiles([
+		{ name: nameA, mimeType: 'text/plain', buffer: Buffer.from('a') },
+		{ name: nameB, mimeType: 'text/plain', buffer: Buffer.from('b') }
+	]);
+	const rowA = page.locator('.item-row', { hasText: nameA });
+	const rowB = page.locator('.item-row', { hasText: nameB });
+	await expect(rowA).toBeVisible({ timeout: 15_000 });
+	await expect(rowB).toBeVisible({ timeout: 15_000 });
+
+	// Captured once, before anything is selected — never recomputed, on
+	// purpose, since a real finger doesn't re-measure the page mid-gesture.
+	const staleBoxB = await rowB.locator('.item-name').boundingBox();
+	if (!staleBoxB) throw new Error('row B not found before selecting anything');
+
+	const boxA = await rowA.locator('.item-name').boundingBox();
+	if (!boxA) throw new Error('row A not found');
+	await touchLongPress(boxA.x + boxA.width / 2, boxA.y + boxA.height / 2);
+	await expect(page.locator('.selection-toolbar')).toContainText('1');
+
+	await touchTap(staleBoxB.x + staleBoxB.width / 2, staleBoxB.y + staleBoxB.height / 2);
+	await expect(page.locator('.selection-toolbar')).toContainText('2');
+	await expect(rowB.locator('.row-checkbox')).toBeChecked();
+
+	await context.close();
 });
