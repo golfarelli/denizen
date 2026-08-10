@@ -528,6 +528,19 @@ main.fullscreen {
 	background: var(--color-bg);
 	position: relative;
 	transition: background 0.12s ease;
+	/* The file browser's own rows (not trash/shares/admin, which still use
+	   .item-name as their own <button> — see its own comment) are the
+	   press/long-press/click target as a whole row now, not just the name
+	   text: a real device long-press landing on the icon or anywhere else
+	   in the row used to reach nothing at all, since only .item-name (a
+	   fairly narrow column) ever had these handlers — found via an
+	   on-screen debug log Fabio reproduced with (2026-08-10). cursor/
+	   touch-action/user-select/-webkit-touch-callout mirror .item-name's
+	   own, now needed here too since the row itself is what's interactive. */
+	cursor: pointer;
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
 }
 
 /* A hairline between rows, not around the list — fully dividerless read as

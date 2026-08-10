@@ -170,10 +170,7 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 	await expect(page.locator('.item-row', { hasText: toMoveA })).toHaveCount(0);
 	await expect(page.locator('.item-row', { hasText: toMoveB })).toHaveCount(0);
 
-	await page
-		.locator('.item-row', { hasText: destName })
-		.getByRole('button', { name: destName, exact: true })
-		.click();
+	await page.locator('.item-row', { hasText: destName }).click();
 	await expect(page.locator('.item-row', { hasText: toMoveA })).toBeVisible();
 	await expect(page.locator('.item-row', { hasText: toMoveB })).toBeVisible();
 });

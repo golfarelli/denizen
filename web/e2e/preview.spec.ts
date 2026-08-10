@@ -15,7 +15,7 @@ test('opening an image file shows an inline preview', async ({ page }) => {
 
 	const row = page.locator('.item-row', { hasText: 'sample-photo.jpg' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'sample-photo.jpg', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	const img = page.locator('.preview-frame img');
@@ -33,7 +33,7 @@ test('opening a PDF renders it inline via canvas', async ({ page }) => {
 
 	const row = page.locator('.item-row', { hasText: 'sample.pdf' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'sample.pdf', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	// pdf.js renders every page to its own <canvas> (see PdfViewer.svelte) —
@@ -65,7 +65,7 @@ test('opening a video streams it via a content-token URL, not a full blob downlo
 
 	const row = page.locator('.item-row', { hasText: 'sample-video.webm' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'sample-video.webm', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	const video = page.locator('.preview-frame video');
@@ -94,7 +94,7 @@ test('opening a Word document renders its real text content', async ({ page }) =
 
 	const row = page.locator('.item-row', { hasText: 'sample.docx' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'sample.docx', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	// The real assertion: actual document text made it into the rendered
@@ -111,7 +111,7 @@ test('opening a spreadsheet renders real cell values and switches sheets', async
 
 	const row = page.locator('.item-row', { hasText: 'sample.xlsx' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'sample.xlsx', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	// Real parsed cell values from the fixture's first sheet ("Results"),
@@ -134,16 +134,13 @@ test('opening a text file shows its content, and back returns to the same folder
 	const folderName = `E2E Preview Folder ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New folder' }).click();
-	await page
-		.locator('.item-row', { hasText: folderName })
-		.getByRole('button', { name: folderName, exact: true })
-		.click();
+	await page.locator('.item-row', { hasText: folderName }).click();
 	await expect(page).toHaveURL(/folder=/);
 
 	await page.locator('input[type="file"]').setInputFiles(TEXT_PATH);
 	const row = page.locator('.item-row', { hasText: 'sample.txt' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'sample.txt', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+from=/);
 	const expectedText = readFileSync(TEXT_PATH, 'utf8');
@@ -170,7 +167,7 @@ test('a file type without preview support falls back to a download prompt', asyn
 	await page.locator('input[type="file"]').setInputFiles(binPath);
 	const row = page.locator('.item-row', { hasText: 'unsupported.bin' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.getByRole('button', { name: 'unsupported.bin', exact: true }).click();
+	await row.click();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	await expect(page.getByText("Preview isn't available for this file type yet.")).toBeVisible();

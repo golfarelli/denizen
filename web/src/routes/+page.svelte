@@ -136,14 +136,19 @@
 	// Pointer events (not touch-specific ones) so this works identically
 	// with a mouse's own "press and hold", not just a finger.
 	//
-	// The buttons below also cancel the browser's own contextmenu event
-	// (fired on a real touch-and-hold, separately from anything here) —
-	// without that, Android in particular leaves the gesture half-eaten
-	// by its native long-press handling even after our own timer-based
-	// selection has already fired, and every *subsequent* tap on another
-	// row stops registering at all. Confirmed this was the actual gap:
-	// e2e (mouse-only, via Playwright's click({ delay })) never exercises
-	// a real contextmenu event, so it looked fine in tests despite this.
+	// Also cancels the browser's own contextmenu event (fired on a real
+	// touch-and-hold, separately from anything here) — Android otherwise
+	// leaves the gesture half-eaten by its native long-press handling.
+	//
+	// The handlers themselves live on .item-row/.item-tile as a whole, not
+	// on .item-name — an earlier version only wired them to the name text,
+	// a fairly narrow column, and a real device's long-press landing
+	// anywhere else in the row (the icon, the padding, ...) reached
+	// nothing at all. Found via an on-screen ?debug=1 event log Fabio
+	// reproduced with (2026-08-10): a stationary hold logged literally
+	// nothing, while a scroll starting near the name text logged a
+	// pointerdown — the tell that the hit target was too small, not that
+	// events weren't firing at all.
 	const LONG_PRESS_MS = 500;
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
 	let longPressTriggered = false;
@@ -789,6 +794,7 @@
 						class="shared-badge"
 						title={item.shared_with.join(', ')}
 						aria-label={$t('dialogs.share.sharedWithBadge', { names: item.shared_with.join(', ') })}
+						onpointerdown={(e) => e.stopPropagation()}
 						onclick={(e) => handleStartShare(item, e)}
 					>
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -804,6 +810,7 @@
 					aria-label={$t('common.actionsFor', { name: item.name })}
 					aria-haspopup="true"
 					aria-expanded={openMenuFor === item.id}
+					onpointerdown={(e) => e.stopPropagation()}
 					onclick={(e) => toggleMenu(item.id, e)}
 				>
 					<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -926,32 +933,41 @@
 			</div>
 			<div class="item-list" class:has-selection={selectedIds.size > 0}>
 				{#each visibleItems as item (item.id)}
-				<div class="item-row" class:item-row-selected={selectedIds.has(item.id)}>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="item-row"
+					class:item-row-selected={selectedIds.has(item.id)}
+					role="button"
+					tabindex="0"
+					onpointerdown={() => startLongPress(item.id)}
+					onpointerup={cancelLongPress}
+					onpointerleave={cancelLongPress}
+					onpointercancel={cancelLongPress}
+					onpointermove={cancelLongPress}
+					oncontextmenu={(e) => {
+						logDebug(`contextmenu id=${item.id.slice(0, 6)} (prevented)`);
+						e.preventDefault();
+					}}
+					onclick={() => handleItemActivate(item)}
+					onkeydown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							handleItemActivate(item);
+						}
+					}}
+				>
 					<span class="item-icon">
 						<input
 							type="checkbox"
 							class="row-checkbox"
 							checked={selectedIds.has(item.id)}
 							aria-label={$t('fileBrowser.selection.selectAriaLabel', { name: item.name })}
+							onpointerdown={(e) => e.stopPropagation()}
 							onclick={(e) => toggleSelect(item.id, e)}
 						/>
 						<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
 					</span>
-					<button
-						class="item-name"
-						onpointerdown={() => startLongPress(item.id)}
-						onpointerup={cancelLongPress}
-						onpointerleave={cancelLongPress}
-						onpointercancel={cancelLongPress}
-						onpointermove={cancelLongPress}
-						oncontextmenu={(e) => {
-							logDebug(`contextmenu id=${item.id.slice(0, 6)} (prevented)`);
-							e.preventDefault();
-						}}
-						onclick={() => handleItemActivate(item)}
-					>
-						{item.name}
-					</button>
+					<span class="item-name">{item.name}</span>
 					<span class="item-modified">{formatDate(item.updated_at)}</span>
 					<span class="item-size">{formatSize(item.size_bytes)}</span>
 					{@render rowMenu(item)}

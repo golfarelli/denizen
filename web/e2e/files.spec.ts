@@ -13,7 +13,10 @@ test('create a folder, navigate into it, and back via breadcrumb', async ({ page
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();
 
-	await folderRow.getByRole('button', { name: folderName, exact: true }).click();
+	// The whole row is the click target now, not just the name text (see
+	// routes/+page.svelte's own comment on why) — so the row itself, not
+	// a nested button role.
+	await folderRow.click();
 
 	await expect(page.locator('.breadcrumb').getByText(folderName)).toBeVisible();
 	await expect(page.getByText('This folder is empty. Drop files here, or use "+ Upload".')).toBeVisible();
@@ -62,10 +65,7 @@ test('the row action menu is not clipped by a short item list', async ({ page })
 	const containerName = `E2E Short List ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(containerName));
 	await page.getByRole('button', { name: '+ New folder' }).click();
-	await page
-		.locator('.item-row', { hasText: containerName })
-		.getByRole('button', { name: containerName, exact: true })
-		.click();
+	await page.locator('.item-row', { hasText: containerName }).click();
 
 	const onlyItemName = 'Only Item';
 	page.once('dialog', (dialog) => dialog.accept(onlyItemName));
