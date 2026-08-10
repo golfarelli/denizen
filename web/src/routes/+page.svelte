@@ -88,7 +88,20 @@
 	// that hasn't reproduced under any synthetic touch simulation tried so
 	// far. ?debug=1 shows a live event log on-screen so Fabio can screenshot
 	// exactly what his phone actually does. Remove once that's resolved.
-	let debugMode = $derived($page.url.searchParams.get('debug') === '1');
+	//
+	// Sticky via localStorage, not just the query param: this is an SPA —
+	// opening a folder calls goto("/?folder=...") which replaces the query
+	// string entirely, silently dropping ?debug=1 the moment anyone
+	// navigates anywhere. Once seen in the URL, it stays on until cleared
+	// by hand (there's no UI for that on purpose — this is a throwaway
+	// debug aid, not a feature).
+	let debugMode = $state(false);
+	$effect(() => {
+		if ($page.url.searchParams.get('debug') === '1') {
+			localStorage.setItem('denizen.debug', '1');
+		}
+		debugMode = localStorage.getItem('denizen.debug') === '1';
+	});
 	let debugLog = $state<string[]>([]);
 	function logDebug(msg: string) {
 		if (!debugMode) return;
