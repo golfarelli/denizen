@@ -1549,3 +1549,23 @@ dialog::backdrop {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
+
+/* TEMPORARY — see routes/+page.svelte's logDebug comment. Remove both
+   together once the real-device long-press bug is actually diagnosed. */
+.debug-panel {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 999;
+	max-height: 45vh;
+	overflow-y: auto;
+	background: rgba(0, 0, 0, 0.92);
+	color: #4ade80;
+	font-family: monospace;
+	font-size: 0.65rem;
+	line-height: 1.4;
+	padding: var(--space-2);
+	white-space: pre-wrap;
+	word-break: break-all;
+}

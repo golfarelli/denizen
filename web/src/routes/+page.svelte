@@ -84,12 +84,26 @@
 	let visibleItems = $derived(sortItems(searchResults ?? items, sortField, sortDirection));
 	let selectedItems = $derived(visibleItems.filter((item) => selectedIds.has(item.id)));
 
+	// TEMPORARY — diagnosing a real-device-only long-press bug (2026-08-10)
+	// that hasn't reproduced under any synthetic touch simulation tried so
+	// far. ?debug=1 shows a live event log on-screen so Fabio can screenshot
+	// exactly what his phone actually does. Remove once that's resolved.
+	let debugMode = $derived($page.url.searchParams.get('debug') === '1');
+	let debugLog = $state<string[]>([]);
+	function logDebug(msg: string) {
+		if (!debugMode) return;
+		const ts = new Date().toISOString().slice(11, 23);
+		debugLog = [...debugLog, `${ts} ${msg}`].slice(-30);
+	}
+
 	function toggleSelect(id: string, event?: Event) {
 		event?.stopPropagation();
 		const next = new Set(selectedIds);
-		if (next.has(id)) next.delete(id);
+		const wasSelected = next.has(id);
+		if (wasSelected) next.delete(id);
 		else next.add(id);
 		selectedIds = next;
+		logDebug(`toggleSelect id=${id.slice(0, 6)} ${wasSelected ? 'REMOVED' : 'ADDED'} → size=${next.size}`);
 	}
 
 	function clearSelection() {
@@ -122,16 +136,22 @@
 	let longPressTriggered = false;
 
 	function startLongPress(id: string) {
+		logDebug(`pointerdown id=${id.slice(0, 6)}`);
 		longPressTriggered = false;
 		clearTimeout(longPressTimer);
 		longPressTimer = setTimeout(() => {
 			longPressTriggered = true;
+			logDebug(`LONG-PRESS FIRED id=${id.slice(0, 6)}`);
 			toggleSelect(id);
 		}, LONG_PRESS_MS);
 	}
 
-	function cancelLongPress() {
+	function cancelLongPress(e?: Event) {
+		if (longPressTimer !== undefined && e?.type !== 'pointermove') {
+			logDebug(`cancelLongPress via ${e?.type ?? 'manual'} (a timer was pending)`);
+		}
 		clearTimeout(longPressTimer);
+		longPressTimer = undefined;
 	}
 
 	// The shared click handler for both the list row's .item-name button
@@ -142,14 +162,20 @@
 	// it) — either way, don't open. A plain tap with nothing selected
 	// opens normally.
 	function handleItemActivate(item: Item) {
+		logDebug(
+			`click id=${item.id.slice(0, 6)} longPressTriggered=${longPressTriggered} selectedIds.size=${selectedIds.size}`
+		);
 		if (longPressTriggered) {
 			longPressTriggered = false;
+			logDebug('  → suppressed (follows a long-press)');
 			return;
 		}
 		if (selectedIds.size > 0) {
+			logDebug('  → toggling (selection already active)');
 			toggleSelect(item.id);
 			return;
 		}
+		logDebug('  → opening normally');
 		if (item.type === 'folder') openFolder(item.id);
 		else openFile(item.id);
 	}
@@ -577,6 +603,14 @@
 	<title>Denizen</title>
 </svelte:head>
 
+<!-- TEMPORARY (?debug=1) — see logDebug's own comment above. -->
+{#if debugMode}
+	<div class="debug-panel">
+		<strong>selectedIds: {[...selectedIds].map((id) => id.slice(0, 6)).join(', ') || '(none)'}</strong>
+		{#each debugLog as line, i (i)}<div>{line}</div>{/each}
+	</div>
+{/if}
+
 <nav class="breadcrumb">
 	{#each breadcrumb as crumb, i (crumb.id ?? 'root')}
 		{#if i > 0}<span>/</span>{/if}
@@ -897,7 +931,10 @@
 						onpointerleave={cancelLongPress}
 						onpointercancel={cancelLongPress}
 						onpointermove={cancelLongPress}
-						oncontextmenu={(e) => e.preventDefault()}
+						oncontextmenu={(e) => {
+							logDebug(`contextmenu id=${item.id.slice(0, 6)} (prevented)`);
+							e.preventDefault();
+						}}
 						onclick={() => handleItemActivate(item)}
 					>
 						{item.name}
@@ -927,7 +964,10 @@
 							onpointerleave={cancelLongPress}
 							onpointercancel={cancelLongPress}
 							onpointermove={cancelLongPress}
-							oncontextmenu={(e) => e.preventDefault()}
+							oncontextmenu={(e) => {
+							logDebug(`contextmenu id=${item.id.slice(0, 6)} (prevented)`);
+							e.preventDefault();
+						}}
 							onclick={() => handleItemActivate(item)}
 						>
 							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
