@@ -821,6 +821,41 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 	return item, nil
 }
 
+// ReindexAllContent walks every active file and (re-)builds its content
+// search index — a one-off backfill for files uploaded before content
+// search existed, which indexContent's normal call sites (FinalizeUpload,
+// ReplaceContent) never touch since neither fires again for a file that's
+// just sitting there. Not wired to any HTTP route or scheduled sweep on
+// purpose — this is meant to be run once via the server's -reindex-content
+// flag, not something a user or a timer triggers. Usernames are cached
+// across items since most files share an owner. Returns how many files it
+// attempted, an extraction/index failure for one file (already logged by
+// indexContent) doesn't stop the rest.
+func (s *ItemService) ReindexAllContent(ctx context.Context) (int, error) {
+	files, err := s.items.ListAllFiles(ctx)
+	if err != nil {
+		return 0, err
+	}
+	usernames := make(map[string]string)
+	for _, item := range files {
+		username, ok := usernames[item.OwnerID]
+		if !ok {
+			username, err = s.username(ctx, item.OwnerID)
+			if err != nil {
+				return 0, err
+			}
+			usernames[item.OwnerID] = username
+		}
+		path, err := s.pathOf(ctx, item, username)
+		if err != nil {
+			log.Printf("reindex: path for %s (%s): %v", item.ID, item.Name, err)
+			continue
+		}
+		s.indexContent(ctx, item.ID, item.Name, path)
+	}
+	return len(files), nil
+}
+
 // indexContent (re-)builds the search index for a file that was just
 // uploaded or edited (FinalizeUpload/ReplaceContent above, after the item
 // row itself has already been committed) — best-effort: extraction

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log"
 	"net/http"
 	"os/signal"
@@ -18,6 +19,9 @@ import (
 )
 
 func main() {
+	reindexContent := flag.Bool("reindex-content", false, "backfill the content search index for every existing file, then exit")
+	flag.Parse()
+
 	cfg := config.Load()
 
 	a, err := app.New(cfg)
@@ -25,6 +29,15 @@ func main() {
 		log.Fatalf("denizen: %v", err)
 	}
 	defer a.DB.Close()
+
+	if *reindexContent {
+		count, err := a.Items.ReindexAllContent(context.Background())
+		if err != nil {
+			log.Fatalf("denizen: reindex: %v", err)
+		}
+		log.Printf("denizen: reindexed %d file(s)", count)
+		return
+	}
 
 	code, created, err := a.Auth.EnsureBootstrapInvite(context.Background(), cfg.BootstrapInviteTTL)
 	if err != nil {

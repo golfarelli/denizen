@@ -244,6 +244,20 @@ func (r *ItemRepository) HardDelete(ctx context.Context, id string) error {
 	return err
 }
 
+// ListAllFiles returns every active (non-trashed) file item across all
+// owners — used only by the one-off content-search backfill (see
+// ItemService.ReindexAllContent), everything else scopes to one owner.
+func (r *ItemRepository) ListAllFiles(ctx context.Context) ([]*model.Item, error) {
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	        FROM items WHERE type = 'file' AND deleted_at IS NULL`
+	rows, err := r.cn.QueryContext(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanAll(rows)
+}
+
 func (r *ItemRepository) scanAll(rows *stdsql.Rows) ([]*model.Item, error) {
 	var items []*model.Item
 	for rows.Next() {
