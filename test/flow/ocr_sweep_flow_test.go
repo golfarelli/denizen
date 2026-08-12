@@ -5,19 +5,22 @@ import (
 	"time"
 )
 
-// TestOCRSweepFlow_MarksAttemptedSoItDoesntRetryForever covers the one
-// piece of RunOCRSweep that's actually non-trivial: not the OCR itself
-// (that's poppler-utils/tesseract's job, and this test environment has
-// neither installed — see textextract.ExtractOCRPDF's own doc comment on
-// degrading to a no-op when they're missing), but the bookkeeping that
-// stops the sweep from re-attempting the same file forever. Covers both
-// candidate kinds (OCRRepository.ListPending): a scanned PDF (pdftotext
-// "succeeds" but extracts only page-break characters — this upload isn't
-// a real PDF at all, so pdftotext finds nothing either, landing in the
-// exact same empty state) and a photographed document (a .jpg, which has
-// no separate text-extraction path to even attempt — see
-// textextract.Supported — so it's always a candidate until OCR'd).
-func TestOCRSweepFlow_MarksAttemptedSoItDoesntRetryForever(t *testing.T) {
+// TestOCRSweepFlow_UploadTriggersItAutomaticallyAndMarksAttempted covers
+// two things together, both non-trivial: that an upload actually kicks a
+// background OCR pass on its own (ItemService.TriggerOCRSweep, called from
+// FinalizeUpload) instead of waiting for the next scheduled tick, and the
+// bookkeeping that stops that pass from re-attempting the same file
+// forever. Not the OCR itself — that's poppler-utils/tesseract's job, and
+// this test environment has neither installed (see
+// textextract.ExtractOCRPDF's own doc comment on degrading to a no-op
+// when they're missing). Covers both candidate kinds
+// (OCRRepository.ListPending): a scanned PDF (pdftotext "succeeds" but
+// extracts only page-break characters — this upload isn't a real PDF at
+// all, so pdftotext finds nothing either, landing in the exact same empty
+// state) and a photographed document (a .jpg, which has no separate
+// text-extraction path to even attempt — see textextract.Supported — so
+// it's always a candidate until OCR'd).
+func TestOCRSweepFlow_UploadTriggersItAutomaticallyAndMarksAttempted(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := t.Context()
 
@@ -30,19 +33,34 @@ func TestOCRSweepFlow_MarksAttemptedSoItDoesntRetryForever(t *testing.T) {
 	uploadFile(t, ts, fabio, nil, "scan.pdf", []byte("not actually a pdf"))
 	uploadFile(t, ts, fabio, nil, "photo.jpg", []byte("not actually a jpg"))
 
-	attempted, err := ts.app.Items.RunOCRSweep(ctx, 10)
-	if err != nil {
-		t.Fatalf("RunOCRSweep: %v", err)
-	}
-	if attempted != 2 {
-		t.Fatalf("first sweep attempted = %d, want 2 (the fake scan + the fake photo)", attempted)
+	// Each upload above triggered its own background sweep as a side
+	// effect — running in its own goroutine, so there's no single moment
+	// to assert a synchronous count against. Poll instead: this same
+	// RunOCRSweep call is safe to run concurrently with (or after) the
+	// triggered one, since MarkAttempted/IndexContent are idempotent, so
+	// it doubles as "wait for both to be handled, however that happens".
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		attempted, err := ts.app.Items.RunOCRSweep(ctx, 10)
+		if err != nil {
+			t.Fatalf("RunOCRSweep: %v", err)
+		}
+		if attempted == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("candidates still unattempted after the deadline — the upload-triggered sweep never ran?")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 
-	attempted, err = ts.app.Items.RunOCRSweep(ctx, 10)
+	// Both are marked attempted now, whichever sweep actually handled
+	// them — a further call finds nothing left to do.
+	attempted, err := ts.app.Items.RunOCRSweep(ctx, 10)
 	if err != nil {
-		t.Fatalf("RunOCRSweep (second): %v", err)
+		t.Fatalf("RunOCRSweep (final check): %v", err)
 	}
 	if attempted != 0 {
-		t.Fatalf("second sweep attempted = %d, want 0 (both already marked attempted)", attempted)
+		t.Fatalf("final check attempted = %d, want 0 (both already marked attempted)", attempted)
 	}
 }

@@ -58,7 +58,7 @@ func New(cfg config.Config) (*App, error) {
 
 	authService := service.NewAuthService(users, invites, refreshTokens, tokens,
 		cfg.DefaultQuotaBytes, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	itemService := service.NewItemService(items, users, userShares, search, ocr, store)
+	itemService := service.NewItemService(items, users, userShares, search, ocr, int(cfg.OCRBatchSize), store)
 	shareService := service.NewShareService(shares, itemService)
 	userShareService := service.NewUserShareService(userShares, itemService, users)
 	userService := service.NewUserService(users)

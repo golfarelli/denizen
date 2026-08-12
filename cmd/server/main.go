@@ -71,20 +71,15 @@ func main() {
 		}
 	})
 
-	ocrSweep := func() {
-		attempted, err := a.Items.RunOCRSweep(ctx, int(cfg.OCRBatchSize))
-		if err != nil {
-			log.Printf("OCR sweep: %v", err)
-		} else if attempted > 0 {
-			log.Printf("OCR sweep: attempted %d file(s)", attempted)
-		}
-	}
-	// Unlike the two sweeps above, an existing backlog is the expected case
-	// here (every scanned PDF uploaded before OCR existed) — run once right
-	// away instead of waiting a full OCRSweepInterval, then fall into the
-	// normal periodic cadence for whatever comes in afterwards.
-	go ocrSweep()
-	go runPeriodically(ctx, cfg.OCRSweepInterval, ocrSweep)
+	// TriggerOCRSweep (not a direct RunOCRSweep call) since ItemService also
+	// calls it right after every upload/replace — same guard, so whichever
+	// fires first for a given batch just wins, the other is a no-op. An
+	// existing backlog is the expected case on a fresh deploy (every
+	// scanned PDF/photo uploaded before OCR existed), so this runs once
+	// immediately rather than waiting a full OCRSweepInterval.
+	kickOCRSweep := func() { a.Items.TriggerOCRSweep(int(cfg.OCRBatchSize)) }
+	kickOCRSweep()
+	go runPeriodically(ctx, cfg.OCRSweepInterval, kickOCRSweep)
 
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: a.Handler}
 	go func() {

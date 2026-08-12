@@ -8,6 +8,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/golfarelli/denizen/internal/apperr"
@@ -23,17 +24,22 @@ import (
 // delete). It's also the only layer that knows an item's ID maps to a real
 // path on disk — see pathOf/folderPath below.
 type ItemService struct {
-	items   *repository.ItemRepository
-	users   *repository.UserRepository
-	grants  *repository.UserShareRepository // direct per-user file shares — see GetIncludingTrashed
-	search  *repository.SearchRepository    // content search index — see indexContent/Search
-	ocr     *repository.OCRRepository       // scanned-PDF OCR attempt tracking — see RunOCRSweep
-	storage *storage.Store
-	now     func() time.Time // swappable in tests; defaults to time.Now
+	items        *repository.ItemRepository
+	users        *repository.UserRepository
+	grants       *repository.UserShareRepository // direct per-user file shares — see GetIncludingTrashed
+	search       *repository.SearchRepository    // content search index — see indexContent/Search
+	ocr          *repository.OCRRepository       // scanned-PDF/photo OCR attempt tracking — see RunOCRSweep
+	ocrBatchSize int                             // see TriggerOCRSweep
+	storage      *storage.Store
+	now          func() time.Time // swappable in tests; defaults to time.Now
+
+	// ocrSweeping guards RunOCRSweep against running two passes
+	// concurrently — see TriggerOCRSweep, the only thing that flips it.
+	ocrSweeping atomic.Bool
 }
 
-func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, ocr *repository.OCRRepository, store *storage.Store) *ItemService {
-	return &ItemService{items: items, users: users, grants: grants, search: search, ocr: ocr, storage: store, now: time.Now}
+func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, ocr *repository.OCRRepository, ocrBatchSize int, store *storage.Store) *ItemService {
+	return &ItemService{items: items, users: users, grants: grants, search: search, ocr: ocr, ocrBatchSize: ocrBatchSize, storage: store, now: time.Now}
 }
 
 // --- name/path helpers -----------------------------------------------------
@@ -740,6 +746,7 @@ func (s *ItemService) FinalizeUpload(ctx context.Context, callerID string, paren
 		return nil, err
 	}
 	s.indexContent(ctx, item.ID, item.Name, targetPath)
+	s.TriggerOCRSweep(s.ocrBatchSize)
 	return item, nil
 }
 
@@ -824,6 +831,7 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 	if err := s.ocr.ClearAttempt(ctx, item.ID); err != nil {
 		log.Printf("ocr: clear attempt for %s: %v", item.ID, err)
 	}
+	s.TriggerOCRSweep(s.ocrBatchSize)
 
 	item.SizeBytes = written
 	item.Checksum = &checksum
@@ -882,6 +890,30 @@ func (s *ItemService) RunOCRSweep(ctx context.Context, batchSize int) (int, erro
 		}
 	}
 	return len(candidates), nil
+}
+
+// TriggerOCRSweep kicks a background RunOCRSweep pass in its own
+// goroutine, unless one is already running — from a previous trigger or
+// the periodic tick in cmd/server/main.go, both of which call this same
+// method, sharing one guard — in which case this is a no-op: ListPending
+// would just find whatever's already queued anyway, so a redundant pass
+// only wastes CPU without finding anything new. Called right after every
+// upload/replace (FinalizeUpload/ReplaceContent) so a scanned PDF or
+// photographed document becomes searchable within seconds instead of
+// waiting for the next scheduled tick, which can be minutes away.
+func (s *ItemService) TriggerOCRSweep(batchSize int) {
+	if !s.ocrSweeping.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer s.ocrSweeping.Store(false)
+		attempted, err := s.RunOCRSweep(context.Background(), batchSize)
+		if err != nil {
+			log.Printf("ocr sweep: %v", err)
+		} else if attempted > 0 {
+			log.Printf("ocr sweep: attempted %d file(s)", attempted)
+		}
+	}()
 }
 
 // ReindexAllContent walks every active file and (re-)builds its content
