@@ -831,17 +831,20 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 	return item, nil
 }
 
-// RunOCRSweep looks for up to batchSize scanned (text-less) PDFs that
-// haven't had an OCR attempt yet (OCRRepository.ListPending) and runs one
-// against each in turn. pdftotext's synchronous fast path (indexContent,
-// called from FinalizeUpload/ReplaceContent) already handles every PDF
-// with a real text layer instantly; this only ever picks up the ones that
-// came back empty, and runs later — from a periodic background sweep, see
-// cmd/server/main.go — instead of blocking the upload that created them,
-// since real OCR (actual image recognition per page) is far slower than
-// pdftotext. Every candidate gets marked attempted whether or not OCR
-// found anything, so a genuinely blank/corrupt scan only ever costs CPU
-// once. Returns how many candidates it looked at.
+// RunOCRSweep looks for up to batchSize scanned PDFs or photographed
+// documents with no indexed text yet (OCRRepository.ListPending) and runs
+// OCR against each in turn — pdftoppm+tesseract for a PDF (ExtractOCRPDF,
+// one rasterize-then-recognize pass per page), tesseract directly for a
+// photo (ExtractOCRImage, no separate fast path even exists for those).
+// pdftotext's synchronous fast path (indexContent, called from
+// FinalizeUpload/ReplaceContent) already handles every PDF with a real
+// text layer instantly; this only ever picks up what came back empty
+// (PDFs) or was never attempted at all (photos), and runs later — from a
+// periodic background sweep, see cmd/server/main.go — instead of blocking
+// the upload that created them, since real OCR (actual image recognition)
+// is far slower than pdftotext. Every candidate gets marked attempted
+// whether or not OCR found anything, so a genuinely blank/corrupt file
+// only ever costs CPU once. Returns how many candidates it looked at.
 func (s *ItemService) RunOCRSweep(ctx context.Context, batchSize int) (int, error) {
 	candidates, err := s.ocr.ListPending(ctx, batchSize)
 	if err != nil {
@@ -858,10 +861,17 @@ func (s *ItemService) RunOCRSweep(ctx context.Context, batchSize int) (int, erro
 			usernames[item.OwnerID] = username
 		}
 		path, err := s.pathOf(ctx, item, username)
+		var text string
+		var extractErr error
 		if err != nil {
 			log.Printf("ocr sweep: path for %s (%s): %v", item.ID, item.Name, err)
-		} else if text, err := textextract.ExtractOCRPDF(path); err != nil {
-			log.Printf("ocr sweep: extract %s (%s): %v", item.ID, item.Name, err)
+		} else if textextract.ExtFor(item.Name) == "pdf" {
+			text, extractErr = textextract.ExtractOCRPDF(path)
+		} else {
+			text, extractErr = textextract.ExtractOCRImage(path)
+		}
+		if extractErr != nil {
+			log.Printf("ocr sweep: extract %s (%s): %v", item.ID, item.Name, extractErr)
 		} else if text != "" {
 			if err := s.search.IndexContent(ctx, item.ID, text); err != nil {
 				log.Printf("ocr sweep: store %s: %v", item.ID, err)

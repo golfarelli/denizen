@@ -202,16 +202,47 @@ func ExtractOCRPDF(path string) (string, error) {
 
 	var b strings.Builder
 	for _, page := range pages {
-		cmd := exec.CommandContext(ctx, tessBin, page, "-", "-l", "ita+eng")
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		if err := cmd.Run(); err != nil {
+		text, err := ocrOne(ctx, tessBin, page)
+		if err != nil {
 			continue // one unreadable page shouldn't blank out the rest of the document
 		}
-		b.Write(out.Bytes())
+		b.WriteString(text)
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
+}
+
+// OCRImageExts is the set of photo formats ExtractOCRImage handles — the
+// common phone-camera/screenshot formats leptonica (tesseract's image
+// library) reads without extra codecs. Exported so
+// OCRRepository.ListPending's SQL and ItemService.RunOCRSweep's dispatch
+// both work off the exact same list instead of drifting apart.
+var OCRImageExts = []string{"jpg", "jpeg", "png"}
+
+// ExtractOCRImage is ExtractOCRPDF's counterpart for a photographed
+// document instead of a scanned one — a .jpg/.png with no separate
+// text-extraction path at all (see Supported: images are never attempted
+// on indexContent's synchronous fast path, there's nothing fast to try).
+// Runs tesseract directly against the photo; no rasterization step, that
+// part is PDF-specific.
+func ExtractOCRImage(path string) (string, error) {
+	tessBin := tesseractPath()
+	if tessBin == "" {
+		return "", ErrUnsupported
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), ocrTimeout)
+	defer cancel()
+	return ocrOne(ctx, tessBin, path)
+}
+
+func ocrOne(ctx context.Context, tessBin, imagePath string) (string, error) {
+	cmd := exec.CommandContext(ctx, tessBin, imagePath, "-", "-l", "ita+eng")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }
 
 var slideXMLPattern = regexp.MustCompile(`^ppt/slides/slide\d+\.xml$`)
