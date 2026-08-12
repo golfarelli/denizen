@@ -57,6 +57,11 @@
 	let fileInput: HTMLInputElement;
 	let sharingItem = $state<Item | null>(null);
 	let movingItems = $state<Item[] | null>(null);
+	// Which of MoveDialog's two behaviors movingItems is currently open
+	// for — "Move" and "Aggiungi collegamento" share the exact same
+	// folder-picker dialog/instance (see MoveDialog.svelte's own mode
+	// prop), only this flag distinguishes the two triggers below.
+	let moveDialogMode = $state<'move' | 'shortcut'>('move');
 	let sharingItems = $state<Item[] | null>(null);
 	let scanOpen = $state(false);
 	// Multi-select for bulk actions (Share/Move/Download/Delete) — ids
@@ -178,6 +183,18 @@
 	// already active (any further tap keeps selecting instead of
 	// navigating away from it) — either way, don't open. A plain tap with
 	// nothing selected opens normally.
+	// Opens item — a shortcut redirects straight to its real target's id
+	// instead of its own (folder-scorciatoia jumps to /?folder=<target>,
+	// same breadcrumb/ownership logic that already runs for a real folder
+	// takes over from there with zero extra code; file-scorciatoia opens
+	// /file/<target> the same way). Shared by both the touch tap-to-open
+	// flow below and the desktop double-click one further down.
+	function openItem(item: Item) {
+		const id = item.target_id ?? item.id;
+		if (item.type === 'folder') openFolder(id);
+		else openFile(id);
+	}
+
 	function handleItemActivate(item: Item) {
 		if (longPressTriggered) {
 			longPressTriggered = false;
@@ -187,8 +204,7 @@
 			toggleSelect(item.id);
 			return;
 		}
-		if (item.type === 'folder') openFolder(item.id);
-		else openFile(item.id);
+		openItem(item);
 	}
 
 	// Desktop's Drive/Finder-style selection: a plain click selects just
@@ -217,8 +233,7 @@
 
 	function handleItemDblClick(item: Item) {
 		clearSelection();
-		if (item.type === 'folder') openFolder(item.id);
-		else openFile(item.id);
+		openItem(item);
 	}
 
 	// Row/tile click dispatcher: touch/pen keeps the existing long-press
@@ -555,6 +570,20 @@
 	function handleStartMove(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
+		moveDialogMode = 'move';
+		movingItems = [item];
+	}
+
+	// Always offered, owned or not — the wishlist's own two entry points:
+	// a shared item you want organized into your own tree, or your own
+	// item you want reachable from somewhere else too. Passing item.id
+	// unchanged even when item is itself a shortcut is fine — the backend
+	// flattens to the real target on its own (CreateShortcut never chains,
+	// see model.Item's own TargetID comment).
+	function handleStartShortcut(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		moveDialogMode = 'shortcut';
 		movingItems = [item];
 	}
 
@@ -661,7 +690,17 @@
 	}
 
 	function handleBulkMove() {
-		if (selectedItems.length > 0) movingItems = selectedItems;
+		if (selectedItems.length > 0) {
+			moveDialogMode = 'move';
+			movingItems = selectedItems;
+		}
+	}
+
+	function handleBulkShortcut() {
+		if (selectedItems.length > 0) {
+			moveDialogMode = 'shortcut';
+			movingItems = selectedItems;
+		}
 	}
 
 	function handleBulkShare() {
@@ -908,6 +947,9 @@
 			<button class="btn" onclick={handleBulkMove} disabled={!selectedItems.every((i) => i.can_edit)}>
 				{$t('common.move')}
 			</button>
+			<button class="btn" onclick={handleBulkShortcut}>
+				{$t('common.addShortcut')}
+			</button>
 			<button class="btn" onclick={handleBulkShare} disabled={!selectedItems.every((i) => i.owned)}>
 				{$t('common.share')}
 			</button>
@@ -1071,7 +1113,13 @@
 							</svg>
 							{$t('common.makeACopy')}
 						</button>
-						{#if item.owned}
+						<button role="menuitem" onclick={(e) => handleStartShortcut(item, e)}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path d="M8 16 16 8M10.5 8H16v5.5" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							{$t('common.addShortcut')}
+						</button>
+						{#if item.owned && !item.target_id}
 							<button role="menuitem" onclick={(e) => handleStartShare(item, e)}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 									<circle cx="6" cy="12" r="2.2" />
@@ -1101,7 +1149,7 @@
 										stroke-linejoin="round"
 									/>
 								</svg>
-								{$t('common.delete')}
+								{$t(item.target_id ? 'common.removeShortcut' : 'common.delete')}
 							</button>
 						{/if}
 						<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
@@ -1160,7 +1208,16 @@
 							onpointerdown={(e) => e.stopPropagation()}
 							onclick={(e) => toggleSelect(item.id, e)}
 						/>
-						<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
+						<span class="icon-wrap">
+							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} />
+							{#if item.target_id}
+								<span class="shortcut-badge" aria-hidden="true">
+									<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" aria-hidden="true">
+										<path d="M8 16 16 8M10.5 8H16v5.5" stroke-linecap="round" stroke-linejoin="round" />
+									</svg>
+								</span>
+							{/if}
+						</span>
 					</span>
 					<span class="item-name">{item.name}</span>
 					<span class="item-modified">{formatDate(item.updated_at)}</span>
@@ -1192,7 +1249,16 @@
 							onclick={(e) => handleRowClick(item, e)}
 							ondblclick={() => handleItemDblClick(item)}
 						>
-							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
+							<span class="icon-wrap">
+								<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
+								{#if item.target_id}
+									<span class="shortcut-badge" aria-hidden="true">
+										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" aria-hidden="true">
+											<path d="M8 16 16 8M10.5 8H16v5.5" stroke-linecap="round" stroke-linejoin="round" />
+										</svg>
+									</span>
+								{/if}
+							</span>
 							<span class="item-tile-name">{item.name}</span>
 							{#if item.type === 'file'}
 								<span class="item-tile-size">{formatSize(item.size_bytes)}</span>
@@ -1278,6 +1344,7 @@
 <BulkShareDialog bind:items={sharingItems} />
 <MoveDialog
 	bind:items={movingItems}
+	mode={moveDialogMode}
 	onMoved={() => {
 		clearSelection();
 		load(currentFolderId);

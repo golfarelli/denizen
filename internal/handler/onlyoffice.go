@@ -73,19 +73,27 @@ func (h *OnlyOfficeHandler) Config(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	id := req.PathValue("id")
-	// GetIncludingTrashed, not Get: a share recipient (view or edit
-	// permission, direct or via a shared ancestor folder) may open this
-	// editor too now, not just the owner — canEdit below is what actually
-	// gates real editing (Mode/Permissions.Edit), not this read.
-	item, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), id)
+	// ResolveContentItem, not GetIncludingTrashed directly: a shortcut to a
+	// file resolves (and re-verifies the caller's *current* access) to the
+	// real target here — canEdit below, Key's cache-busting UpdatedAt, and
+	// every URL built past this point all end up keyed on the real item's
+	// own id, never the shortcut's. Using the shortcut's own row for any of
+	// that would be wrong two ways at once: its own UpdatedAt never changes
+	// when the real content does (a permanently-stale OnlyOffice cache key),
+	// and — the more serious one — a shortcut is always "owned" by whoever
+	// created it, so CanEdit against the shortcut's own row would read true
+	// even for a shortcut to something only shared with them at view-only,
+	// silently handing out edit access a direct share never granted.
+	item, err := h.items.ResolveContentItem(req.Context(), ownerID(req), req.PathValue("id"))
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
 	}
+	id := item.ID
 	if item.DeletedAt != nil {
-		// GetIncludingTrashed lets the owner preview a trashed item — never
-		// editing one, though, same as the strict Get this used before.
+		// GetIncludingTrashed (inside ResolveContentItem) lets the owner
+		// preview a trashed item — never editing one, though, same as the
+		// strict Get this used before.
 		httpio.WriteError(res, apperr.NotFound)
 		return
 	}

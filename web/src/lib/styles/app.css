@@ -729,6 +729,34 @@ main.fullscreen {
 	flex-shrink: 0;
 }
 
+/* Anchors .shortcut-badge to the icon it actually belongs to — a separate
+   wrapper from .item-icon/.item-tile-main themselves since those also
+   contain the checkbox/name, which the badge has no business overlapping. */
+.icon-wrap {
+	position: relative;
+	display: inline-flex;
+	flex-shrink: 0;
+}
+
+/* The small arrow-in-a-circle overlay marking a row as a shortcut
+   ("Aggiungi collegamento") — same glyph as that menu item's own icon, so
+   it reads as the same concept in both places. Bottom-right corner of the
+   icon, same convention as a Windows/macOS shortcut/alias badge. */
+.shortcut-badge {
+	position: absolute;
+	right: -3px;
+	bottom: -3px;
+	width: 0.9rem;
+	height: 0.9rem;
+	border-radius: 50%;
+	background: var(--color-bg);
+	color: var(--color-text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 0 0 1px var(--color-border);
+}
+
 /* A touch-only affordance now — desktop gets real click/Ctrl/Shift/drag
    selection instead (routes/+page.svelte's handleItemClick/startMarquee),
    so a checkbox sitting on every row all the time no longer earns its

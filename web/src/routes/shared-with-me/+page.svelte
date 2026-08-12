@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type ReceivedShare, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import MoveDialog from '$lib/MoveDialog.svelte';
 	import { t } from '$lib/i18n';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
@@ -102,6 +103,19 @@
 	}
 
 	onMount(load);
+
+	// The wishlist's other explicit entry point for shortcuts (the file
+	// browser's own row menu is the first — see routes/+page.svelte) —
+	// same MoveDialog instance/dialog, mode="shortcut". Nothing on this
+	// page itself changes once one's added (it lands in the recipient's
+	// own drive, not here), so onMoved below has nothing to refresh.
+	let shortcutTarget = $state<Item[] | null>(null);
+
+	function handleStartShortcut(share: EnrichedReceivedShare, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		if (share.item) shortcutTarget = [share.item];
+	}
 
 	function openItem(share: EnrichedReceivedShare) {
 		if (!share.item) return;
@@ -218,6 +232,12 @@
 									</svg>
 									{$t('common.open')}
 								</button>
+								<button role="menuitem" onclick={(e) => handleStartShortcut(share, e)}>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+										<path d="M8 16 16 8M10.5 8H16v5.5" stroke-linecap="round" stroke-linejoin="round" />
+									</svg>
+									{$t('common.addShortcut')}
+								</button>
 							{/if}
 							<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>
 						</div>
@@ -227,6 +247,8 @@
 		{/each}
 	</div>
 {/if}
+
+<MoveDialog bind:items={shortcutTarget} mode="shortcut" onMoved={() => {}} />
 
 <style>
 	.permission-tag {

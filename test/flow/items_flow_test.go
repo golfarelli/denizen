@@ -19,6 +19,7 @@ type apiItem struct {
 	Name       string   `json:"name"`
 	Type       string   `json:"type"`
 	SizeBytes  int64    `json:"size_bytes"`
+	TargetID   *string  `json:"target_id,omitempty"`
 	CreatedAt  int64    `json:"created_at"`
 	UpdatedAt  int64    `json:"updated_at"`
 	DeletedAt  *int64   `json:"deleted_at,omitempty"`

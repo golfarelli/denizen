@@ -48,10 +48,10 @@ func (r *OCRRepository) ListPending(ctx context.Context, limit int) ([]*model.It
 	args = append(args, limit)
 
 	sql := `SELECT items.id, items.owner_id, items.parent_id, items.name, items.type, items.size_bytes,
-	               items.mime_type, items.checksum, items.deleted_at, items.created_at, items.updated_at
+	               items.mime_type, items.checksum, items.target_id, items.deleted_at, items.created_at, items.updated_at
 	        FROM items
 	        LEFT JOIN item_content_fts ON item_content_fts.item_id = items.id
-	        WHERE items.type = 'file' AND items.deleted_at IS NULL
+	        WHERE items.type = 'file' AND items.deleted_at IS NULL AND items.target_id IS NULL
 	          AND (` + strings.Join(extClauses, " OR ") + `)
 	          AND NOT EXISTS (SELECT 1 FROM ocr_attempts WHERE ocr_attempts.item_id = items.id)
 	          AND (item_content_fts.content IS NULL

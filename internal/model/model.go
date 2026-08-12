@@ -45,6 +45,18 @@ type RefreshToken struct {
 // Item is a file or a folder. Folders group other items under them via
 // ParentID; a nil ParentID means "the owner's root". See
 // docs/ARCHITECTURE.md for how an item's ID maps to a real path on disk.
+//
+// TargetID, when non-nil, makes this a shortcut instead of a real item:
+// Type still says what it points to (a folder shortcut has Type ==
+// ItemTypeFolder, same as the real folder — every existing icon/
+// navigation/query check that switches on Type keeps working unchanged),
+// but there is no counterpart on disk — SizeBytes stays 0 and Checksum
+// stays nil, same convention already used for folders. Name/MimeType are
+// a snapshot taken from the target at creation time, not resolved live on
+// every read — see ItemService.CreateShortcut's own comment. Every write
+// path that would otherwise touch storage.* (Move/Delete/Restore/
+// PermanentlyDelete/Copy) checks TargetID first and skips it — a shortcut
+// row is DB-only.
 type Item struct {
 	ID        string
 	OwnerID   string
@@ -54,6 +66,7 @@ type Item struct {
 	SizeBytes int64
 	MimeType  *string
 	Checksum  *string
+	TargetID  *string
 	DeletedAt *int64 // nil = active; set = in trash since this time
 	CreatedAt int64
 	UpdatedAt int64

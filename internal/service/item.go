@@ -197,6 +197,29 @@ func (s *ItemService) GetIncludingTrashed(ctx context.Context, callerID, id stri
 	return item, nil
 }
 
+// ResolveContentItem is GetIncludingTrashed plus one extra step: if id
+// turns out to be a shortcut, it re-resolves callerID's access against the
+// *target* right now, rather than trusting that access implied at the
+// shortcut's own creation time still holds. A share revoked since then
+// correctly breaks the shortcut here (GetIncludingTrashed on the target
+// returns apperr.NotFound) instead of silently still serving content the
+// caller can no longer see any other way. Content/ContentToken (the only
+// two handlers that ever serve bytes for an item) use this instead of
+// GetIncludingTrashed directly; every other read (List, Get, Search, ...)
+// deliberately keeps showing the shortcut's own row — snapshot name and
+// all — without this extra round trip, see model.Item's own TargetID
+// comment on why that's a fine simplification there.
+func (s *ItemService) ResolveContentItem(ctx context.Context, callerID, id string) (*model.Item, error) {
+	item, err := s.GetIncludingTrashed(ctx, callerID, id)
+	if err != nil {
+		return nil, err
+	}
+	if item.TargetID == nil {
+		return item, nil
+	}
+	return s.GetIncludingTrashed(ctx, callerID, *item.TargetID)
+}
+
 // resolveGrant finds the user_shares grant, if any, that gives callerID
 // access to item — either a direct grant on item itself, or on the
 // nearest shared ancestor folder above it (a folder share is inherited by
@@ -660,6 +683,66 @@ func (s *ItemService) CreateFolder(ctx context.Context, callerID string, parentI
 	return item, nil
 }
 
+// CreateShortcut adds a pointer to targetID inside destParentID (nil = the
+// caller's own root) — no storage.* calls at all, unlike CreateFolder just
+// above: a shortcut has no counterpart on disk (see model.Item's own
+// TargetID comment). callerID needs read access to the target (owns it,
+// or reached it via a share — getReadable, the same check Copy uses) and
+// write access to the destination (ValidateFolder, same as CreateFolder/
+// Move — and the same "owned by whoever the destination folder belongs
+// to, not necessarily the caller" rule that already applies there).
+//
+// A shortcut to a shortcut flattens to the real target instead of
+// chaining, so every write path below (Move/Delete/Restore/
+// PermanentlyDelete/Copy) only ever has to consider one level of
+// indirection.
+//
+// Name and MimeType are a snapshot of the target taken right now, not
+// resolved live on every future read — ponytail: renaming the real target
+// later won't update this shortcut's own displayed name; add a live JOIN
+// at read time (List/Get/Search) if that drifts enough in practice to
+// bother Fabio, not worth the extra query on every listing for a
+// personal-scale drive today.
+func (s *ItemService) CreateShortcut(ctx context.Context, callerID, targetID string, destParentID *string) (*model.Item, error) {
+	target, err := s.getReadable(ctx, callerID, targetID)
+	if err != nil {
+		return nil, err
+	}
+	if target.TargetID != nil {
+		target, err = s.getReadable(ctx, callerID, *target.TargetID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	destOwnerID, err := s.ValidateFolder(ctx, callerID, destParentID)
+	if err != nil {
+		return nil, err
+	}
+
+	finalName, err := s.uniqueName(ctx, destOwnerID, destParentID, target.Type, target.Name, "")
+	if err != nil {
+		return nil, err
+	}
+
+	now := s.now().Unix()
+	item := &model.Item{
+		ID:        idgen.New(),
+		OwnerID:   destOwnerID,
+		ParentID:  destParentID,
+		Name:      finalName,
+		Type:      target.Type,
+		MimeType:  target.MimeType,
+		TargetID:  &target.ID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.items.Create(ctx, item); err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
 // FinalizeUpload registers a completed upload as a file item: it moves the
 // finished upload from sourcePath (wherever the tus store staged it — see
 // internal/upload) into the owner's real folder tree, computes its
@@ -1001,7 +1084,7 @@ func (s *ItemService) Move(ctx context.Context, callerID, id string, in MoveInpu
 		return nil, err
 	}
 
-	if in.ParentID != nil && item.Type == model.ItemTypeFolder {
+	if in.ParentID != nil && item.Type == model.ItemTypeFolder && item.TargetID == nil {
 		if err := s.checkNotSelfOrDescendant(ctx, item.ID, *in.ParentID); err != nil {
 			return nil, err
 		}
@@ -1017,33 +1100,38 @@ func (s *ItemService) Move(ctx context.Context, callerID, id string, in MoveInpu
 		}
 	}
 
-	username, err := s.username(ctx, item.OwnerID)
-	if err != nil {
-		return nil, err
-	}
-	oldPath, err := s.pathOf(ctx, item, username)
-	if err != nil {
-		return nil, err
-	}
-	newFolderPath, err := s.folderPath(ctx, item.OwnerID, username, in.ParentID)
-	if err != nil {
-		return nil, err
-	}
 	finalName, err := s.uniqueName(ctx, item.OwnerID, in.ParentID, item.Type, name, item.ID)
 	if err != nil {
 		return nil, err
 	}
-	newPath := filepath.Join(newFolderPath, finalName)
 
-	if newPath != oldPath {
-		if err := s.storage.Rename(oldPath, newPath); err != nil {
+	// A shortcut has no counterpart on disk to rename/move — only its own
+	// row changes (see model.Item's own TargetID comment).
+	var oldPath, newPath string
+	if item.TargetID == nil {
+		username, err := s.username(ctx, item.OwnerID)
+		if err != nil {
 			return nil, err
+		}
+		oldPath, err = s.pathOf(ctx, item, username)
+		if err != nil {
+			return nil, err
+		}
+		newFolderPath, err := s.folderPath(ctx, item.OwnerID, username, in.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		newPath = filepath.Join(newFolderPath, finalName)
+		if newPath != oldPath {
+			if err := s.storage.Rename(oldPath, newPath); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	now := s.now().Unix()
 	if err := s.items.UpdateNameParent(ctx, id, finalName, in.ParentID, now); err != nil {
-		if newPath != oldPath {
+		if item.TargetID == nil && newPath != oldPath {
 			_ = s.storage.Rename(newPath, oldPath) // best-effort: keep DB and disk in agreement
 		}
 		return nil, err
@@ -1104,6 +1192,16 @@ func (s *ItemService) Copy(ctx context.Context, callerID, id string, destParentI
 	if err != nil {
 		return nil, err
 	}
+
+	// Copying a shortcut creates another shortcut to the same target,
+	// same as Drive — there's no real content here for copyRecursive
+	// below to copy. CreateShortcut always flattens at creation time (see
+	// its own comment), so item.TargetID already points straight at the
+	// real item, never at another shortcut.
+	if item.TargetID != nil {
+		return s.CreateShortcut(ctx, callerID, *item.TargetID, destParentID)
+	}
+
 	sourceUsername, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return nil, err
@@ -1210,6 +1308,15 @@ func (s *ItemService) Delete(ctx context.Context, callerID, id string) error {
 	if err != nil {
 		return err
 	}
+
+	// A shortcut has no counterpart on disk to move into trash — only its
+	// own row goes (see model.Item's own TargetID comment); markSubtreeDeleted
+	// is DB-only regardless, real physical trashing only ever happens here,
+	// for the top-level item Delete was actually called on.
+	if item.TargetID != nil {
+		return s.markSubtreeDeleted(ctx, item.OwnerID, item.ID, s.now().Unix())
+	}
+
 	username, err := s.username(ctx, item.OwnerID)
 	if err != nil {
 		return err
@@ -1269,7 +1376,6 @@ func (s *ItemService) Restore(ctx context.Context, ownerID, id string) (*model.I
 	if err != nil {
 		return nil, err
 	}
-	trashPath := s.storage.TrashPath(username, item.ID, item.Name)
 
 	restoreParentID := item.ParentID
 	if restoreParentID != nil {
@@ -1282,23 +1388,33 @@ func (s *ItemService) Restore(ctx context.Context, ownerID, id string) (*model.I
 		}
 	}
 
-	destFolderPath, err := s.folderPath(ctx, ownerID, username, restoreParentID)
-	if err != nil {
-		return nil, err
-	}
 	finalName, err := s.uniqueName(ctx, ownerID, restoreParentID, item.Type, item.Name, item.ID)
 	if err != nil {
 		return nil, err
 	}
-	destPath := filepath.Join(destFolderPath, finalName)
 
-	if err := s.storage.Rename(trashPath, destPath); err != nil {
-		return nil, err
+	// A shortcut never had a real trash path to begin with (Delete skips
+	// storage for one — see model.Item's own TargetID comment), so there's
+	// nothing to rename back.
+	if item.TargetID == nil {
+		trashPath := s.storage.TrashPath(username, item.ID, item.Name)
+		destFolderPath, err := s.folderPath(ctx, ownerID, username, restoreParentID)
+		if err != nil {
+			return nil, err
+		}
+		destPath := filepath.Join(destFolderPath, finalName)
+		if err := s.storage.Rename(trashPath, destPath); err != nil {
+			return nil, err
+		}
 	}
 
 	now := s.now().Unix()
 	if err := s.items.Restore(ctx, id, finalName, restoreParentID, now); err != nil {
-		_ = s.storage.Rename(destPath, trashPath) // best-effort rollback
+		if item.TargetID == nil {
+			trashPath := s.storage.TrashPath(username, item.ID, item.Name)
+			destFolderPath, _ := s.folderPath(ctx, ownerID, username, restoreParentID)
+			_ = s.storage.Rename(filepath.Join(destFolderPath, finalName), trashPath) // best-effort rollback
+		}
 		return nil, err
 	}
 	if err := s.restoreDescendants(ctx, ownerID, item.ID, now); err != nil {
@@ -1342,13 +1458,18 @@ func (s *ItemService) PermanentlyDelete(ctx context.Context, ownerID, id string)
 		return apperr.NotFound
 	}
 
-	username, err := s.username(ctx, ownerID)
-	if err != nil {
-		return err
-	}
-	trashPath := s.storage.TrashPath(username, item.ID, item.Name)
-	if err := s.storage.Remove(trashPath); err != nil {
-		return err
+	// A shortcut never had a real trash path (Delete skips storage for
+	// one — see model.Item's own TargetID comment), so there's nothing on
+	// disk to remove here either.
+	if item.TargetID == nil {
+		username, err := s.username(ctx, ownerID)
+		if err != nil {
+			return err
+		}
+		trashPath := s.storage.TrashPath(username, item.ID, item.Name)
+		if err := s.storage.Remove(trashPath); err != nil {
+			return err
+		}
 	}
 	return s.hardDeleteSubtreeRows(ctx, ownerID, item.ID)
 }

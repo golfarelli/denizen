@@ -106,6 +106,13 @@ export interface Item {
 	// ShareDialog's own "people with access" section for the full list
 	// with revoke buttons, this is just the file browser's row badge.
 	shared_with?: string[];
+	// Present only on a shortcut ("Aggiungi collegamento") — the real
+	// item's id it points at. type/mime_type/name above still describe
+	// this row itself (a snapshot taken when the shortcut was created, not
+	// re-resolved live from the target — see the backend's own comment on
+	// why), but opening/navigating should always go to target_id instead
+	// of id.
+	target_id?: string;
 }
 
 export interface Me {
@@ -222,6 +229,12 @@ export const api = {
 
 	copyItem: (id: string, parentId: string | null) =>
 		req<Item>(`/api/v1/items/${id}/copy`, jsonInit({ parent_id: parentId })),
+
+	// id is the real item being pointed at; parentId is where the new
+	// shortcut lands (null = the caller's own root) — see Item.target_id's
+	// own comment for what makes the response a shortcut.
+	createShortcut: (id: string, parentId: string | null) =>
+		req<Item>(`/api/v1/items/${id}/shortcut`, jsonInit({ parent_id: parentId })),
 
 	listTrash: () => req<Item[]>('/api/v1/trash'),
 
