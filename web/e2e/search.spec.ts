@@ -15,7 +15,7 @@ test('the search box finds a file in a different folder by name, and by content'
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();
-	await folderRow.locator('.item-name').click();
+	await folderRow.locator('.item-name').dblclick();
 	await expect(page).toHaveURL(/\?folder=/);
 
 	// Upload, inside this nested folder, one file findable by name and one
@@ -45,7 +45,7 @@ test('the search box finds a file in a different folder by name, and by content'
 	await expect(page.locator('.item-row', { hasText: byName })).toHaveCount(0);
 
 	// --- opening a result works exactly like a normal row --------------------------
-	await page.locator('.item-row', { hasText: byContent }).locator('.item-name').click();
+	await page.locator('.item-row', { hasText: byContent }).locator('.item-name').dblclick();
 	await expect(page).toHaveURL(/\/file\//);
 	await expect(page.locator('.preview-text')).toContainText('preventivo');
 

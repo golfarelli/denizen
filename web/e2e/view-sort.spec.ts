@@ -31,9 +31,11 @@ test('switching to grid view shows tiles and persists across a reload', async ({
 	await expect(tile.locator('.dropdown-menu')).toBeVisible();
 	await expect(tile.locator('.dropdown-menu').getByRole('menuitem', { name: 'Rename' })).toBeVisible();
 
-	// Opening a folder still works by clicking the tile itself.
+	// Opening a folder still works by double-clicking the tile itself — a
+	// single click now selects it instead (desktop click-select, same as
+	// list view — see routes/+page.svelte's handleItemClick).
 	await page.keyboard.press('Escape');
-	await page.locator('.item-tile-main', { hasText: folderName }).click();
+	await page.locator('.item-tile-main', { hasText: folderName }).dblclick();
 	await expect(page.locator('.breadcrumb').getByText(folderName)).toBeVisible();
 
 	// Back to list view for the next test in this file.

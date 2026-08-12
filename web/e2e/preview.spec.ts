@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import { readFileSync } from 'fs';
+import { openViaDblclick } from './helpers/dblclick';
 
 const PHOTO_PATH = path.join(import.meta.dirname, 'fixtures', 'sample-photo.jpg');
 const PDF_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.pdf');
@@ -15,7 +16,7 @@ test('opening an image file shows an inline preview', async ({ page }) => {
 
 	const row = page.locator('.item-row', { hasText: 'sample-photo.jpg' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await row.dblclick();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	const img = page.locator('.preview-frame img');
@@ -33,7 +34,7 @@ test('opening a PDF renders it inline via canvas', async ({ page }) => {
 
 	const row = page.locator('.item-row', { hasText: 'sample.pdf' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await row.dblclick();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	// pdf.js renders every page to its own <canvas> (see PdfViewer.svelte) —
@@ -65,7 +66,7 @@ test('opening a video streams it via a content-token URL, not a full blob downlo
 
 	const row = page.locator('.item-row', { hasText: 'sample-video.webm' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await row.dblclick();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	const video = page.locator('.preview-frame video');
@@ -94,7 +95,7 @@ test('opening a Word document renders its real text content', async ({ page }) =
 
 	const row = page.locator('.item-row', { hasText: 'sample.docx' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await row.dblclick();
 
 	await expect(page).toHaveURL(/\/file\/.+/);
 	// The real assertion: actual document text made it into the rendered
@@ -111,9 +112,8 @@ test('opening a spreadsheet renders real cell values and switches sheets', async
 
 	const row = page.locator('.item-row', { hasText: 'sample.xlsx' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await openViaDblclick(page, row, /\/file\/.+/);
 
-	await expect(page).toHaveURL(/\/file\/.+/);
 	// Real parsed cell values from the fixture's first sheet ("Results"),
 	// not just an empty table shell.
 	const table = page.locator('.xlsx-table');
@@ -135,13 +135,13 @@ test('opening a text file shows its content, and back returns to the same folder
 	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
-	await page.locator('.item-row', { hasText: folderName }).click();
+	await page.locator('.item-row', { hasText: folderName }).dblclick();
 	await expect(page).toHaveURL(/folder=/);
 
 	await page.locator('input[type="file"]').setInputFiles(TEXT_PATH);
 	const row = page.locator('.item-row', { hasText: 'sample.txt' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await row.dblclick();
 
 	await expect(page).toHaveURL(/\/file\/.+from=/);
 	const expectedText = readFileSync(TEXT_PATH, 'utf8');
@@ -168,9 +168,8 @@ test('a file type without preview support falls back to a download prompt', asyn
 	await page.locator('input[type="file"]').setInputFiles(binPath);
 	const row = page.locator('.item-row', { hasText: 'unsupported.bin' });
 	await expect(row).toBeVisible({ timeout: 15_000 });
-	await row.click();
+	await openViaDblclick(page, row, /\/file\/.+/);
 
-	await expect(page).toHaveURL(/\/file\/.+/);
 	await expect(page.getByText("Preview isn't available for this file type yet.")).toBeVisible();
 	// Download now lives behind the page's own "⋮" action menu (the same
 	// one the file list's rows use), not a directly-visible button.

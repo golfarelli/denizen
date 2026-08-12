@@ -28,7 +28,7 @@ test('folder tree: collapsed by default, auto-reveals the current folder, expand
 
 	// Navigating into it (via the file list, not the tree) is enough on its
 	// own to reveal it in the sidebar — Home expands itself.
-	await parentRow.click();
+	await parentRow.dblclick();
 	await expect(page.locator('.breadcrumb').getByText(parentName)).toBeVisible();
 	// .tree-row (toggle + name only, not the nested <ul> of children) is the
 	// safe thing to match by text — .tree-item would also "contain" every
@@ -62,8 +62,8 @@ test('folder tree: collapsed by default, auto-reveals the current folder, expand
 	// something that happened to already be open from earlier.
 	await sidebar.getByRole('link', { name: 'Home', exact: true }).click();
 	await expect(treeChildren).toHaveCount(0);
-	await page.locator('.item-row', { hasText: parentName }).click();
-	await page.locator('.item-row', { hasText: childName }).click();
+	await page.locator('.item-row', { hasText: parentName }).dblclick();
+	await page.locator('.item-row', { hasText: childName }).dblclick();
 	await expect(page.locator('.breadcrumb').getByText(childName)).toBeVisible();
 
 	await expect(treeChildren).toBeVisible();
