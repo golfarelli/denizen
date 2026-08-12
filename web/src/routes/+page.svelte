@@ -63,6 +63,11 @@
 	// rather than Items so it survives a `load()` refresh (a fresh array
 	// of Item objects each time) without losing track of what's selected.
 	let selectedIds = $state<Set<string>>(new Set());
+	// The last item explicitly clicked or Ctrl/Cmd-clicked (not
+	// Shift-clicked) — Shift+click selects the whole range between this and
+	// the new target, same anchor Drive/Finder both use, kept until a plain
+	// click or Ctrl/Cmd+click moves it. Desktop-only (see handleItemClick).
+	let selectionAnchorId: string | null = $state(null);
 	// A real, whole-drive search (GET /api/v1/search — name and indexed
 	// file content, see internal/service/item.go's Search), not a filter
 	// over whatever's already loaded for the current folder. null =
@@ -112,9 +117,8 @@
 
 	// Long-press to select on mobile, instead of a checkbox sitting on
 	// every row all the time — see .row-checkbox's own CSS comment for
-	// why it's hidden below 640px until a selection is already active.
-	// Pointer events (not touch-specific ones) so this works identically
-	// with a mouse's own "press and hold", not just a finger.
+	// why it's hidden on mobile too until a selection is already active
+	// (desktop hides it outright now, see below).
 	//
 	// Also cancels the browser's own contextmenu event (fired on a real
 	// touch-and-hold, separately from anything here) — Android otherwise
@@ -138,8 +142,16 @@
 	let longPressTriggered = false;
 	let longPressStartX = 0;
 	let longPressStartY = 0;
+	// Which pointer type most recently pressed down on a row — a real mouse
+	// now gets instant Drive/Finder-style click selection (handleItemClick
+	// below) instead of the long-press flow, which stays exactly as it was
+	// for touch/pen (no shift/ctrl/drag equivalent on a touchscreen, and
+	// Drive's own mobile app doesn't try to fake one either).
+	let lastPointerType = 'mouse';
 
 	function startLongPress(id: string, e: PointerEvent) {
+		lastPointerType = e.pointerType;
+		if (e.pointerType === 'mouse') return;
 		longPressTriggered = false;
 		longPressStartX = e.clientX;
 		longPressStartY = e.clientY;
@@ -160,13 +172,12 @@
 		longPressTimer = undefined;
 	}
 
-	// The shared click handler for both the list row's .item-name button
-	// and the grid tile's .item-tile-main button: a long-press just
-	// finished selecting this item (longPressTriggered, reset here so it
-	// doesn't leak into the next click), or a selection is already active
-	// (any further tap keeps selecting instead of navigating away from
-	// it) — either way, don't open. A plain tap with nothing selected
-	// opens normally.
+	// Touch/pen's own activation handler, unchanged from before this pass:
+	// a long-press just finished selecting this item (longPressTriggered,
+	// reset here so it doesn't leak into the next tap), or a selection is
+	// already active (any further tap keeps selecting instead of
+	// navigating away from it) — either way, don't open. A plain tap with
+	// nothing selected opens normally.
 	function handleItemActivate(item: Item) {
 		if (longPressTriggered) {
 			longPressTriggered = false;
@@ -179,6 +190,119 @@
 		if (item.type === 'folder') openFolder(item.id);
 		else openFile(item.id);
 	}
+
+	// Desktop's Drive/Finder-style selection: a plain click selects just
+	// this item (replacing whatever was selected before), Ctrl/Cmd+click
+	// toggles it without disturbing the rest, Shift+click selects the
+	// whole range between the last anchor and this item. Never opens
+	// anything itself — see handleItemDblClick.
+	function handleItemClick(item: Item, event: MouseEvent) {
+		if (event.shiftKey && selectionAnchorId) {
+			const anchorIndex = visibleItems.findIndex((i) => i.id === selectionAnchorId);
+			const targetIndex = visibleItems.findIndex((i) => i.id === item.id);
+			if (anchorIndex !== -1 && targetIndex !== -1) {
+				const [from, to] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+				selectedIds = new Set(visibleItems.slice(from, to + 1).map((i) => i.id));
+				return;
+			}
+		}
+		if (event.ctrlKey || event.metaKey) {
+			toggleSelect(item.id);
+			selectionAnchorId = item.id;
+			return;
+		}
+		selectedIds = new Set([item.id]);
+		selectionAnchorId = item.id;
+	}
+
+	function handleItemDblClick(item: Item) {
+		clearSelection();
+		if (item.type === 'folder') openFolder(item.id);
+		else openFile(item.id);
+	}
+
+	// Row/tile click dispatcher: touch/pen keeps the existing long-press
+	// flow above untouched, a real mouse gets the click-select model
+	// instead — there, a plain click never opens anything, only a
+	// double-click does.
+	function handleRowClick(item: Item, event: MouseEvent) {
+		if (lastPointerType !== 'mouse') {
+			handleItemActivate(item);
+			return;
+		}
+		handleItemClick(item, event);
+	}
+
+	// Click-and-drag over empty space rubber-band-selects everything the
+	// rectangle touches, same as Drive's own desktop list/grid. Mouse-only
+	// (touch scrolling would otherwise fight it), and only starts from
+	// genuinely empty space — e.currentTarget is the dropzone container
+	// itself, e.target is whatever was actually pressed; a row/tile's own
+	// pointerdown bubbles up here too, but on the row itself, so this
+	// check tells the two apart without every row needing its own
+	// stopPropagation.
+	let marqueeActive = $state(false);
+	let marqueeStartX = $state(0);
+	let marqueeStartY = $state(0);
+	let marqueeCurrentX = $state(0);
+	let marqueeCurrentY = $state(0);
+	let marqueeContainer: HTMLElement | null = null;
+	let marqueeBaseSelection: Set<string> = new Set();
+	let marqueeAdditive = false;
+
+	function startMarquee(e: PointerEvent) {
+		if (e.pointerType !== 'mouse' || e.target !== e.currentTarget) return;
+		marqueeAdditive = e.ctrlKey || e.metaKey;
+		marqueeBaseSelection = marqueeAdditive ? new Set(selectedIds) : new Set();
+		marqueeContainer = e.currentTarget as HTMLElement;
+		marqueeStartX = e.clientX;
+		marqueeStartY = e.clientY;
+		marqueeCurrentX = e.clientX;
+		marqueeCurrentY = e.clientY;
+		marqueeActive = true;
+		marqueeContainer.setPointerCapture(e.pointerId);
+	}
+
+	function moveMarquee(e: PointerEvent) {
+		if (!marqueeActive || !marqueeContainer) return;
+		marqueeCurrentX = e.clientX;
+		marqueeCurrentY = e.clientY;
+		const left = Math.min(marqueeStartX, marqueeCurrentX);
+		const right = Math.max(marqueeStartX, marqueeCurrentX);
+		const top = Math.min(marqueeStartY, marqueeCurrentY);
+		const bottom = Math.max(marqueeStartY, marqueeCurrentY);
+		const intersecting = new Set<string>();
+		for (const el of marqueeContainer.querySelectorAll<HTMLElement>('[data-item-id]')) {
+			const r = el.getBoundingClientRect();
+			if (r.left < right && r.right > left && r.top < bottom && r.bottom > top) {
+				intersecting.add(el.dataset.itemId!);
+			}
+		}
+		selectedIds = marqueeAdditive ? new Set([...marqueeBaseSelection, ...intersecting]) : intersecting;
+	}
+
+	function endMarquee() {
+		marqueeActive = false;
+		marqueeContainer = null;
+	}
+
+	// Ctrl/Cmd+A selects everything currently visible — the Drive/Finder
+	// keyboard equivalent of the header checkbox this replaced (removed
+	// along with the per-row ones, see .row-checkbox's own CSS comment).
+	// Skipped while focus is in a real text input (the search box) so the
+	// browser's own "select all text" still works there instead of being
+	// hijacked.
+	$effect(() => {
+		function handleKeydown(e: KeyboardEvent) {
+			if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a') return;
+			const target = e.target;
+			if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+			e.preventDefault();
+			selectedIds = new Set(visibleItems.map((item) => item.id));
+		}
+		window.addEventListener('keydown', handleKeydown);
+		return () => window.removeEventListener('keydown', handleKeydown);
+	});
 
 	// Debounced so every keystroke doesn't fire a request — 300ms is short
 	// enough to feel responsive, long enough that typing a whole word
@@ -835,6 +959,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+	class="dropzone"
 	ondragover={(e) => {
 		e.preventDefault();
 		dragging = true;
@@ -842,7 +967,20 @@
 	ondragleave={() => (dragging = false)}
 	ondrop={handleDrop}
 	class:dropzone-active={dragging}
+	onpointerdown={startMarquee}
+	onpointermove={moveMarquee}
+	onpointerup={endMarquee}
+	onpointercancel={endMarquee}
 >
+	{#if marqueeActive}
+		<div
+			class="marquee"
+			style:left="{Math.min(marqueeStartX, marqueeCurrentX)}px"
+			style:top="{Math.min(marqueeStartY, marqueeCurrentY)}px"
+			style:width="{Math.abs(marqueeCurrentX - marqueeStartX)}px"
+			style:height="{Math.abs(marqueeCurrentY - marqueeStartY)}px"
+		></div>
+	{/if}
 	{#if loading || (searching && searchResults === null)}
 		<p>{$t('common.loading')}</p>
 	{:else if visibleItems.length === 0}
@@ -974,16 +1112,7 @@
 
 		{#if $viewMode === 'list'}
 			<div class="item-list-header">
-				<span class="item-icon">
-					<input
-						type="checkbox"
-						checked={visibleItems.length > 0 && selectedIds.size === visibleItems.length}
-						aria-label={selectedIds.size === visibleItems.length
-							? $t('fileBrowser.selection.deselectAll')
-							: $t('fileBrowser.selection.selectAll')}
-						onchange={toggleSelectAll}
-					/>
-				</span>
+				<span class="item-icon"></span>
 				<button class="sort-header item-name-header" onclick={() => toggleSort('name')}>
 					{$t('common.name')}
 					{#if sortField === 'name'}<SortArrow direction={sortDirection} />{/if}
@@ -1004,6 +1133,7 @@
 				<div
 					class="item-row"
 					class:item-row-selected={selectedIds.has(item.id)}
+					data-item-id={item.id}
 					role="button"
 					tabindex="0"
 					onpointerdown={(e) => startLongPress(item.id, e)}
@@ -1012,7 +1142,8 @@
 					onpointercancel={cancelLongPress}
 					onpointermove={cancelLongPress}
 					oncontextmenu={(e) => e.preventDefault()}
-					onclick={() => handleItemActivate(item)}
+					onclick={(e) => handleRowClick(item, e)}
+					ondblclick={() => handleItemDblClick(item)}
 					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
 							e.preventDefault();
@@ -1041,7 +1172,7 @@
 		{:else}
 			<div class="item-grid" class:has-selection={selectedIds.size > 0}>
 				{#each visibleItems as item (item.id)}
-					<div class="item-tile" class:item-row-selected={selectedIds.has(item.id)}>
+					<div class="item-tile" class:item-row-selected={selectedIds.has(item.id)} data-item-id={item.id}>
 						<input
 							type="checkbox"
 							class="row-checkbox tile-checkbox"
@@ -1058,7 +1189,8 @@
 							onpointercancel={cancelLongPress}
 							onpointermove={cancelLongPress}
 							oncontextmenu={(e) => e.preventDefault()}
-							onclick={() => handleItemActivate(item)}
+							onclick={(e) => handleRowClick(item, e)}
+							ondblclick={() => handleItemDblClick(item)}
 						>
 							<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
 							<span class="item-tile-name">{item.name}</span>

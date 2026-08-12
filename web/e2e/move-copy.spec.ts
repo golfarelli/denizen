@@ -45,7 +45,7 @@ test('move a folder into another folder via the destination picker', async ({ pa
 	await expect(page.locator('.item-row', { hasText: sourceName })).not.toBeVisible();
 
 	// ...and actually inside the destination folder now, not just hidden.
-	await page.locator('.item-row', { hasText: destName }).click();
+	await page.locator('.item-row', { hasText: destName }).dblclick();
 	await expect(page.locator('.item-row', { hasText: sourceName })).toBeVisible();
 });
 
