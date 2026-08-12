@@ -8,12 +8,14 @@ test('move a folder into another folder via the destination picker', async ({ pa
 
 	const destName = `E2E Move Dest ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(destName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	await expect(page.locator('.item-row', { hasText: destName })).toBeVisible();
 
 	const sourceName = `E2E Move Source ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(sourceName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	const sourceRow = page.locator('.item-row', { hasText: sourceName });
 	await expect(sourceRow).toBeVisible();
 

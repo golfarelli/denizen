@@ -170,7 +170,8 @@ test('sharing a folder shows its name but no broken Download button', async ({ p
 	await page.goto('/');
 	const folderName = `E2E Share Folder ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();

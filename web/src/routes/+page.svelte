@@ -12,6 +12,8 @@
 	import { copyShareLink } from '$lib/copyShareLink';
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import { viewMode } from '$lib/viewMode';
+	import { walkAncestors } from '$lib/ancestorChain';
+	import { invalidateTree } from '$lib/folderTree';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
 	import { t } from '$lib/i18n';
@@ -20,6 +22,11 @@
 		id: string | null;
 		name: string;
 	}
+
+	// Sentinel breadcrumb id for a root crumb reached via a share rather than
+	// the caller's own drive (see buildBreadcrumb) — distinct from `null`
+	// (real Home) so goToCrumb routes it to /shared-with-me instead of /.
+	const SHARED_ROOT_CRUMB_ID = '__shared-with-me__';
 
 	interface UploadEntry {
 		id: string;
@@ -263,6 +270,29 @@
 		};
 	});
 
+	// The desktop toolbar's single "+ Nuovo" button (Upload/Scan/New folder
+	// consolidated into one dropdown, Drive-style, instead of three
+	// always-visible buttons) — same open/close shape as fabMenuOpen above,
+	// just for the desktop-only trigger (.fab itself is mobile-only, see
+	// app.css).
+	let newMenuOpen = $state(false);
+
+	$effect(() => {
+		if (!newMenuOpen) return;
+		function handlePointerDown() {
+			newMenuOpen = false;
+		}
+		function handleKeydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') newMenuOpen = false;
+		}
+		window.addEventListener('click', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('click', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
+
 	// A local tracking key for the upload progress panel below — doesn't
 	// need to be globally unique or unguessable, just distinct within this
 	// tab's own `uploads` array, so crypto.randomUUID() would be overkill
@@ -288,26 +318,23 @@
 	// uses it for currentFolderCanEdit, no separate request needed.
 	async function buildBreadcrumb(folderId: string | null): Promise<{ crumbs: Crumb[]; canEdit: boolean }> {
 		if (!folderId) return { crumbs: [{ id: null, name: $t('common.home') }], canEdit: true };
-		const chain: Crumb[] = [];
-		let current: string | null = folderId;
-		let canEdit = true;
-		while (current) {
-			let item: Item;
-			try {
-				item = await api.getItem(current);
-			} catch {
-				// An ancestor above the point we were actually granted access
-				// to — a shared subfolder nested inside parts of the owner's
-				// drive we can't see the rest of. Stop climbing here instead
-				// of failing the whole page; Home (prepended below) still
-				// safely takes us back to our own root either way.
-				break;
-			}
-			if (current === folderId) canEdit = item.can_edit;
-			chain.unshift({ id: item.id, name: item.name });
-			current = item.parent_id;
-		}
-		return { crumbs: [{ id: null, name: $t('common.home') }, ...chain], canEdit };
+		const chain = await walkAncestors(folderId);
+		const target = chain.find((item) => item.id === folderId);
+		// The highest ancestor we could actually reach either is ours (a
+		// normal folder somewhere under our own root) or isn't (we only got
+		// this far via a share) — root the crumb trail accordingly instead
+		// of always labeling it Home, and send it back to /shared-with-me
+		// rather than / (see goToCrumb). chain[0] is empty only if folderId
+		// itself 404s (deleted from under us) — canEdit/root both fall back
+		// to their safe defaults in that case.
+		const root: Crumb =
+			chain.length > 0 && !chain[0].owned
+				? { id: SHARED_ROOT_CRUMB_ID, name: $t('nav.sharedWithMe') }
+				: { id: null, name: $t('common.home') };
+		return {
+			crumbs: [root, ...chain.map((item) => ({ id: item.id, name: item.name }))],
+			canEdit: target?.can_edit ?? true
+		};
 	}
 
 	async function load(folderId: string | null) {
@@ -318,6 +345,15 @@
 			items = listing ?? [];
 			breadcrumb = folder.crumbs;
 			currentFolderCanEdit = folder.canEdit;
+			// The one place every folder-affecting mutation on this page
+			// (create/rename/move/copy/delete, bulk included) already funnels
+			// through to refresh its own view — piggybacking the sidebar
+			// tree's own invalidation here, rather than at each mutation's
+			// own call site, covers all of them from one spot. Also fires on
+			// plain navigation, not just a mutation — harmless (see
+			// lib/folderTree.ts's own comment on why this doesn't need to be
+			// precise).
+			invalidateTree();
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $t('fileBrowser.errors.couldNotLoadFolder');
 		} finally {
@@ -345,6 +381,10 @@
 	}
 
 	function goToCrumb(id: string | null) {
+		if (id === SHARED_ROOT_CRUMB_ID) {
+			goto('/shared-with-me');
+			return;
+		}
 		goto(id ? `/?folder=${encodeURIComponent(id)}` : '/');
 	}
 
@@ -656,10 +696,70 @@
 		</button>
 	</div>
 	{#if currentFolderCanEdit}
-		<div class="toolbar-actions">
-			<button class="btn" onclick={() => fileInput.click()}>{$t('fileBrowser.upload')}</button>
-			<button class="btn" onclick={() => (scanOpen = true)}>{$t('fileBrowser.scan')}</button>
-			<button class="btn btn-primary" onclick={handleNewFolder}>{$t('fileBrowser.newFolder')}</button>
+		<!-- Desktop-only (see app.css's .toolbar-actions mobile rule) — the
+		     FAB further down covers the same three actions on mobile. One
+		     "+ Nuovo" trigger instead of three always-visible buttons,
+		     Drive-style, reusing the FAB menu's own items/handlers below. -->
+		<div class="toolbar-actions new-menu">
+			<button
+				class="btn btn-primary"
+				aria-haspopup="true"
+				aria-expanded={newMenuOpen}
+				onclick={(e) => {
+					e.stopPropagation();
+					newMenuOpen = !newMenuOpen;
+				}}
+			>
+				{$t('fileBrowser.new')}
+			</button>
+			{#if newMenuOpen}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_interactive_supports_focus -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
+					<button
+						role="menuitem"
+						onclick={() => {
+							newMenuOpen = false;
+							fileInput.click();
+						}}
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+							<path d="M12 15V4M8 8l4-4 4 4M5 20h14" stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+						{$t('fileBrowser.uploadPlain')}
+					</button>
+					<button
+						role="menuitem"
+						onclick={() => {
+							newMenuOpen = false;
+							scanOpen = true;
+						}}
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+							<path d="M8 7l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3Z" stroke-linejoin="round" />
+							<circle cx="12" cy="13.5" r="3.2" />
+						</svg>
+						{$t('fileBrowser.scanPlain')}
+					</button>
+					<button
+						role="menuitem"
+						onclick={() => {
+							newMenuOpen = false;
+							handleNewFolder();
+						}}
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+							<path
+								d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
+								stroke-linejoin="round"
+							/>
+							<path d="M12 11v4M10 13h4" stroke-linecap="round" />
+						</svg>
+						{$t('fileBrowser.newFolderPlain')}
+					</button>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>

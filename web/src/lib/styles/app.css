@@ -37,6 +37,13 @@
 	--sidebar-width: 248px;
 	--shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
 	--shadow-md: 0 6px 20px rgb(16 24 40 / 10%);
+
+	/* .topbar's real height, not a guess at its rendered one — applied to
+	   .topbar itself as a min-height below, so the two stay in sync by
+	   construction. Also .item-list-header's sticky offset (see its own
+	   comment), since .topbar is the only other fixed/sticky chrome above
+	   it. */
+	--topbar-height: 3.25rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -198,6 +205,17 @@ input {
 	flex-direction: column;
 	background: var(--color-sidebar-bg);
 	border-right: 1px solid var(--color-border);
+	/* Pinned to the viewport with its own bounded height, rather than
+	   stretching to whatever height the tallest column in .app-shell ends
+	   up at (the main file list, almost always) and scrolling away with
+	   it — now that .sidebar-nav can hold a real, potentially long folder
+	   tree instead of five links that always fit, this row-of-links-still-
+	   fits-on-one-screen assumption doesn't hold anymore. Brand/storage/
+	   logout stay put; only .sidebar-nav itself scrolls (below). */
+	position: sticky;
+	top: 0;
+	height: 100dvh;
+	overflow: hidden;
 }
 
 .sidebar-nav {
@@ -206,6 +224,11 @@ input {
 	gap: 2px;
 	padding: var(--space-2);
 	flex: 1;
+	overflow-y: auto;
+	/* Without this a flex child's default min-height:auto refuses to
+	   shrink below its content size, so overflow-y above would never
+	   actually kick in — the standard fix for a scrollable flex child. */
+	min-height: 0;
 }
 
 .sidebar-nav a {
@@ -229,6 +252,96 @@ input {
 }
 
 .sidebar-nav a.active {
+	background: var(--color-accent-soft);
+	color: var(--color-accent);
+	font-weight: 600;
+}
+
+/* The sidebar's folder tree — routes/+layout.svelte's "Home" entry (the
+   tree's root) and lib/FolderTreeItem.svelte (every folder below that,
+   recursively) share these same classes so expanding/collapsing/selecting
+   look identical at every depth. */
+.tree-root {
+	margin-bottom: 2px;
+}
+
+.tree-row {
+	display: flex;
+	align-items: center;
+}
+
+.tree-children {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tree-loading {
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	padding: var(--space-1) var(--space-3);
+}
+
+.tree-toggle {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border: none;
+	background: none;
+	color: var(--color-text-muted);
+	border-radius: var(--radius);
+	cursor: pointer;
+}
+
+.tree-toggle:hover {
+	background: var(--color-border);
+}
+
+.tree-toggle svg {
+	transition: transform 0.12s ease;
+}
+
+.tree-toggle-expanded svg {
+	transform: rotate(90deg);
+}
+
+/* Covers both the tree root's own <a> (Home) and every FolderTreeItem's
+   <button> — a plain browser button reset so the two read identically
+   despite the different tag (a folder node has nowhere to href to that
+   isn't already a client-side navigation, so a button rather than an <a>
+   with a synthetic href). */
+.tree-name {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex: 1;
+	min-width: 0;
+	border: none;
+	background: none;
+	color: var(--color-text);
+	text-decoration: none;
+	font: inherit;
+	font-size: 0.95rem;
+	text-align: left;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius);
+	cursor: pointer;
+}
+
+.tree-name-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tree-name:hover {
+	background: var(--color-border);
+}
+
+.tree-name.active {
 	background: var(--color-accent-soft);
 	color: var(--color-accent);
 	font-weight: 600;
@@ -322,6 +435,7 @@ input {
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
+	min-height: var(--topbar-height);
 	padding: var(--space-3) var(--space-6);
 	border-bottom: 1px solid var(--color-border);
 	background: var(--color-bg);
@@ -483,9 +597,10 @@ main.fullscreen {
 .breadcrumb {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--space-1);
+	gap: var(--space-2);
 	align-items: center;
 	margin-bottom: var(--space-4);
+	font-size: 1.2rem;
 	color: var(--color-text-muted);
 }
 
@@ -500,6 +615,16 @@ main.fullscreen {
 
 .breadcrumb button:hover {
 	color: var(--color-accent);
+}
+
+/* The current crumb (disabled — see routes/+page.svelte's own
+   `disabled={i === breadcrumb.length - 1}`) reads as the page's actual
+   title, same emphasis Drive gives it, instead of the same muted weight as
+   the clickable ancestors before it. */
+.breadcrumb button:disabled {
+	color: var(--color-text);
+	font-weight: 600;
+	cursor: default;
 }
 
 /* No outer border/card and no per-row divider lines — Drive's own list
@@ -657,6 +782,16 @@ main.fullscreen {
    below them — Drive's and Nextcloud's own file lists both have this row,
    this one didn't before. Same grid-template as .item-row (and the same
    mobile override below), just with text labels instead of real cells. */
+/* Sticks right below .topbar (the only other fixed chrome above it, hence
+   reusing --topbar-height rather than a second guessed offset) so the
+   column names stay put while rows scroll underneath — breadcrumb/toolbar
+   above it scroll away normally, same as Drive. Hidden below 640px anyway
+   (see the mobile media query), so no separate mobile handling needed here.
+   ponytail: doesn't also pin .toolbar (the search/sort row) — would need a
+   second offset tracking .toolbar's own, wrap-prone height, not worth it
+   for a header that's only really tall on a narrow desktop window. Add a
+   --toolbar-height var (min-height'd the same way as --topbar-height) if
+   that's ever wanted too. */
 .item-list-header {
 	display: grid;
 	grid-template-columns: auto 1fr auto auto auto;
@@ -664,6 +799,10 @@ main.fullscreen {
 	align-items: center;
 	column-gap: var(--space-3);
 	padding: 0 var(--space-4) var(--space-2);
+	position: sticky;
+	top: var(--topbar-height);
+	z-index: 8;
+	background: var(--color-bg);
 	color: var(--color-text-muted);
 	font-size: 0.8rem;
 	text-transform: uppercase;
@@ -834,6 +973,12 @@ main.fullscreen {
 .toolbar-actions {
 	display: flex;
 	gap: var(--space-2);
+}
+
+/* Anchors the "+ Nuovo" dropdown (routes/+page.svelte) the same way
+   .row-menu/.sort-menu anchor theirs. */
+.new-menu {
+	position: relative;
 }
 
 /* The bulk-action bar shown when one or more rows are selected

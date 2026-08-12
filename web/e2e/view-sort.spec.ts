@@ -8,7 +8,8 @@ test('switching to grid view shows tiles and persists across a reload', async ({
 
 	const folderName = `E2E Grid ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	await expect(page.locator('.item-row', { hasText: folderName })).toBeVisible();
 
 	await expect(page.locator('.item-list')).toBeVisible();
@@ -47,7 +48,8 @@ test('clicking a column header sorts the list, and clicking again reverses it', 
 	const names = [`b-e2e-sort-${stamp}`, `a-e2e-sort-${stamp}`, `c-e2e-sort-${stamp}`];
 	for (const name of names) {
 		page.once('dialog', (dialog) => dialog.accept(name));
-		await page.getByRole('button', { name: '+ New folder' }).click();
+		await page.getByRole('button', { name: '+ New' }).click();
+		await page.getByRole('menuitem', { name: 'New folder' }).click();
 		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
 	}
 

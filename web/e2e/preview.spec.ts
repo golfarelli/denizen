@@ -133,7 +133,8 @@ test('opening a text file shows its content, and back returns to the same folder
 
 	const folderName = `E2E Preview Folder ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	await page.locator('.item-row', { hasText: folderName }).click();
 	await expect(page).toHaveURL(/folder=/);
 

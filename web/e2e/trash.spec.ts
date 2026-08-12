@@ -5,7 +5,8 @@ test('delete a folder, see it in trash, and restore it', async ({ page }) => {
 
 	const name = `E2E Trash Restore ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(name));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const row = page.locator('.item-row', { hasText: name });
 	await expect(row).toBeVisible();
@@ -36,7 +37,8 @@ test('delete a folder, then permanently delete it from trash', async ({ page }) 
 
 	const name = `E2E Trash Purge ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(name));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const row = page.locator('.item-row', { hasText: name });
 	await expect(row).toBeVisible();

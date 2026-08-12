@@ -40,7 +40,8 @@ test('long-pressing an item selects it instead of opening it; a normal click sti
 
 	const folderName = `E2E Long Press ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	const row = page.locator('.item-row', { hasText: folderName });
 	await expect(row).toBeVisible();
 
@@ -68,7 +69,8 @@ test('long-pressing an item selects it instead of opening it; a normal click sti
 	// toolbar sits where it'd otherwise be covered — this just confirms
 	// state, not a real workflow step).
 	await row.locator('.row-checkbox').click();
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	const secondRow = page.locator('.item-row', { hasText: secondFolderName });
 	await expect(secondRow).toBeVisible();
 
@@ -90,7 +92,8 @@ test('the native long-press context menu is suppressed on an item row', async ({
 
 	const folderName = `E2E Context Menu ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	const row = page.locator('.item-row', { hasText: folderName });
 	await expect(row).toBeVisible();
 
@@ -133,7 +136,8 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 
 	const destName = `Bulk Move Dest ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(destName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	await expect(page.locator('.item-row', { hasText: destName })).toBeVisible();
 
 	const toDelete = uniqueName('to-delete');
