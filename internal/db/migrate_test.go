@@ -79,8 +79,8 @@ func TestMigrate_ExistingDatabaseUpgradesCleanly(t *testing.T) {
 		rows.Scan(&v)
 		recorded = append(recorded, v)
 	}
-	if len(recorded) != 4 || recorded[0] != 1 || recorded[1] != 2 || recorded[2] != 3 || recorded[3] != 4 {
-		t.Fatalf("schema_migrations = %v, want [1 2 3 4]", recorded)
+	if len(recorded) != 5 || recorded[0] != 1 || recorded[1] != 2 || recorded[2] != 3 || recorded[3] != 4 || recorded[4] != 5 {
+		t.Fatalf("schema_migrations = %v, want [1 2 3 4 5]", recorded)
 	}
 
 	// Step 3: opening it a THIRD time must be a clean no-op (idempotent).

@@ -27,12 +27,13 @@ type ItemService struct {
 	users   *repository.UserRepository
 	grants  *repository.UserShareRepository // direct per-user file shares — see GetIncludingTrashed
 	search  *repository.SearchRepository    // content search index — see indexContent/Search
+	ocr     *repository.OCRRepository       // scanned-PDF OCR attempt tracking — see RunOCRSweep
 	storage *storage.Store
 	now     func() time.Time // swappable in tests; defaults to time.Now
 }
 
-func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, store *storage.Store) *ItemService {
-	return &ItemService{items: items, users: users, grants: grants, search: search, storage: store, now: time.Now}
+func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, ocr *repository.OCRRepository, store *storage.Store) *ItemService {
+	return &ItemService{items: items, users: users, grants: grants, search: search, ocr: ocr, storage: store, now: time.Now}
 }
 
 // --- name/path helpers -----------------------------------------------------
@@ -814,11 +815,63 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 		return nil, err
 	}
 	s.indexContent(ctx, item.ID, item.Name, targetPath)
+	// A prior version of this file may have been a blank scan the OCR
+	// sweep already gave up on (see RunOCRSweep) — the new bytes deserve
+	// their own fresh attempt instead of staying permanently skipped over
+	// something that no longer even exists. Best-effort, same as the
+	// index update just above: a stale marker left behind by a failure
+	// here just costs one skipped OCR attempt, never a broken upload.
+	if err := s.ocr.ClearAttempt(ctx, item.ID); err != nil {
+		log.Printf("ocr: clear attempt for %s: %v", item.ID, err)
+	}
 
 	item.SizeBytes = written
 	item.Checksum = &checksum
 	item.UpdatedAt = now
 	return item, nil
+}
+
+// RunOCRSweep looks for up to batchSize scanned (text-less) PDFs that
+// haven't had an OCR attempt yet (OCRRepository.ListPending) and runs one
+// against each in turn. pdftotext's synchronous fast path (indexContent,
+// called from FinalizeUpload/ReplaceContent) already handles every PDF
+// with a real text layer instantly; this only ever picks up the ones that
+// came back empty, and runs later — from a periodic background sweep, see
+// cmd/server/main.go — instead of blocking the upload that created them,
+// since real OCR (actual image recognition per page) is far slower than
+// pdftotext. Every candidate gets marked attempted whether or not OCR
+// found anything, so a genuinely blank/corrupt scan only ever costs CPU
+// once. Returns how many candidates it looked at.
+func (s *ItemService) RunOCRSweep(ctx context.Context, batchSize int) (int, error) {
+	candidates, err := s.ocr.ListPending(ctx, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	usernames := make(map[string]string)
+	for _, item := range candidates {
+		username, ok := usernames[item.OwnerID]
+		if !ok {
+			username, err = s.username(ctx, item.OwnerID)
+			if err != nil {
+				return 0, err
+			}
+			usernames[item.OwnerID] = username
+		}
+		path, err := s.pathOf(ctx, item, username)
+		if err != nil {
+			log.Printf("ocr sweep: path for %s (%s): %v", item.ID, item.Name, err)
+		} else if text, err := textextract.ExtractOCRPDF(path); err != nil {
+			log.Printf("ocr sweep: extract %s (%s): %v", item.ID, item.Name, err)
+		} else if text != "" {
+			if err := s.search.IndexContent(ctx, item.ID, text); err != nil {
+				log.Printf("ocr sweep: store %s: %v", item.ID, err)
+			}
+		}
+		if err := s.ocr.MarkAttempted(ctx, item.ID, s.now().Unix()); err != nil {
+			log.Printf("ocr sweep: mark attempted %s: %v", item.ID, err)
+		}
+	}
+	return len(candidates), nil
 }
 
 // ReindexAllContent walks every active file and (re-)builds its content

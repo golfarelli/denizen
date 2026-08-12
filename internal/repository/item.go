@@ -58,7 +58,7 @@ func (r *ItemRepository) GetByIDs(ctx context.Context, ids []string) ([]*model.I
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // likeEscape escapes query for a LIKE ... ESCAPE '\' pattern (SQLite's own
@@ -85,7 +85,7 @@ func (r *ItemRepository) SearchByName(ctx context.Context, ownerID, query string
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // SearchByNameInSubtree is SearchByName scoped to one subtree instead of
@@ -113,7 +113,7 @@ func (r *ItemRepository) SearchByNameInSubtree(ctx context.Context, rootID, quer
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // ListChildren lists the active (non-trashed) direct children of parentID
@@ -127,7 +127,7 @@ func (r *ItemRepository) ListChildren(ctx context.Context, ownerID string, paren
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // ListTrash lists ownerID's trashed items, most recently deleted first.
@@ -140,7 +140,7 @@ func (r *ItemRepository) ListTrash(ctx context.Context, ownerID string) ([]*mode
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // ListTrashedBefore lists every trashed item, across all owners, whose
@@ -156,7 +156,7 @@ func (r *ItemRepository) ListTrashedBefore(ctx context.Context, cutoff int64) ([
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // ListChildrenDeleted lists the trashed direct children of parentID —
@@ -171,7 +171,7 @@ func (r *ItemRepository) ListChildrenDeleted(ctx context.Context, ownerID string
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
 // NameExists reports whether an active item named `name` already exists
@@ -255,10 +255,10 @@ func (r *ItemRepository) ListAllFiles(ctx context.Context) ([]*model.Item, error
 		return nil, err
 	}
 	defer rows.Close()
-	return r.scanAll(rows)
+	return scanAll(rows)
 }
 
-func (r *ItemRepository) scanAll(rows *stdsql.Rows) ([]*model.Item, error) {
+func scanAll(rows *stdsql.Rows) ([]*model.Item, error) {
 	var items []*model.Item
 	for rows.Next() {
 		item, err := scanItem(rows)

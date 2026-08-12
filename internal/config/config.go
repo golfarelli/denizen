@@ -38,6 +38,14 @@ type Config struct {
 	// internal/service.ItemService.PurgeExpiredTrash.
 	TrashPurgeInterval time.Duration
 	TrashRetention     time.Duration
+	// OCRSweepInterval/OCRBatchSize control the background sweep that OCRs
+	// scanned (text-less) PDFs for content search — see
+	// internal/service.ItemService.RunOCRSweep. Kept small/frequent by
+	// default: real OCR is CPU-heavy, so a handful of pages per tick
+	// drains a backlog steadily without hogging a home server for minutes
+	// at a time.
+	OCRSweepInterval time.Duration
+	OCRBatchSize     int64
 	// OnlyOfficeURL, if set, is the base URL of an OnlyOffice Document
 	// Server that unlocks real in-browser Word/Excel/PowerPoint editing
 	// (see internal/onlyoffice) — a genuinely heavy separate service, so
@@ -79,6 +87,8 @@ func Load() Config {
 		UploadGCAfter:      getEnvDuration("DENIZEN_UPLOAD_GC_AFTER", 24*time.Hour),
 		TrashPurgeInterval: getEnvDuration("DENIZEN_TRASH_PURGE_INTERVAL", time.Hour),
 		TrashRetention:     getEnvDuration("DENIZEN_TRASH_RETENTION", 30*24*time.Hour),
+		OCRSweepInterval:   getEnvDuration("DENIZEN_OCR_SWEEP_INTERVAL", 5*time.Minute),
+		OCRBatchSize:       getEnvInt64("DENIZEN_OCR_BATCH_SIZE", 3),
 
 		OnlyOfficeURL:             getEnv("DENIZEN_ONLYOFFICE_URL", ""),
 		OnlyOfficeJWTSecret:       getEnv("DENIZEN_ONLYOFFICE_JWT_SECRET", ""),

@@ -23,11 +23,14 @@ RUN CGO_ENABLED=0 go build -o /out/denizen ./cmd/server
 
 # --- runtime: just the binary -------------------------------------------------
 FROM alpine:latest
-# poppler-utils: pdftotext, used to index PDF content for search
-# (internal/textextract) — its absence degrades gracefully (PDFs just
-# aren't searchable), so this is the only new runtime dependency search
-# needed, not a hard requirement of the app starting at all.
-RUN apk add --no-cache ca-certificates tzdata poppler-utils
+# poppler-utils: pdftotext (real text layer) + pdftoppm (rasterizing a
+# scanned page for OCR) — both used by internal/textextract. tesseract-ocr
+# + its Italian/English word lists: the actual OCR pass for a scanned PDF
+# (see ItemService.RunOCRSweep), this app's documents being mostly Italian
+# with the occasional English one. All of these degrade gracefully if
+# missing (PDFs — scanned or not — just aren't searchable), never a
+# startup requirement.
+RUN apk add --no-cache ca-certificates tzdata poppler-utils tesseract-ocr tesseract-ocr-data-ita tesseract-ocr-data-eng
 COPY --from=backend /out/denizen /usr/local/bin/denizen
 # DENIZEN_DATA_DIR (default ./data — see internal/config/config.go) should
 # be bind- or volume-mounted here in any real deployment; the container

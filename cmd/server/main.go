@@ -71,6 +71,21 @@ func main() {
 		}
 	})
 
+	ocrSweep := func() {
+		attempted, err := a.Items.RunOCRSweep(ctx, int(cfg.OCRBatchSize))
+		if err != nil {
+			log.Printf("OCR sweep: %v", err)
+		} else if attempted > 0 {
+			log.Printf("OCR sweep: attempted %d scanned PDF(s)", attempted)
+		}
+	}
+	// Unlike the two sweeps above, an existing backlog is the expected case
+	// here (every scanned PDF uploaded before OCR existed) — run once right
+	// away instead of waiting a full OCRSweepInterval, then fall into the
+	// normal periodic cadence for whatever comes in afterwards.
+	go ocrSweep()
+	go runPeriodically(ctx, cfg.OCRSweepInterval, ocrSweep)
+
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: a.Handler}
 	go func() {
 		<-ctx.Done()

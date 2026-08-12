@@ -9,6 +9,7 @@ package textextract
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -17,8 +18,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // maxSourceBytes caps how much of a file we'll even attempt to read/convert
@@ -123,6 +126,92 @@ func extractPDF(path string) (string, error) {
 		return "", err
 	}
 	return out.String(), nil
+}
+
+// maxOCRPages caps how many pages of a scanned PDF get OCR'd — OCR is
+// orders of magnitude slower than pdftotext (whole seconds per page on
+// modest hardware), so an unusually long scanned document is truncated
+// rather than tying up the background OCR sweep (ItemService.RunOCRSweep)
+// on one file for minutes. A search index only needs enough of the
+// document to be findable, not every page.
+const maxOCRPages = 30
+
+// ocrTimeout bounds the whole OCR pass for one file — a corrupt or
+// pathological PDF (e.g. one page rendering to an enormous bitmap)
+// shouldn't be able to wedge the sweep indefinitely.
+const ocrTimeout = 5 * time.Minute
+
+// pdftoppmPath/tesseractPath mirror pdftotextPath below: resolved once,
+// missing means "OCR isn't available", not a startup failure — RunOCRSweep
+// simply marks every candidate attempted-with-nothing-found until poppler-
+// utils/tesseract are actually installed (see Dockerfile).
+var pdftoppmPath = sync.OnceValue(func() string {
+	p, err := exec.LookPath("pdftoppm")
+	if err != nil {
+		return ""
+	}
+	return p
+})
+
+var tesseractPath = sync.OnceValue(func() string {
+	p, err := exec.LookPath("tesseract")
+	if err != nil {
+		return ""
+	}
+	return p
+})
+
+// ExtractOCRPDF is extractPDF's fallback for a scanned PDF — one with no
+// real text layer, so pdftotext comes back empty (see
+// ItemService.RunOCRSweep, the only caller: it only ever tries this for a
+// PDF that already came up text-less). Rasterizes each page to a PNG via
+// pdftoppm, then runs tesseract against each page image in turn,
+// concatenating the results — slow (real image recognition, not just
+// parsing embedded text), which is exactly why this runs from a
+// background sweep instead of indexContent's synchronous upload path.
+// Italian + English word lists (see Dockerfile) since this app's real
+// documents are mostly Italian with the occasional English one.
+func ExtractOCRPDF(path string) (string, error) {
+	ppmBin := pdftoppmPath()
+	tessBin := tesseractPath()
+	if ppmBin == "" || tessBin == "" {
+		return "", ErrUnsupported
+	}
+
+	dir, err := os.MkdirTemp("", "denizen-ocr-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), ocrTimeout)
+	defer cancel()
+
+	prefix := filepath.Join(dir, "page")
+	rasterize := exec.CommandContext(ctx, ppmBin,
+		"-png", "-r", "200", "-l", strconv.Itoa(maxOCRPages), path, prefix)
+	if err := rasterize.Run(); err != nil {
+		return "", err
+	}
+
+	pages, err := filepath.Glob(prefix + "-*.png")
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(pages) // pdftoppm zero-pads per run, so this is already page order
+
+	var b strings.Builder
+	for _, page := range pages {
+		cmd := exec.CommandContext(ctx, tessBin, page, "-", "-l", "ita+eng")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		if err := cmd.Run(); err != nil {
+			continue // one unreadable page shouldn't blank out the rest of the document
+		}
+		b.Write(out.Bytes())
+		b.WriteByte('\n')
+	}
+	return b.String(), nil
 }
 
 var slideXMLPattern = regexp.MustCompile(`^ppt/slides/slide\d+\.xml$`)
