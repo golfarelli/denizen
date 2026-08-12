@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { forceEnglishLocale } from './helpers/locale';
+import { registerSecondUser } from './helpers/secondUser';
 
 // Mirrors auth.setup.ts's own ADMIN_USERNAME constant — can't import it
 // directly, Playwright disallows a regular spec importing a *.setup.ts
@@ -10,33 +10,6 @@ let uploadCounter = 0;
 function uniqueName(ext: string): string {
 	uploadCounter += 1;
 	return `user-share-test-${uploadCounter}-${Date.now()}.${ext}`;
-}
-
-// Registers a brand new user through a fresh admin-created invite, in its
-// own browser context (never the admin's own `page` — registering there
-// would overwrite the admin's session, same gotcha share.spec.ts/
-// admin.spec.ts already guard against). Returns that context's own page,
-// logged in for real, plus the username picked (unique per test run so
-// the "Choose a person…" directory dropdown never has stale rows from an
-// earlier test).
-async function registerSecondUser(
-	adminPage: import('@playwright/test').Page,
-	browser: import('@playwright/test').Browser
-): Promise<{ page: import('@playwright/test').Page; username: string }> {
-	await adminPage.goto('/admin');
-	await adminPage.getByRole('button', { name: 'Create invite' }).click();
-	const inviteUrl = await adminPage.locator('#invite-url').inputValue();
-
-	const context = await browser.newContext();
-	await forceEnglishLocale(context);
-	const page = await context.newPage();
-	await page.goto(inviteUrl);
-	const username = `anna-${Date.now()}`;
-	await page.getByLabel('Username').fill(username);
-	await page.getByLabel('Password').fill('another-strong-password-123');
-	await page.getByRole('button', { name: 'Create account' }).click();
-	await expect(page).toHaveURL('/');
-	return { page, username };
 }
 
 test('sharing a file with a specific person: they see it view-only in Shared with me, and losing the grant cuts them off', async ({

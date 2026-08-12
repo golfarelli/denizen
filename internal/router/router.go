@@ -47,6 +47,7 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.Handle("DELETE /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Delete)))
 	mux.Handle("POST /api/v1/items/{id}/restore", requireAuth(http.HandlerFunc(items.Restore)))
 	mux.Handle("POST /api/v1/items/{id}/copy", requireAuth(http.HandlerFunc(items.Copy)))
+	mux.Handle("POST /api/v1/items/{id}/shortcut", requireAuth(http.HandlerFunc(items.CreateShortcut)))
 
 	mux.Handle("GET /api/v1/trash", requireAuth(http.HandlerFunc(items.ListTrash)))
 	mux.Handle("DELETE /api/v1/trash/{id}", requireAuth(http.HandlerFunc(items.DeletePermanently)))

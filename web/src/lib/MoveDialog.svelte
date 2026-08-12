@@ -10,11 +10,21 @@
 
 	// null/empty = closed. An array, not a single item, so the same dialog
 	// covers both "Move" on one row and a bulk-selection "Move" — a rename
-	// never happens here either way (see handleMoveHere), only relocation.
+	// never happens here either way (see handleConfirm), only relocation.
 	// onMoved lets the caller refresh its own listing after a successful
 	// move — unlike ShareDialog, this actually changes the current
 	// folder's contents.
-	let { items = $bindable(null), onMoved }: { items: Item[] | null; onMoved: () => void } = $props();
+	//
+	// mode 'shortcut' reuses this exact same breadcrumb/folder-browsing UI
+	// for "Aggiungi collegamento" instead — same picker, only the confirm
+	// action and copy change (see handleConfirm/the heading below). Bulk
+	// "add a shortcut for every selected item" comes for free from the
+	// same items-array support Move already has.
+	let {
+		items = $bindable(null),
+		mode = 'move',
+		onMoved
+	}: { items: Item[] | null; mode?: 'move' | 'shortcut'; onMoved: () => void } = $props();
 
 	let dialogEl: HTMLDialogElement;
 	let currentFolderId = $state<string | null>(null);
@@ -22,7 +32,7 @@
 	let folders = $state<Item[]>([]);
 	let loading = $state(false);
 	let error = $state('');
-	let moving = $state(false);
+	let confirming = $state(false);
 
 	let movingIds = $derived(new Set((items ?? []).map((i) => i.id)));
 
@@ -72,22 +82,32 @@
 		items = null;
 	}
 
-	async function handleMoveHere() {
+	async function handleConfirm() {
 		if (!items || items.length === 0) return;
-		moving = true;
+		confirming = true;
 		error = '';
 		// Every item keeps its own name — a bulk move never renames, same
-		// as dragging a multi-selection onto a folder in Drive/Nextcloud.
-		// One item's failure (e.g. a name collision the backend rejects)
-		// doesn't stop the rest from moving.
-		const results = await Promise.allSettled(items.map((item) => api.move(item.id, item.name, currentFolderId)));
+		// as dragging a multi-selection onto a folder in Drive/Nextcloud
+		// (and a shortcut's own name is always a fresh snapshot of the
+		// target's regardless — see createShortcut's own comment). One
+		// item's failure (e.g. a name collision the backend rejects)
+		// doesn't stop the rest.
+		const results = await Promise.allSettled(
+			items.map((item) =>
+				mode === 'shortcut' ? api.createShortcut(item.id, currentFolderId) : api.move(item.id, item.name, currentFolderId)
+			)
+		);
 		const failed = results.filter((r) => r.status === 'rejected').length;
-		moving = false;
+		confirming = false;
 		if (failed > 0) {
 			error =
 				failed === items.length
-					? $t('common.errors.couldNotMove')
-					: $t('dialogs.move.errors.someFailed', { count: failed });
+					? mode === 'shortcut'
+						? $t('common.errors.couldNotAddShortcut')
+						: $t('common.errors.couldNotMove')
+					: $t(mode === 'shortcut' ? 'dialogs.shortcut.errors.someFailed' : 'dialogs.move.errors.someFailed', {
+							count: failed
+						});
 		}
 		onMoved();
 		if (failed < items.length) close();
@@ -98,8 +118,10 @@
 	{#if items && items.length > 0}
 		<h2>
 			{items.length === 1
-				? $t('dialogs.move.heading', { name: items[0].name })
-				: $t('dialogs.move.headingMultiple', { count: items.length })}
+				? $t(mode === 'shortcut' ? 'dialogs.shortcut.heading' : 'dialogs.move.heading', { name: items[0].name })
+				: $t(mode === 'shortcut' ? 'dialogs.shortcut.headingMultiple' : 'dialogs.move.headingMultiple', {
+						count: items.length
+					})}
 		</h2>
 
 		<nav class="breadcrumb">
@@ -130,8 +152,10 @@
 
 		<div class="dialog-actions">
 			<button class="btn" onclick={close}>{$t('common.cancel')}</button>
-			<button class="btn btn-primary" onclick={handleMoveHere} disabled={moving}>
-				{moving ? $t('dialogs.move.moving') : $t('dialogs.move.moveHere')}
+			<button class="btn btn-primary" onclick={handleConfirm} disabled={confirming}>
+				{confirming
+					? $t(mode === 'shortcut' ? 'dialogs.shortcut.adding' : 'dialogs.move.moving')
+					: $t(mode === 'shortcut' ? 'dialogs.shortcut.addHere' : 'dialogs.move.moveHere')}
 			</button>
 		</div>
 	{/if}

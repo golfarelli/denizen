@@ -41,6 +41,12 @@ type itemResponse struct {
 	Type      string  `json:"type"`
 	SizeBytes int64   `json:"size_bytes"`
 	MimeType  *string `json:"mime_type,omitempty"`
+	// TargetID, when present, makes this a shortcut — see model.Item's own
+	// comment. Everything else in this response (Name, Type, MimeType,
+	// CanEdit, ...) already describes the shortcut's own row correctly on
+	// its own; the frontend only needs TargetID to know where a click
+	// should actually navigate/open, and to render its badge.
+	TargetID  *string `json:"target_id,omitempty"`
 	CreatedAt int64   `json:"created_at"`
 	UpdatedAt int64   `json:"updated_at"`
 	DeletedAt *int64  `json:"deleted_at,omitempty"`
@@ -75,6 +81,7 @@ func toItemResponse(item *model.Item, callerID string) itemResponse {
 		Type:      string(item.Type),
 		SizeBytes: item.SizeBytes,
 		MimeType:  item.MimeType,
+		TargetID:  item.TargetID,
 		CreatedAt: item.CreatedAt,
 		UpdatedAt: item.UpdatedAt,
 		DeletedAt: item.DeletedAt,
@@ -244,7 +251,7 @@ func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
 // video/PDF preview seeking around doesn't need custom byte-range logic
 // here). Trashed items are readable here too — see Get's own comment.
 func (h *ItemHandler) Content(res http.ResponseWriter, req *http.Request) {
-	item, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), req.PathValue("id"))
+	item, err := h.items.ResolveContentItem(req.Context(), ownerID(req), req.PathValue("id"))
 	if err != nil {
 		httpio.WriteError(res, err)
 		return
@@ -272,10 +279,11 @@ type contentTokenResponse struct {
 // for.
 func (h *ItemHandler) ContentToken(res http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
-	// Same ownership check every other item route already goes through —
-	// confirms the item exists and actually belongs to the caller before
-	// minting anything for it.
-	if _, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), id); err != nil {
+	// Same check Content itself uses — confirms the item exists and is
+	// actually readable by the caller (resolving a shortcut to its real
+	// target first) before minting anything for it, rather than minting a
+	// token for something Content would just reject the moment it's used.
+	if _, err := h.items.ResolveContentItem(req.Context(), ownerID(req), id); err != nil {
 		httpio.WriteError(res, err)
 		return
 	}
@@ -343,6 +351,30 @@ func (h *ItemHandler) Copy(res http.ResponseWriter, req *http.Request) {
 	}
 
 	item, err := h.items.Copy(req.Context(), ownerID(req), req.PathValue("id"), in.ParentID)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
+}
+
+type createShortcutRequest struct {
+	ParentID *string `json:"parent_id"`
+}
+
+// CreateShortcut handles POST /api/v1/items/{id}/shortcut — {id} is the
+// real item being pointed at, parent_id (nil/absent = the caller's own
+// root) is where the new shortcut lands, same "id in the path is the
+// thing acted on, parent_id in the body is the destination" shape Copy
+// above already uses.
+func (h *ItemHandler) CreateShortcut(res http.ResponseWriter, req *http.Request) {
+	var in createShortcutRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+
+	item, err := h.items.CreateShortcut(req.Context(), ownerID(req), req.PathValue("id"), in.ParentID)
 	if err != nil {
 		httpio.WriteError(res, err)
 		return

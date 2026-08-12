@@ -79,8 +79,21 @@ func TestMigrate_ExistingDatabaseUpgradesCleanly(t *testing.T) {
 		rows.Scan(&v)
 		recorded = append(recorded, v)
 	}
-	if len(recorded) != 5 || recorded[0] != 1 || recorded[1] != 2 || recorded[2] != 3 || recorded[3] != 4 || recorded[4] != 5 {
-		t.Fatalf("schema_migrations = %v, want [1 2 3 4 5]", recorded)
+	// Derived from the real migration files, not a hardcoded count — so
+	// adding migration N+1 later doesn't also require updating this
+	// assertion by hand, only the actual set of expected versions (1..N,
+	// in order, nothing skipped or duplicated) still gets checked for real.
+	all, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != len(all) {
+		t.Fatalf("schema_migrations = %v, want %d entries (one per migration file)", recorded, len(all))
+	}
+	for i, v := range recorded {
+		if v != i+1 {
+			t.Fatalf("schema_migrations = %v, want a contiguous 1..%d sequence", recorded, len(all))
+		}
 	}
 
 	// Step 3: opening it a THIRD time must be a clean no-op (idempotent).

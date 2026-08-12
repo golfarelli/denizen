@@ -20,11 +20,11 @@ func NewItemRepository(cn *stdsql.DB) *ItemRepository {
 }
 
 func (r *ItemRepository) Create(ctx context.Context, item *model.Item) error {
-	sql := `INSERT INTO items (id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at)
-	        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	sql := `INSERT INTO items (id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at)
+	        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.cn.ExecContext(ctx, sql,
 		item.ID, item.OwnerID, item.ParentID, item.Name, string(item.Type),
-		item.SizeBytes, item.MimeType, item.Checksum, item.DeletedAt, item.CreatedAt, item.UpdatedAt)
+		item.SizeBytes, item.MimeType, item.Checksum, item.TargetID, item.DeletedAt, item.CreatedAt, item.UpdatedAt)
 	return err
 }
 
@@ -32,7 +32,7 @@ func (r *ItemRepository) Create(ctx context.Context, item *model.Item) error {
 // callers that only want one or the other (nearly everyone) check
 // item.DeletedAt themselves.
 func (r *ItemRepository) GetByID(ctx context.Context, id string) (*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE id = ?`
 	return r.scanOne(r.cn.QueryRowContext(ctx, sql, id))
 }
@@ -47,7 +47,7 @@ func (r *ItemRepository) GetByIDs(ctx context.Context, ids []string) ([]*model.I
 		return nil, nil
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE id IN (` + placeholders + `)`
 	args := make([]any, len(ids))
 	for i, id := range ids {
@@ -77,7 +77,7 @@ func likeEscape(query string) string {
 // match via internal/repository/search.go, and with SearchByNameInSubtree
 // below for anything shared with the caller rather than owned by them).
 func (r *ItemRepository) SearchByName(ctx context.Context, ownerID, query string, limit int) ([]*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE owner_id = ? AND deleted_at IS NULL AND name LIKE ? ESCAPE '\'
 	        ORDER BY updated_at DESC LIMIT ?`
 	rows, err := r.cn.QueryContext(ctx, sql, ownerID, "%"+likeEscape(query)+"%", limit)
@@ -104,7 +104,7 @@ func (r *ItemRepository) SearchByNameInSubtree(ctx context.Context, rootID, quer
 	            SELECT items.id FROM items JOIN subtree ON items.parent_id = subtree.id WHERE items.deleted_at IS NULL
 	        )
 	        SELECT items.id, items.owner_id, items.parent_id, items.name, items.type, items.size_bytes,
-	               items.mime_type, items.checksum, items.deleted_at, items.created_at, items.updated_at
+	               items.mime_type, items.checksum, items.target_id, items.deleted_at, items.created_at, items.updated_at
 	        FROM items JOIN subtree ON items.id = subtree.id
 	        WHERE items.deleted_at IS NULL AND items.name LIKE ? ESCAPE '\'
 	        ORDER BY items.updated_at DESC LIMIT ?`
@@ -119,7 +119,7 @@ func (r *ItemRepository) SearchByNameInSubtree(ctx context.Context, rootID, quer
 // ListChildren lists the active (non-trashed) direct children of parentID
 // (nil = the owner's root) owned by ownerID.
 func (r *ItemRepository) ListChildren(ctx context.Context, ownerID string, parentID *string) ([]*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE owner_id = ? AND parent_id IS ? AND deleted_at IS NULL
 	        ORDER BY type DESC, name ASC` // folders before files, then alphabetical
 	rows, err := r.cn.QueryContext(ctx, sql, ownerID, parentID)
@@ -132,7 +132,7 @@ func (r *ItemRepository) ListChildren(ctx context.Context, ownerID string, paren
 
 // ListTrash lists ownerID's trashed items, most recently deleted first.
 func (r *ItemRepository) ListTrash(ctx context.Context, ownerID string) ([]*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE owner_id = ? AND deleted_at IS NOT NULL
 	        ORDER BY deleted_at DESC`
 	rows, err := r.cn.QueryContext(ctx, sql, ownerID)
@@ -148,7 +148,7 @@ func (r *ItemRepository) ListTrash(ctx context.Context, ownerID string) ([]*mode
 // ListTrash (which is scoped to one owner), used only by the scheduled
 // auto-purge sweep (see ItemService.PurgeExpiredTrash).
 func (r *ItemRepository) ListTrashedBefore(ctx context.Context, cutoff int64) ([]*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE deleted_at IS NOT NULL AND deleted_at < ?
 	        ORDER BY deleted_at ASC`
 	rows, err := r.cn.QueryContext(ctx, sql, cutoff)
@@ -163,7 +163,7 @@ func (r *ItemRepository) ListTrashedBefore(ctx context.Context, cutoff int64) ([
 // the mirror image of ListChildren, used to walk down a trashed folder's
 // subtree (e.g. while restoring it — see internal/service/item.go).
 func (r *ItemRepository) ListChildrenDeleted(ctx context.Context, ownerID string, parentID *string) ([]*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
 	        FROM items WHERE owner_id = ? AND parent_id IS ? AND deleted_at IS NOT NULL
 	        ORDER BY name ASC`
 	rows, err := r.cn.QueryContext(ctx, sql, ownerID, parentID)
@@ -248,8 +248,8 @@ func (r *ItemRepository) HardDelete(ctx context.Context, id string) error {
 // owners — used only by the one-off content-search backfill (see
 // ItemService.ReindexAllContent), everything else scopes to one owner.
 func (r *ItemRepository) ListAllFiles(ctx context.Context) ([]*model.Item, error) {
-	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, deleted_at, created_at, updated_at
-	        FROM items WHERE type = 'file' AND deleted_at IS NULL`
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
+	        FROM items WHERE type = 'file' AND deleted_at IS NULL AND target_id IS NULL`
 	rows, err := r.cn.QueryContext(ctx, sql)
 	if err != nil {
 		return nil, err
@@ -294,10 +294,11 @@ func scanItem(row rowScanner) (*model.Item, error) {
 		itemType  string
 		mimeType  stdsql.NullString
 		checksum  stdsql.NullString
+		targetID  stdsql.NullString
 		deletedAt stdsql.NullInt64
 	)
 	err := row.Scan(&item.ID, &item.OwnerID, &parentID, &item.Name, &itemType,
-		&item.SizeBytes, &mimeType, &checksum, &deletedAt, &item.CreatedAt, &item.UpdatedAt)
+		&item.SizeBytes, &mimeType, &checksum, &targetID, &deletedAt, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -310,6 +311,9 @@ func scanItem(row rowScanner) (*model.Item, error) {
 	}
 	if checksum.Valid {
 		item.Checksum = &checksum.String
+	}
+	if targetID.Valid {
+		item.TargetID = &targetID.String
 	}
 	if deletedAt.Valid {
 		item.DeletedAt = &deletedAt.Int64
