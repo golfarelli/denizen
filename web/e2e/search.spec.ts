@@ -11,7 +11,8 @@ test('the search box finds a file in a different folder by name, and by content'
 
 	const folderName = `Search Folder ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();
 	await folderRow.locator('.item-name').click();

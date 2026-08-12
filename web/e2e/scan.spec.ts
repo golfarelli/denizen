@@ -6,7 +6,8 @@ const PHOTO_PATH = path.join(import.meta.dirname, 'fixtures', 'sample-photo.jpg'
 test('scan two pages and upload as one multi-page PDF', async ({ page }) => {
 	await page.goto('/');
 
-	await page.getByRole('button', { name: '📷 Scan' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'Scan' }).click();
 	const dialog = page.locator('dialog.card[open]');
 	await expect(dialog).toBeVisible();
 

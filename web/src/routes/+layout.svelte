@@ -1,16 +1,19 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import '$lib/styles/app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { auth, clearAuth } from '$lib/auth';
-	import { api } from '$lib/api';
+	import { api, type Item } from '$lib/api';
 	import { me, refreshMe, clearMe } from '$lib/me';
 	import { registerServiceWorker } from '$lib/pwa';
 	import { fullscreen } from '$lib/fullscreen';
 	import { sidebarOpen, closeSidebar } from '$lib/sidebar';
 	import { locale, t, type Locale } from '$lib/i18n';
+	import { walkAncestors } from '$lib/ancestorChain';
+	import { autoExpandFolderIds, treeVersion } from '$lib/folderTree';
+	import FolderTreeItem from '$lib/FolderTreeItem.svelte';
 
 	let { children } = $props();
 
@@ -68,6 +71,86 @@
 		closeSidebar();
 	});
 
+	// The sidebar's own folder tree — root-level folders eagerly (it's the
+	// always-visible base of the tree), everything below that lazily inside
+	// FolderTreeItem.svelte itself as each branch is actually expanded.
+	let rootFolders = $state<Item[] | null>(null);
+	let rootFoldersLoading = $state(false);
+	let homeExpanded = $state(false);
+
+	// Refetches every time Home is (re)expanded — not cached past that,
+	// same as every other node (FolderTreeItem.svelte) — so a folder
+	// created/renamed/moved elsewhere while collapsed shows up correctly
+	// the next time it's opened instead of whatever was true the one time
+	// this happened to run before.
+	async function loadRootFolders() {
+		if (rootFoldersLoading) return;
+		rootFoldersLoading = true;
+		try {
+			const all = await api.listItems(null);
+			rootFolders = all.filter((item) => item.type === 'folder');
+		} catch {
+			rootFolders = [];
+		} finally {
+			rootFoldersLoading = false;
+		}
+	}
+
+	function toggleHome() {
+		homeExpanded = !homeExpanded;
+		if (homeExpanded) loadRootFolders();
+	}
+
+	// A folder-affecting mutation happened somewhere (see lib/folderTree.ts)
+	// — refetch, but only while Home is actually open; a still-collapsed
+	// tree just picks up the change lazily the next time it's expanded.
+	// untrack: loadRootFolders' own guard reads rootFoldersLoading
+	// synchronously (before its first await) — left untracked, that read
+	// happens inside *this* effect's own tracking window and gets picked up
+	// as one of its dependencies, so the guard's own reset back to false
+	// once the fetch finishes would re-trigger this same effect forever.
+	$effect(() => {
+		$treeVersion;
+		if (homeExpanded) untrack(() => loadRootFolders());
+	});
+
+	// Only meaningful on the file browser itself — the breadcrumb (routes/
+	// +page.svelte) is the other thing scoped to this same route+param.
+	let currentFolderId = $derived(
+		$page.url.pathname === '/' ? $page.url.searchParams.get('folder') : null
+	);
+
+	// Reveals wherever the current folder actually is in the tree, however
+	// you got there (typed a URL, opened a folder from search results, ...)
+	// — not just navigation that started from the tree itself. Additive
+	// only (never collapses anything the user already had open), so a
+	// duplicate walk from quick back-to-back navigation is harmless even
+	// without guarding against it landing out of order.
+	$effect(() => {
+		const folderId = currentFolderId;
+		console.log('DEBUG reveal effect tick', Date.now(), folderId);
+		if (folderId) revealInTree(folderId);
+	});
+
+	async function revealInTree(folderId: string): Promise<void> {
+		const chain = await walkAncestors(folderId);
+		// Not ours (reached via a share) — the tree only ever shows the
+		// caller's own drive, same scope as the "Home" nav item itself, so
+		// there's nothing here to reveal.
+		if (chain.length === 0 || !chain[0].owned) return;
+		if (!homeExpanded) {
+			homeExpanded = true;
+			loadRootFolders();
+		}
+		autoExpandFolderIds.update((ids) => {
+			const next = new Set(ids);
+			for (const item of chain) {
+				if (item.id !== folderId) next.add(item.id);
+			}
+			return next;
+		});
+	}
+
 	async function handleLogout() {
 		if ($auth) {
 			await api.logout($auth.refreshToken).catch(() => {
@@ -121,13 +204,51 @@
 			</a>
 
 			<nav class="sidebar-nav">
-				<a href="/" class:active={$page.url.pathname === '/'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<path d="M4 11.5 12 4l8 7.5" stroke-linecap="round" stroke-linejoin="round" />
-						<path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9" stroke-linecap="round" stroke-linejoin="round" />
-					</svg>
-					{$t('common.home')}
-				</a>
+				<div class="tree-root">
+					<div class="tree-row">
+						<button
+							class="tree-toggle"
+							class:tree-toggle-expanded={homeExpanded}
+							aria-expanded={homeExpanded}
+							aria-label={homeExpanded
+								? $t('nav.collapseFolder', { name: $t('common.home') })
+								: $t('nav.expandFolder', { name: $t('common.home') })}
+							onclick={(e) => {
+								e.stopPropagation();
+								toggleHome();
+							}}
+						>
+							<svg width="10" height="10" viewBox="0 0 24 24" aria-hidden="true">
+								<path
+									d="M9 5l7 7-7 7"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.4"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</button>
+						<a href="/" class="tree-name" class:active={$page.url.pathname === '/' && !currentFolderId}>
+							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path d="M4 11.5 12 4l8 7.5" stroke-linecap="round" stroke-linejoin="round" />
+								<path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9" stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+							{$t('common.home')}
+						</a>
+					</div>
+					{#if homeExpanded}
+						<ul class="tree-children">
+							{#if rootFoldersLoading && rootFolders === null}
+								<li class="tree-loading" style:margin-left="1rem">{$t('common.loading')}</li>
+							{:else if rootFolders}
+								{#each rootFolders as folder (folder.id)}
+									<FolderTreeItem item={folder} depth={1} />
+								{/each}
+							{/if}
+						</ul>
+					{/if}
+				</div>
 				<a href="/shares" class:active={$page.url.pathname === '/shares'}>
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 						<circle cx="6" cy="12" r="2.2" />

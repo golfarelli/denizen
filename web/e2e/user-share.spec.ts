@@ -110,7 +110,8 @@ test('sharing a folder offers both the per-person section and a link', async ({ 
 
 	const folderName = `E2E Folder Share ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const row = page.locator('.item-row', { hasText: folderName });
 	await expect(row).toBeVisible();

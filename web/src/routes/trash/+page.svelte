@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Item } from '$lib/api';
+	import { invalidateTree } from '$lib/folderTree';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import SortArrow from '$lib/SortArrow.svelte';
@@ -63,6 +64,10 @@
 		error = '';
 		try {
 			items = await api.listTrash();
+			// A restored folder needs the sidebar tree to pick it back up
+			// (see lib/folderTree.ts) — this is the one place both
+			// handleRestore and handleDeleteForever already funnel through.
+			invalidateTree();
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : $t('trash.errors.couldNotLoad');
 		} finally {

@@ -8,7 +8,8 @@ test('create a folder, navigate into it, and back via breadcrumb', async ({ page
 	// The "+ New folder" flow uses a native prompt() (see routes/+page.svelte)
 	// — Playwright's dialog event is how a real browser lets a test answer one.
 	page.once('dialog', (dialog) => dialog.accept(folderName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();
@@ -19,9 +20,9 @@ test('create a folder, navigate into it, and back via breadcrumb', async ({ page
 	await folderRow.click();
 
 	await expect(page.locator('.breadcrumb').getByText(folderName)).toBeVisible();
-	await expect(page.getByText('This folder is empty. Drop files here, or use "+ Upload".')).toBeVisible();
+	await expect(page.getByText('This folder is empty. Drop files here, or use "+ New".')).toBeVisible();
 
-	await page.getByRole('button', { name: 'Home' }).click();
+	await page.locator('.breadcrumb').getByRole('button', { name: 'Home' }).click();
 	await expect(folderRow).toBeVisible();
 });
 
@@ -32,7 +33,8 @@ test('rename a folder', async ({ page }) => {
 	const renamedName = 'E2E After Rename';
 
 	page.once('dialog', (dialog) => dialog.accept(originalName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const folderRow = page.locator('.item-row', { hasText: originalName });
 	await expect(folderRow).toBeVisible();
@@ -64,12 +66,14 @@ test('the row action menu is not clipped by a short item list', async ({ page })
 	// `overflow: hidden` used to clip it in (see app.css).
 	const containerName = `E2E Short List ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(containerName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 	await page.locator('.item-row', { hasText: containerName }).click();
 
 	const onlyItemName = 'Only Item';
 	page.once('dialog', (dialog) => dialog.accept(onlyItemName));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const row = page.locator('.item-row', { hasText: onlyItemName });
 	await expect(row).toBeVisible();
@@ -108,7 +112,8 @@ test('the row action menu closes on outside click', async ({ page }) => {
 
 	const name = `E2E Menu Close ${Date.now()}`;
 	page.once('dialog', (dialog) => dialog.accept(name));
-	await page.getByRole('button', { name: '+ New folder' }).click();
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
 
 	const row = page.locator('.item-row', { hasText: name });
 	await expect(row).toBeVisible();
