@@ -76,7 +76,7 @@ func main() {
 		if err != nil {
 			log.Printf("OCR sweep: %v", err)
 		} else if attempted > 0 {
-			log.Printf("OCR sweep: attempted %d scanned PDF(s)", attempted)
+			log.Printf("OCR sweep: attempted %d file(s)", attempted)
 		}
 	}
 	// Unlike the two sweeps above, an existing backlog is the expected case
