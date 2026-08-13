@@ -140,14 +140,18 @@ input {
 	color: var(--color-text-muted);
 }
 
-.field input {
+.field input,
+.field select {
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
 	padding: var(--space-2) var(--space-3);
 	background: var(--color-bg);
+	color: inherit;
+	font: inherit;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
 	outline: 2px solid var(--color-accent);
 	outline-offset: -1px;
 }
@@ -1063,7 +1067,7 @@ main.fullscreen {
 	max-width: 22rem;
 }
 
-.search-box svg {
+.search-box .search-icon {
 	position: absolute;
 	left: var(--space-3);
 	top: 50%;
@@ -1077,7 +1081,28 @@ main.fullscreen {
 	border: 1px solid var(--color-border);
 	background: var(--color-surface);
 	border-radius: 999px;
-	padding: var(--space-2) var(--space-3) var(--space-2) 2.25rem;
+	padding: var(--space-2) 2.25rem;
+}
+
+/* The "sliders" advanced-search trigger — right side of the box, same
+   spot Drive's own icon sits, mirroring .search-icon's own left-side
+   positioning. */
+.advanced-search-btn {
+	position: absolute;
+	right: var(--space-1);
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--color-text-muted);
+	border-color: transparent;
+	background: none;
+}
+
+.advanced-search-btn:hover {
+	background: var(--color-border);
+}
+
+.advanced-search-btn.active {
+	color: var(--color-accent);
 }
 
 .search-box input:focus {
@@ -1246,6 +1271,48 @@ dialog::backdrop {
 	color: var(--color-text-muted);
 	font-size: 0.9rem;
 	margin-top: 0;
+}
+
+/* Active advanced-search filters, shown as removable pills above the
+   results — a second surface for the exact same state
+   AdvancedSearchDialog's own selects set, not a separate input. */
+.search-filter-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+}
+
+.chip {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	border: 1px solid var(--color-accent);
+	background: var(--color-accent-soft);
+	color: var(--color-accent);
+	border-radius: 999px;
+	padding: var(--space-1) var(--space-3);
+	font-size: 0.85rem;
+	cursor: pointer;
+}
+
+.chip:hover {
+	filter: brightness(0.95);
+}
+
+.chip-clear {
+	border: none;
+	background: none;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	text-decoration: underline;
+	cursor: pointer;
+	padding: var(--space-1) var(--space-2);
+}
+
+.chip-clear:hover {
+	color: var(--color-text);
 }
 
 /* Per-row action menu (the "⋮" kebab button and its dropdown) — a plain

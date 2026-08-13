@@ -18,6 +18,8 @@
 	// landing card, where it's the one focal element on an otherwise
 	// mostly empty page) pass a larger CSS length instead of fighting this
 	// component's own scoped styles from outside.
+	import { fileKind, type FileKind } from '$lib/fileKind';
+
 	let {
 		type,
 		name,
@@ -25,68 +27,7 @@
 		size = '1.75rem'
 	}: { type: 'file' | 'folder'; name: string; mimeType?: string; size?: string } = $props();
 
-	const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic', 'avif']);
-	const VIDEO_EXT = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v']);
-	const AUDIO_EXT = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac']);
-	const ARCHIVE_EXT = new Set(['zip', 'rar', '7z', 'tar', 'gz', 'bz2']);
-	// Mirrors file/[id]/+page.svelte's own TEXT_EXTENSIONS — kept as a
-	// separate copy rather than a shared import since the two lists serve
-	// different purposes (this one only ever picks a color/label, that one
-	// decides which viewer component loads) and drifting slightly apart
-	// (e.g. this one not needing 'csv', which is folded into 'excel'
-	// instead) is fine.
-	const TEXT_EXT = new Set([
-		'txt',
-		'md',
-		'markdown',
-		'json',
-		'log',
-		'yaml',
-		'yml',
-		'xml',
-		'html',
-		'htm',
-		'css',
-		'js',
-		'ts',
-		'ini',
-		'conf',
-		'toml',
-		'sh',
-		'go',
-		'py'
-	]);
-
-	type Kind =
-		| 'folder'
-		| 'word'
-		| 'excel'
-		| 'powerpoint'
-		| 'pdf'
-		| 'image'
-		| 'video'
-		| 'audio'
-		| 'archive'
-		| 'text'
-		| 'generic';
-
-	function kindOf(): Kind {
-		if (type === 'folder') return 'folder';
-		const mime = mimeType ?? '';
-		const ext = name.split('.').pop()?.toLowerCase() ?? '';
-		if (ext === 'docx' || ext === 'doc') return 'word';
-		if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') return 'excel';
-		if (ext === 'pptx' || ext === 'ppt') return 'powerpoint';
-		if (ext === 'pdf' || mime === 'application/pdf') return 'pdf';
-		if (mime.startsWith('image/') || IMAGE_EXT.has(ext)) return 'image';
-		if (mime.startsWith('video/') || VIDEO_EXT.has(ext)) return 'video';
-		if (mime.startsWith('audio/') || AUDIO_EXT.has(ext)) return 'audio';
-		if (ARCHIVE_EXT.has(ext)) return 'archive';
-		if (mime.startsWith('text/') || TEXT_EXT.has(ext)) return 'text';
-		return 'generic';
-	}
-
-	const COLORS: Record<Kind, string> = {
+	const COLORS: Record<FileKind, string> = {
 		folder: '#f2b429',
 		word: '#3b6fe0',
 		excel: '#1f9d55',
@@ -100,7 +41,7 @@
 		generic: '#9095a3'
 	};
 
-	const LABELS: Partial<Record<Kind, string>> = {
+	const LABELS: Partial<Record<FileKind, string>> = {
 		word: 'DOC',
 		excel: 'XLS',
 		powerpoint: 'PPT',
@@ -109,7 +50,7 @@
 		text: 'TXT'
 	};
 
-	let kind = $derived(kindOf());
+	let kind = $derived(fileKind(type, name, mimeType));
 	let color = $derived(COLORS[kind]);
 	let label = $derived(LABELS[kind]);
 </script>
