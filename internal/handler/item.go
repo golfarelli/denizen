@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golfarelli/denizen/internal/apperr"
+	"github.com/golfarelli/denizen/internal/blanktemplates"
 	"github.com/golfarelli/denizen/internal/httpio"
 	"github.com/golfarelli/denizen/internal/middleware"
 	"github.com/golfarelli/denizen/internal/model"
@@ -111,27 +112,38 @@ type createItemRequest struct {
 	ParentID *string `json:"parent_id"`
 }
 
-// Create currently only supports creating folders — a file needs bytes, not
-// just a name, so files are created via the (upcoming) upload endpoint
-// instead. The request still carries "type" so that endpoint's shape isn't
-// a surprise later.
+// Create makes a folder ("type": "folder") or a new blank Word/Excel/
+// PowerPoint document ("type": one of blanktemplates.MimeTypes' own keys,
+// "docx"/"xlsx"/"pptx") — any other file needs real bytes, not just a
+// name, so those are still created via the upload endpoint instead.
 func (h *ItemHandler) Create(res http.ResponseWriter, req *http.Request) {
 	var in createItemRequest
 	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
 		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
 		return
 	}
-	if in.Type != string(model.ItemTypeFolder) {
-		httpio.WriteError(res, apperr.Validation(`type must be "folder" (files are created via upload)`))
+
+	if in.Type == string(model.ItemTypeFolder) {
+		item, err := h.items.CreateFolder(req.Context(), ownerID(req), in.ParentID, in.Name)
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
 		return
 	}
 
-	item, err := h.items.CreateFolder(req.Context(), ownerID(req), in.ParentID, in.Name)
-	if err != nil {
-		httpio.WriteError(res, err)
+	if _, ok := blanktemplates.MimeTypes[in.Type]; ok {
+		item, err := h.items.CreateBlankDocument(req.Context(), ownerID(req), in.ParentID, in.Type, in.Name)
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
 		return
 	}
-	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
+
+	httpio.WriteError(res, apperr.Validation(`type must be "folder", "docx", "xlsx", or "pptx" (any other file is created via upload)`))
 }
 
 // List handles GET /api/v1/items?parent_id=... — parent_id omitted or empty

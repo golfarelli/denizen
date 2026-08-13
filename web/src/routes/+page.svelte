@@ -600,6 +600,35 @@
 		}
 	}
 
+	// No naming prompt, unlike handleNewFolder above — same as Drive's own
+	// "New > Google Docs" flow, straight into the editor with a default
+	// name rather than asking first; the name is just as renameable
+	// afterward as anything else. Navigates instead of reloading the
+	// current listing (openFile, same as double-clicking any other file)
+	// since the whole point is landing in OnlyOffice immediately — see
+	// routes/file/[id]/+page.svelte's own OnlyOfficeViewer dispatch, which
+	// needs nothing extra here to pick a docx/xlsx/pptx up as editable.
+	const BLANK_DOCUMENT_DEFAULT_NAME_KEYS = {
+		docx: 'fileBrowser.newDocxDefaultName',
+		xlsx: 'fileBrowser.newXlsxDefaultName',
+		pptx: 'fileBrowser.newPptxDefaultName'
+	} as const;
+
+	const BLANK_DOCUMENT_MENU_LABEL_KEYS = {
+		docx: 'fileBrowser.newDocxPlain',
+		xlsx: 'fileBrowser.newXlsxPlain',
+		pptx: 'fileBrowser.newPptxPlain'
+	} as const;
+
+	async function handleNewBlankDocument(ext: keyof typeof BLANK_DOCUMENT_DEFAULT_NAME_KEYS) {
+		try {
+			const item = await api.createBlankDocument(ext, $t(BLANK_DOCUMENT_DEFAULT_NAME_KEYS[ext]), currentFolderId);
+			openFile(item.id);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $t('fileBrowser.errors.couldNotCreateDocument');
+		}
+	}
+
 	async function handleDelete(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
@@ -996,6 +1025,21 @@
 						</svg>
 						{$t('fileBrowser.newFolderPlain')}
 					</button>
+					{#each ['docx', 'xlsx', 'pptx'] as const as ext}
+						<button
+							role="menuitem"
+							onclick={() => {
+								newMenuOpen = false;
+								handleNewBlankDocument(ext);
+							}}
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+								<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
+								<path d="M14 3v4h4" stroke-linejoin="round" />
+							</svg>
+							{$t(BLANK_DOCUMENT_MENU_LABEL_KEYS[ext])}
+						</button>
+					{/each}
 				</div>
 			{/if}
 		</div>
@@ -1436,6 +1480,21 @@
 			</svg>
 			{$t('fileBrowser.newFolderPlain')}
 		</button>
+		{#each ['docx', 'xlsx', 'pptx'] as const as ext}
+			<button
+				role="menuitem"
+				onclick={() => {
+					fabMenuOpen = false;
+					handleNewBlankDocument(ext);
+				}}
+			>
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+					<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
+					<path d="M14 3v4h4" stroke-linejoin="round" />
+				</svg>
+				{$t(BLANK_DOCUMENT_MENU_LABEL_KEYS[ext])}
+			</button>
+		{/each}
 		<button class="dropdown-menu-cancel" onclick={() => (fabMenuOpen = false)}>{$t('common.cancel')}</button>
 	</div>
 {/if}

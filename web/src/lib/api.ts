@@ -222,6 +222,12 @@ export const api = {
 	createFolder: (name: string, parentId: string | null) =>
 		req<Item>('/api/v1/items', jsonInit({ type: 'folder', name, parent_id: parentId })),
 
+	// ext is 'docx' | 'xlsx' | 'pptx' — same endpoint as createFolder, a
+	// blank Word/Excel/PowerPoint document instead (see internal/
+	// blanktemplates). name must already end with .{ext}.
+	createBlankDocument: (ext: string, name: string, parentId: string | null) =>
+		req<Item>('/api/v1/items', jsonInit({ type: ext, name, parent_id: parentId })),
+
 	move: (id: string, name: string, parentId: string | null) =>
 		req<Item>(`/api/v1/items/${id}`, jsonInit({ name, parent_id: parentId }, 'PATCH')),
 
