@@ -8,7 +8,16 @@
 	import BulkShareDialog from '$lib/BulkShareDialog.svelte';
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import ScanDialog from '$lib/ScanDialog.svelte';
+	import AdvancedSearchDialog from '$lib/AdvancedSearchDialog.svelte';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import { fileKind } from '$lib/fileKind';
+	import {
+		dateFilterCutoff,
+		isSearchFilterActive,
+		type TypeFilter,
+		type DateFilter,
+		type OwnerFilter
+	} from '$lib/searchFilters';
 	import { copyShareLink } from '$lib/copyShareLink';
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import { viewMode } from '$lib/viewMode';
@@ -83,6 +92,56 @@
 	let searchResults = $state<Item[] | null>(null);
 	let searching = $state(false);
 
+	// Advanced search's own filters — entirely client-side, over whatever
+	// searchResults already holds. The backend caps a search at 50 results
+	// (see ItemService's own searchResultLimit comment: "plenty for a
+	// personal-scale drive"), so filtering after the fact rather than
+	// pushing type/date/owner down into the query is a deliberate
+	// simplification riding on that same assumption, not a separate one —
+	// ponytail: a query matching more than 50 things *and* needing a
+	// filter to find the right one is the case this would miss, add
+	// server-side filtering if that combination ever actually comes up.
+	let advancedSearchOpen = $state(false);
+	let searchTypeFilter = $state<TypeFilter>('any');
+	let searchDateFilter = $state<DateFilter>('any');
+	let searchOwnerFilter = $state<OwnerFilter>('any');
+
+	let filteredSearchResults = $derived.by(() => {
+		if (searchResults === null) return null;
+		const cutoff = dateFilterCutoff(searchDateFilter);
+		return searchResults.filter((item) => {
+			if (searchTypeFilter !== 'any' && fileKind(item.type, item.name, item.mime_type) !== searchTypeFilter) return false;
+			if (searchOwnerFilter === 'mine' && !item.owned) return false;
+			if (searchOwnerFilter === 'shared' && item.owned) return false;
+			if (cutoff !== null && item.updated_at < cutoff) return false;
+			return true;
+		});
+	});
+
+	// Each active filter's own chip label (routes' own results-chips row,
+	// mirroring the advanced-search dialog's own option labels one to
+	// one — a plain capitalized-key lookup since every TypeFilter/
+	// DateFilter/OwnerFilter value already matches its i18n key's own
+	// suffix exactly, e.g. 'word' -> 'dialogs.advancedSearch.typeWord').
+	function capitalize(s: string): string {
+		return s.charAt(0).toUpperCase() + s.slice(1);
+	}
+	function typeFilterLabel(filter: TypeFilter): string {
+		return $t(`dialogs.advancedSearch.type${capitalize(filter)}`);
+	}
+	function dateFilterLabel(filter: DateFilter): string {
+		return $t(`dialogs.advancedSearch.modified${capitalize(filter)}`);
+	}
+	function ownerFilterLabel(filter: OwnerFilter): string {
+		return $t(`dialogs.advancedSearch.owner${capitalize(filter)}`);
+	}
+
+	function clearSearchFilters() {
+		searchTypeFilter = 'any';
+		searchDateFilter = 'any';
+		searchOwnerFilter = 'any';
+	}
+
 	// Not persisted (unlike $viewMode, see lib/viewMode.ts) — resets to
 	// name/ascending each visit, same as most desktop file managers do
 	// rather than remembering a sort that might not make sense next time.
@@ -98,7 +157,7 @@
 		}
 	}
 
-	let visibleItems = $derived(sortItems(searchResults ?? items, sortField, sortDirection));
+	let visibleItems = $derived(sortItems(filteredSearchResults ?? items, sortField, sortDirection));
 	let selectedItems = $derived(visibleItems.filter((item) => selectedIds.has(item.id)));
 
 	function toggleSelect(id: string, event?: Event) {
@@ -503,6 +562,9 @@
 	$effect(() => {
 		if ($auth) load(currentFolderId);
 		searchQuery = ''; // a filter scoped to the folder you were just in shouldn't silently apply to the one you navigate to next
+		searchTypeFilter = 'any'; // same reasoning — advanced search filters from a previous search shouldn't linger into the next one
+		searchDateFilter = 'any';
+		searchOwnerFilter = 'any';
 		clearSelection(); // a selection from the folder you were just in shouldn't silently apply to the one you navigate to next either
 	});
 
@@ -811,7 +873,7 @@
 <div class="toolbar">
 	<h1 style="margin:0">{$t('fileBrowser.title')}</h1>
 	<div class="search-box">
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+		<svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 			<circle cx="11" cy="11" r="6" />
 			<path d="m20 20-3.5-3.5" stroke-linecap="round" />
 		</svg>
@@ -821,6 +883,19 @@
 			bind:value={searchQuery}
 			aria-label={$t('fileBrowser.searchAriaLabel')}
 		/>
+		<button
+			class="icon-btn advanced-search-btn"
+			class:active={isSearchFilterActive(searchTypeFilter, searchDateFilter, searchOwnerFilter)}
+			aria-label={$t('fileBrowser.advancedSearchAriaLabel')}
+			onclick={() => (advancedSearchOpen = true)}
+		>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+				<path d="M4 7h9M17 7h3M4 12h3M9 12h11M4 17h13M19 17h1" stroke-linecap="round" />
+				<circle cx="14" cy="7" r="2" fill="var(--color-bg)" stroke="currentColor" stroke-width="1.5" />
+				<circle cx="7" cy="12" r="2" fill="var(--color-bg)" stroke="currentColor" stroke-width="1.5" />
+				<circle cx="16" cy="17" r="2" fill="var(--color-bg)" stroke="currentColor" stroke-width="1.5" />
+			</svg>
+		</button>
 	</div>
 	<SortMenu
 		fields={[
@@ -928,7 +1003,32 @@
 </div>
 
 {#if searchResults !== null}
-	<p class="hint">{$t('fileBrowser.searchResultsHint', { query: searchQuery.trim(), count: searchResults.length })}</p>
+	<p class="hint">
+		{$t('fileBrowser.searchResultsHint', { query: searchQuery.trim(), count: (filteredSearchResults ?? []).length })}
+	</p>
+	{#if isSearchFilterActive(searchTypeFilter, searchDateFilter, searchOwnerFilter)}
+		<div class="search-filter-chips">
+			{#if searchTypeFilter !== 'any'}
+				<button class="chip" onclick={() => (searchTypeFilter = 'any')}>
+					{typeFilterLabel(searchTypeFilter)}
+					<span aria-hidden="true">✕</span>
+				</button>
+			{/if}
+			{#if searchDateFilter !== 'any'}
+				<button class="chip" onclick={() => (searchDateFilter = 'any')}>
+					{dateFilterLabel(searchDateFilter)}
+					<span aria-hidden="true">✕</span>
+				</button>
+			{/if}
+			{#if searchOwnerFilter !== 'any'}
+				<button class="chip" onclick={() => (searchOwnerFilter = 'any')}>
+					{ownerFilterLabel(searchOwnerFilter)}
+					<span aria-hidden="true">✕</span>
+				</button>
+			{/if}
+			<button class="chip-clear" onclick={clearSearchFilters}>{$t('fileBrowser.clearFilters')}</button>
+		</div>
+	{/if}
 {/if}
 
 {#if selectedIds.size > 0}
@@ -1351,3 +1451,9 @@
 	}}
 />
 <ScanDialog bind:open={scanOpen} onScanned={handleScanned} />
+<AdvancedSearchDialog
+	bind:open={advancedSearchOpen}
+	bind:typeFilter={searchTypeFilter}
+	bind:dateFilter={searchDateFilter}
+	bind:ownerFilter={searchOwnerFilter}
+/>
