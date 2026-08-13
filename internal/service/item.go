@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golfarelli/denizen/internal/apperr"
+	"github.com/golfarelli/denizen/internal/blanktemplates"
 	"github.com/golfarelli/denizen/internal/idgen"
 	"github.com/golfarelli/denizen/internal/model"
 	"github.com/golfarelli/denizen/internal/repository"
@@ -740,6 +742,89 @@ func (s *ItemService) CreateShortcut(ctx context.Context, callerID, targetID str
 	if err := s.items.Create(ctx, item); err != nil {
 		return nil, err
 	}
+	return item, nil
+}
+
+// CreateBlankDocument creates a new, genuinely empty Word/Excel/
+// PowerPoint file (internal/blanktemplates) — the file browser's "+ New"
+// -> "New Word document"/"New spreadsheet"/"New presentation" action,
+// which needs a real file with real bytes to open in OnlyOffice at all
+// (there's no "create straight into the editor" flow without one). ext
+// selects the template ("docx"/"xlsx"/"pptx"); name must already end with
+// that same extension — the Config handler (internal/handler/
+// onlyoffice.go) derives what kind of document this is from the item's
+// own Name at open time, not from anything stored here, so a mismatch
+// would silently break editing later instead of failing loudly now.
+func (s *ItemService) CreateBlankDocument(ctx context.Context, callerID string, parentID *string, ext, name string) (*model.Item, error) {
+	content, ok := blanktemplates.Bytes(ext)
+	if !ok {
+		return nil, apperr.Validation("unsupported document type")
+	}
+	if err := validateName(name); err != nil {
+		return nil, err
+	}
+	name = strings.TrimSpace(name)
+	if !strings.HasSuffix(strings.ToLower(name), "."+ext) {
+		return nil, apperr.Validation("name must end with ." + ext)
+	}
+
+	ownerID, err := s.ValidateFolder(ctx, callerID, parentID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.CheckQuota(ctx, ownerID, int64(len(content))); err != nil {
+		return nil, err
+	}
+
+	username, err := s.username(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	folderPath, err := s.folderPath(ctx, ownerID, username, parentID)
+	if err != nil {
+		return nil, err
+	}
+	finalName, err := s.uniqueName(ctx, ownerID, parentID, model.ItemTypeFile, name, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Disk first, then the DB row — same order/rollback shape as
+	// CreateFolder above, for the same reason.
+	targetPath := filepath.Join(folderPath, finalName)
+	if _, err := s.storage.WriteFile(targetPath, bytes.NewReader(content)); err != nil {
+		return nil, err
+	}
+	checksum, err := s.storage.Checksum(targetPath)
+	if err != nil {
+		_ = s.storage.Remove(targetPath)
+		return nil, err
+	}
+
+	now := s.now().Unix()
+	mimeType := blanktemplates.MimeTypes[ext]
+	item := &model.Item{
+		ID:        idgen.New(),
+		OwnerID:   ownerID,
+		ParentID:  parentID,
+		Name:      finalName,
+		Type:      model.ItemTypeFile,
+		SizeBytes: int64(len(content)),
+		MimeType:  &mimeType,
+		Checksum:  &checksum,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.items.Create(ctx, item); err != nil {
+		_ = s.storage.Remove(targetPath)
+		return nil, err
+	}
+	if err := s.users.IncrementStorageUsed(ctx, ownerID, item.SizeBytes); err != nil {
+		return nil, err
+	}
+	// No indexContent call — a genuinely blank document has nothing worth
+	// indexing yet; the first real save (OnlyOffice's callback ->
+	// ReplaceContent) indexes it once there's real content.
 	return item, nil
 }
 
