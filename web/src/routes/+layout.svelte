@@ -283,6 +283,18 @@
 					{$t('nav.trash')}
 				</a>
 				</div>
+				<!-- Outside .sidebar-nav-primary on purpose: unlike Home/Shares/
+				     Shared with me/Trash, this one has no .bottom-tabbar
+				     counterpart (that stayed scoped to the four it was built
+				     for — see feature/bottom-tabbar), so it stays reachable via
+				     the drawer at every width, mobile included. -->
+				<a href="/recent" class:active={$page.url.pathname === '/recent'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<circle cx="12" cy="12" r="9" />
+						<path d="M12 7v5l3.5 2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					{$t('nav.recent')}
+				</a>
 				{#if $me?.is_admin}
 					<a href="/admin" class:active={$page.url.pathname === '/admin'}>
 						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

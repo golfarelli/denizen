@@ -39,17 +39,18 @@
 	let onlyOffice = $state<OnlyOfficeStatus | null>(null);
 
 	// Set by whichever list navigated here (routes/+page.svelte, routes/
-	// trash/+page.svelte, routes/shares/+page.svelte) so "Back" returns to
-	// where the user actually came from — a real folder id, or one of the
-	// two fixed non-folder lists that also open files this way now — not
-	// always the root. Falls back to root for a direct link/bookmark that
-	// never went through any of them.
+	// trash/+page.svelte, routes/shares/+page.svelte, routes/recent/
+	// +page.svelte) so "Back" returns to where the user actually came from
+	// — a real folder id, or one of the fixed non-folder lists that also
+	// open files this way now — not always the root. Falls back to root
+	// for a direct link/bookmark that never went through any of them.
 	let backHref = $derived.by(() => {
 		const from = $page.url.searchParams.get('from');
 		if (!from) return '/';
 		if (from === 'trash') return '/trash';
 		if (from === 'shares') return '/shares';
 		if (from === 'shared-with-me') return '/shared-with-me';
+		if (from === 'recent') return '/recent';
 		return `/?folder=${encodeURIComponent(from)}`;
 	});
 

@@ -458,6 +458,16 @@ func (s *ItemService) Thumbnail(ctx context.Context, callerID, id string) ([]byt
 	return data, nil
 }
 
+// ListRecent lists callerID's own most-recently-modified files, across the
+// whole drive rather than one folder — see ItemRepository.ListRecentFiles's
+// own doc comment for the folders-excluded/owned-only scope. Reuses
+// searchResultLimit (Search's own "50 is plenty for a personal drive" cap,
+// see its doc comment below) rather than a second arbitrary number for
+// what's the same kind of bounded listing.
+func (s *ItemService) ListRecent(ctx context.Context, callerID string) ([]*model.Item, error) {
+	return s.items.ListRecentFiles(ctx, callerID, searchResultLimit)
+}
+
 // ListChildren lists the active direct children of parentID (nil = root).
 //
 // callerID is who's asking, not necessarily whose tree gets listed:

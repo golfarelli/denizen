@@ -215,6 +215,11 @@ export const api = {
 
 	getItem: (id: string) => req<Item>(`/api/v1/items/${id}`),
 
+	// The caller's own most-recently-modified files, across the whole drive
+	// — see ItemService.ListRecent's own doc comment for scope (owned
+	// files only, folders excluded).
+	listRecent: () => req<Item[]>('/api/v1/recent'),
+
 	// Name/content search across the caller's whole drive — see
 	// ItemService.Search's own comment for scope and ranking.
 	search: (q: string) => req<Item[]>(`/api/v1/search?q=${encodeURIComponent(q)}`),

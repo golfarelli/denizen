@@ -37,6 +37,9 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	// Name/content search across the caller's whole drive — see
 	// ItemService.Search's own doc comment on scope.
 	mux.Handle("GET /api/v1/search", requireAuth(http.HandlerFunc(items.Search)))
+	// The caller's own most-recently-modified files, across the whole
+	// drive — see ItemHandler.ListRecent's own doc comment.
+	mux.Handle("GET /api/v1/recent", requireAuth(http.HandlerFunc(items.ListRecent)))
 	mux.Handle("GET /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Get)))
 	// The only route on a content token as well as a normal bearer token —
 	// see middleware.RequireAuthOrContentToken and ContentToken's own doc

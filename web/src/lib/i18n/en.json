@@ -39,6 +39,7 @@
 	"common.errors.couldNotDownload": "Could not download this file.",
 	"common.errors.couldNotDeleteSome": "{count} item(s) could not be deleted.",
 
+	"nav.recent": "Recent",
 	"nav.myShares": "My shares",
 	"nav.sharedWithMe": "Shared with me",
 	"nav.trash": "Trash",
@@ -109,6 +110,10 @@
 	"shares.confirmRevokePerson": "Remove {name}'s access to this item?",
 	"shares.errors.couldNotLoad": "Could not load your shares.",
 	"shares.errors.couldNotRevoke": "Could not revoke this share.",
+
+	"recent.hint": "Your most recently modified or uploaded files, across every folder.",
+	"recent.empty": "No recent files.",
+	"recent.errors.couldNotLoad": "Could not load recent files.",
 
 	"sharedWithMe.hint": "Files and folders someone else shared directly with you.",
 	"sharedWithMe.empty": "Nothing has been shared with you yet.",

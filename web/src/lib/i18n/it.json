@@ -39,6 +39,7 @@
 	"common.errors.couldNotDownload": "Impossibile scaricare questo file.",
 	"common.errors.couldNotDeleteSome": "{count} elemento/i non è stato possibile eliminare.",
 
+	"nav.recent": "Recenti",
 	"nav.myShares": "Condivisioni",
 	"nav.sharedWithMe": "Condiviso con me",
 	"nav.trash": "Cestino",
@@ -109,6 +110,10 @@
 	"shares.confirmRevokePerson": "Rimuovere l'accesso di {name} a questo elemento?",
 	"shares.errors.couldNotLoad": "Impossibile caricare le tue condivisioni.",
 	"shares.errors.couldNotRevoke": "Impossibile revocare questa condivisione.",
+
+	"recent.hint": "I tuoi file modificati o caricati più di recente, da tutte le cartelle.",
+	"recent.empty": "Nessun file recente.",
+	"recent.errors.couldNotLoad": "Impossibile caricare i file recenti.",
 
 	"sharedWithMe.hint": "File e cartelle che qualcun altro ha condiviso direttamente con te.",
 	"sharedWithMe.empty": "Non c'è ancora nulla condiviso con te.",

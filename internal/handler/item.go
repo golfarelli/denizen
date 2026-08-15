@@ -199,6 +199,26 @@ func (h *ItemHandler) enrichSharedWith(ctx context.Context, out []itemResponse) 
 	return nil
 }
 
+// ListRecent handles GET /api/v1/recent — the caller's own most recently
+// modified files across the whole drive, for the "Recent" nav item
+// (routes/recent/+page.svelte) — see ItemService.ListRecent's own scope
+// comment. Every row here is Owned by definition (see ListRecentFiles), so
+// unlike List/Search there's no per-row CanEdit to resolve beyond
+// toItemResponse's own default.
+func (h *ItemHandler) ListRecent(res http.ResponseWriter, req *http.Request) {
+	items, err := h.items.ListRecent(req.Context(), ownerID(req))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
 // Search handles GET /api/v1/search?q=... — a name/content match across
 // everything the caller may read, own or shared with them (see
 // ItemService.Search's own doc comment).
