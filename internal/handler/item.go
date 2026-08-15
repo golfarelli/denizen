@@ -276,6 +276,26 @@ func (h *ItemHandler) Content(res http.ResponseWriter, req *http.Request) {
 	serveFileContent(res, req, item, path)
 }
 
+// Thumbnail handles GET /api/v1/items/{id}/thumbnail — a small JPEG preview
+// for the grid view (see routes/+page.svelte's Thumbnail.svelte), for the
+// file types ItemService.Thumbnail actually supports. Behind normal
+// middleware.RequireAuth, not RequireAuthOrContentToken: unlike <video>/
+// <audio> (see ContentToken's own comment), the frontend fetches this with
+// its usual Authorization header and turns the bytes into a blob: URL,
+// exactly like it already does for a single image's own preview (see
+// lib/api.ts's downloadContent) — no direct <img src> to a bearer-token-less
+// URL is ever needed here.
+func (h *ItemHandler) Thumbnail(res http.ResponseWriter, req *http.Request) {
+	data, err := h.items.Thumbnail(req.Context(), ownerID(req), req.PathValue("id"))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.Header().Set("Content-Type", "image/jpeg")
+	res.Header().Set("Cache-Control", "private, max-age=604800, immutable") // a week — cache key already changes on content change, see storage.ThumbnailPath
+	res.Write(data)
+}
+
 type contentTokenResponse struct {
 	Token     string `json:"token"`
 	ExpiresAt int64  `json:"expires_at"`

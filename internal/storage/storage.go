@@ -56,6 +56,51 @@ func (s *Store) TrashPath(username, itemID, originalName string) string {
 	return filepath.Join(s.UserTrashRoot(username), fmt.Sprintf("%s_%s", itemID, originalName))
 }
 
+// ThumbnailPath returns where a cached thumbnail for the given item lives —
+// flat, like TrashPath, and keyed by both the item's id and its current
+// UpdatedAt: a re-upload/edit bumps UpdatedAt (see ItemService.
+// ReplaceContent), which changes this path and so naturally invalidates the
+// stale cached thumbnail without needing to track/delete it explicitly. The
+// old file is simply never read again — see ItemService.Thumbnail.
+// ponytail: orphaned old-UpdatedAt thumbnails are never swept; add a
+// cleanup pass alongside the existing trash-purge sweep if the thumbnail
+// cache's disk footprint ever actually matters.
+func (s *Store) ThumbnailPath(itemID string, updatedAt int64) string {
+	return filepath.Join(s.dataDir, "thumbnails", fmt.Sprintf("%s_%d.jpg", itemID, updatedAt))
+}
+
+// WriteCacheFile writes data to path (creating parent directories as
+// needed) via a temp-file-then-rename, so a concurrent reader (see
+// ItemService.Thumbnail, where two requests can race to regenerate the same
+// missing thumbnail) never observes a partially-written file — os.Rename is
+// atomic on the same filesystem, which this always is (temp file created as
+// a sibling of the destination).
+func (s *Store) WriteCacheFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
 // CreateFolder creates path and any missing parent directories.
 func (s *Store) CreateFolder(path string) error {
 	return os.MkdirAll(path, 0o755)

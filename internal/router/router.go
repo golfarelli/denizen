@@ -43,6 +43,9 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	// comment for why <video>/<audio> need this and nothing else does.
 	mux.Handle("GET /api/v1/items/{id}/content", requireAuthOrContentToken(http.HandlerFunc(items.Content)))
 	mux.Handle("POST /api/v1/items/{id}/content-token", requireAuth(http.HandlerFunc(items.ContentToken)))
+	// Grid-view preview thumbnail — normal bearer auth, not the content-token
+	// route above; see ItemHandler.Thumbnail's own comment on why.
+	mux.Handle("GET /api/v1/items/{id}/thumbnail", requireAuth(http.HandlerFunc(items.Thumbnail)))
 	mux.Handle("PATCH /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Move)))
 	mux.Handle("DELETE /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Delete)))
 	mux.Handle("POST /api/v1/items/{id}/restore", requireAuth(http.HandlerFunc(items.Restore)))

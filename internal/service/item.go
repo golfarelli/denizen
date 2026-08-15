@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -19,6 +20,7 @@ import (
 	"github.com/golfarelli/denizen/internal/repository"
 	"github.com/golfarelli/denizen/internal/storage"
 	"github.com/golfarelli/denizen/internal/textextract"
+	"github.com/golfarelli/denizen/internal/thumbnail"
 )
 
 // ItemService covers folders and (once upload lands) files: creating,
@@ -411,6 +413,49 @@ func (s *ItemService) FilePath(ctx context.Context, item *model.Item) (string, e
 		return s.storage.TrashPath(username, item.ID, item.Name), nil
 	}
 	return s.pathOf(ctx, item, username)
+}
+
+// Thumbnail returns JPEG-encoded thumbnail bytes for id — resolves access
+// the same way ResolveContentItem/Content do (owner, shared grant, or a
+// shortcut's real target; trashed items included, same as FilePath), then
+// serves a cached copy from storage.ThumbnailPath if one already exists for
+// this exact UpdatedAt, generating (and caching) one otherwise. Returns
+// apperr.NotFound, not an error a caller needs to distinguish further, for
+// anything thumbnail.Generate can't handle (unsupported extension, missing
+// pdftoppm, a corrupt file) — the frontend's grid view falls back to its
+// generic per-type icon on any non-2xx here, so "no thumbnail" and "this
+// item doesn't exist" get the same simple treatment on that side.
+func (s *ItemService) Thumbnail(ctx context.Context, callerID, id string) ([]byte, error) {
+	item, err := s.ResolveContentItem(ctx, callerID, id)
+	if err != nil {
+		return nil, err
+	}
+	ext := textextract.ExtFor(item.Name)
+	if !thumbnail.Supported(ext) {
+		return nil, apperr.NotFound
+	}
+
+	cachePath := s.storage.ThumbnailPath(item.ID, item.UpdatedAt)
+	if cached, err := os.ReadFile(cachePath); err == nil {
+		return cached, nil
+	}
+
+	srcPath, err := s.FilePath(ctx, item)
+	if err != nil {
+		return nil, err
+	}
+	data, err := thumbnail.Generate(srcPath, ext)
+	if err != nil {
+		return nil, apperr.NotFound
+	}
+	// Best-effort cache write: a failure here (e.g. disk full) still leaves
+	// a perfectly good thumbnail to return for this one request, it just
+	// means the next request regenerates it too — same tradeoff indexContent
+	// already makes for search-index writes.
+	if err := s.storage.WriteCacheFile(cachePath, data); err != nil {
+		log.Printf("thumbnail: cache write for %s: %v", item.ID, err)
+	}
+	return data, nil
 }
 
 // ListChildren lists the active direct children of parentID (nil = root).
