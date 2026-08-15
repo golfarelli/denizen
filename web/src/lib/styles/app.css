@@ -27,6 +27,7 @@
 
 	--radius: 8px;
 	--radius-lg: 12px;
+	--bottom-tabbar-height: 3.75rem; /* .bottom-tabbar, mobile only — see app.css's own media query */
 	--font-sans:
 		system-ui,
 		-apple-system,
@@ -522,6 +523,45 @@ input {
 		display: flex;
 		padding: 0;
 	}
+}
+
+/* .bottom-tabbar's own static shape — display stays "none" until the
+   max-width: 640px block far below switches it to "flex" (same breakpoint
+   as the FAB and the rest of this file's phone-specific layout, deliberately
+   narrower than the 900px sidebar-becomes-drawer breakpoint above: a fixed
+   bottom nav bar is a phone pattern, not a tablet one). Defined here,
+   ahead of that override, so the override — later in source — is what
+   actually wins; app.css's own convention throughout this file (see .fab's
+   base rule vs. its max-width: 640px flip). */
+.bottom-tabbar {
+	display: none;
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: var(--bottom-tabbar-height);
+	z-index: 30;
+	background: var(--color-bg);
+	border-top: 1px solid var(--color-border);
+	box-shadow: var(--shadow-md);
+}
+
+.bottom-tabbar a {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	color: var(--color-text-muted);
+	font-size: 0.68rem;
+	text-align: center;
+	line-height: 1.15;
+	padding: var(--space-1);
+}
+
+.bottom-tabbar a.active {
+	color: var(--color-accent);
 }
 
 main.with-topbar {
@@ -1547,6 +1587,24 @@ dialog::backdrop {
 	   that's already tight on room. */
 	main.with-topbar {
 		padding: var(--space-4) var(--space-3);
+		/* Extra room so .bottom-tabbar (below) never covers the last row —
+		   same reasoning as .item-list.has-selection's own padding-bottom
+		   for .selection-toolbar. A second declaration, not merged into the
+		   shorthand above, so it's easy to scan as "this one's for the tab
+		   bar" on its own. */
+		padding-bottom: calc(var(--bottom-tabbar-height) + var(--space-4));
+	}
+
+	/* Home/Shares/Shared with me/Trash move to .bottom-tabbar (below) at
+	   this same breakpoint — no point listing them twice in the drawer too.
+	   Admin (outside this wrapper — see routes/+layout.svelte) stays put,
+	   still reachable via the hamburger drawer at any width. */
+	.sidebar-nav-primary {
+		display: none;
+	}
+
+	.bottom-tabbar {
+		display: flex;
 	}
 
 	.item-list-header {
@@ -1586,6 +1644,18 @@ dialog::backdrop {
 
 	.fab {
 		display: flex;
+		/* Lifted above .bottom-tabbar (below), which now occupies the same
+		   bottom edge the FAB used to have all to itself. */
+		bottom: calc(var(--bottom-tabbar-height) + var(--space-3));
+	}
+
+	.fab-menu {
+		/* Same lift as .fab just above, plus its own base offset (see the
+		   unconditional .fab-menu rule this overrides: fab height + its two
+		   gaps) — the FAB's new bottom here isn't visible to a plain var()
+		   reference from that separate rule, so the whole expression is
+		   repeated rather than partially reused. */
+		bottom: calc(var(--bottom-tabbar-height) + var(--space-3) + 3.5rem + var(--space-2));
 	}
 
 	/* .item-row-flex rows (trash/shares/admin/move-picker — see its own
@@ -1845,4 +1915,17 @@ dialog::backdrop {
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
 	overflow: hidden;
+}
+
+/* Deliberately last in the file: this has to win over the max-width: 640px
+   block's ".bottom-tabbar { display: flex }" whenever both are true (narrow
+   viewport AND an active selection), and two same-specificity rules for the
+   same property resolve by source order — .selection-toolbar (routes/
+   +page.svelte) already owns this exact screen edge once a selection
+   exists, same reasoning the FAB already hides for (see its own JS-level
+   condition in +page.svelte) — :has() gets the same result here as a pure
+   CSS rule instead of new state threaded down from that page into this
+   layout just to hide one element. */
+.app-main:has(.item-list.has-selection, .item-grid.has-selection) .bottom-tabbar {
+	display: none;
 }
