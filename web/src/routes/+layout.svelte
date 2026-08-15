@@ -128,7 +128,6 @@
 	// without guarding against it landing out of order.
 	$effect(() => {
 		const folderId = currentFolderId;
-		console.log('DEBUG reveal effect tick', Date.now(), folderId);
 		if (folderId) revealInTree(folderId);
 	});
 
@@ -204,6 +203,14 @@
 			</a>
 
 			<nav class="sidebar-nav">
+				<!-- Home/Shares/Shared with me/Trash — hidden below the mobile
+				     breakpoint (see app.css), where .bottom-tabbar now covers
+				     the same four destinations in one tap instead of
+				     hamburger-then-tap; still the real nav on desktop, which
+				     has no tab bar. Admin (below, outside this wrapper) stays
+				     drawer-only everywhere — it's not one of the four common
+				     destinations the tab bar was built for. -->
+				<div class="sidebar-nav-primary">
 				<div class="tree-root">
 					<div class="tree-row">
 						<button
@@ -275,6 +282,7 @@
 					</svg>
 					{$t('nav.trash')}
 				</a>
+				</div>
 				{#if $me?.is_admin}
 					<a href="/admin" class:active={$page.url.pathname === '/admin'}>
 						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -353,6 +361,51 @@
 			<main class="with-topbar">
 				{@render children()}
 			</main>
+
+			<!-- Mobile only (see the media query in app.css) — the same four
+			     primary destinations already in .sidebar-nav above, reachable
+			     in one tap instead of hamburger-then-tap. The sidebar itself
+			     stays the nav on desktop, where there's no bottom tab bar and
+			     screen width was never the constraint driving this. Hidden
+			     during an active file-list selection via a :has() rule in
+			     app.css — .selection-toolbar (routes/+page.svelte) already
+			     owns that same screen edge then, same reasoning the FAB
+			     already hides for. -->
+			<nav class="bottom-tabbar" aria-label={$t('layout.openMenu')}>
+				<a href="/" class:active={$page.url.pathname === '/' && !currentFolderId}>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<path d="M4 11.5 12 4l8 7.5" stroke-linecap="round" stroke-linejoin="round" />
+						<path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					{$t('common.home')}
+				</a>
+				<a href="/shares" class:active={$page.url.pathname === '/shares'}>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<circle cx="6" cy="12" r="2.2" />
+						<circle cx="17" cy="6" r="2.2" />
+						<circle cx="17" cy="18" r="2.2" />
+						<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
+					</svg>
+					{$t('nav.myShares')}
+				</a>
+				<a href="/shared-with-me" class:active={$page.url.pathname === '/shared-with-me'}>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<circle cx="12" cy="8" r="3.2" />
+						<path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					{$t('nav.sharedWithMe')}
+				</a>
+				<a href="/trash" class:active={$page.url.pathname === '/trash'}>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<path
+							d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					{$t('nav.trash')}
+				</a>
+			</nav>
 		</div>
 	</div>
 {:else}
