@@ -735,11 +735,36 @@ main.fullscreen {
 
 /* Anchors .shortcut-badge to the icon it actually belongs to — a separate
    wrapper from .item-icon/.item-tile-main themselves since those also
-   contain the checkbox/name, which the badge has no business overlapping. */
+   contain the checkbox/name, which the badge has no business overlapping.
+   Fixed size (rather than sizing to content) so every tile in a grid row
+   is the same height whether or not that particular item ends up showing
+   a real thumbnail (see .item-tile-thumb below) instead of the small
+   centered FileIcon glyph — an uneven row of tall/short tiles reads as
+   broken, not "some items have richer previews". List view's own
+   .icon-wrap usage (routes/+page.svelte) stays unaffected: that one never
+   renders a thumbnail, only ever the plain small icon. */
 .icon-wrap {
 	position: relative;
 	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	flex-shrink: 0;
+}
+
+.item-tile .icon-wrap {
+	width: 4.5rem;
+	height: 4.5rem;
+}
+
+/* Fills .icon-wrap edge-to-edge when a real thumbnail loaded (see
+   Thumbnail.svelte) — object-fit: cover crops rather than letterboxes, same
+   as Drive's own grid tiles, since a cropped-but-filled square reads better
+   at this size than a small image floating in empty space. */
+.item-tile-thumb {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: calc(var(--radius) - 2px);
 }
 
 /* The small arrow-in-a-circle overlay marking a row as a shortcut

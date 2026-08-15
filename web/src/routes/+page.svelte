@@ -10,6 +10,7 @@
 	import ScanDialog from '$lib/ScanDialog.svelte';
 	import AdvancedSearchDialog from '$lib/AdvancedSearchDialog.svelte';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import Thumbnail from '$lib/Thumbnail.svelte';
 	import { fileKind } from '$lib/fileKind';
 	import {
 		dateFilterCutoff,
@@ -1394,7 +1395,7 @@
 							ondblclick={() => handleItemDblClick(item)}
 						>
 							<span class="icon-wrap">
-								<FileIcon type={item.type} name={item.name} mimeType={item.mime_type} size="2.75rem" />
+								<Thumbnail id={item.id} type={item.type} name={item.name} mimeType={item.mime_type} />
 								{#if item.target_id}
 									<span class="shortcut-badge" aria-hidden="true">
 										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" aria-hidden="true">

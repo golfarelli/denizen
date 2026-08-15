@@ -257,6 +257,18 @@ export const api = {
 		return res.blob();
 	},
 
+	// Same blob-over-authenticated-fetch shape as downloadContent above —
+	// a thumbnail is small and doesn't need Range streaming, so there's no
+	// reason to reach for the content-token/direct-<img>-src pattern
+	// getContentToken exists for. Throws on any non-2xx (unsupported file
+	// type, none cached/generatable yet, ...) — see Thumbnail.svelte, the
+	// only caller, for the fallback-to-icon behavior that expects this.
+	getThumbnail: async (id: string): Promise<Blob> => {
+		const res = await apiFetch(`/api/v1/items/${id}/thumbnail`);
+		if (!res.ok) throw await parseError(res);
+		return res.blob();
+	},
+
 	// <video>/<audio> can't attach the Authorization header either (same
 	// reason downloadContent above fetches bytes itself) — but unlike an
 	// image or a PDF, a video benefits from real HTTP Range streaming
