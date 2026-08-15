@@ -130,6 +130,24 @@ func (r *ItemRepository) ListChildren(ctx context.Context, ownerID string, paren
 	return scanAll(rows)
 }
 
+// ListRecentFiles lists ownerID's own active files (not folders — a
+// "recent" view is about content you've touched, not a second way to
+// browse the folder tree), most recently modified/created first, capped at
+// limit. Scoped to ownerID only, not anything reached via a share grant —
+// same deliberate v1 scope cut SearchByName's own doc comment already
+// explains for search, kept consistent rather than special-cased here.
+func (r *ItemRepository) ListRecentFiles(ctx context.Context, ownerID string, limit int) ([]*model.Item, error) {
+	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
+	        FROM items WHERE owner_id = ? AND deleted_at IS NULL AND type = 'file'
+	        ORDER BY updated_at DESC LIMIT ?`
+	rows, err := r.cn.QueryContext(ctx, sql, ownerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAll(rows)
+}
+
 // ListTrash lists ownerID's trashed items, most recently deleted first.
 func (r *ItemRepository) ListTrash(ctx context.Context, ownerID string) ([]*model.Item, error) {
 	sql := `SELECT id, owner_id, parent_id, name, type, size_bytes, mime_type, checksum, target_id, deleted_at, created_at, updated_at
