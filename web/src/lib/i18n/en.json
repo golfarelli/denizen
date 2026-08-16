@@ -50,6 +50,7 @@
 	"nav.myShares": "My shares",
 	"nav.sharedWithMe": "Shared with me",
 	"nav.trash": "Trash",
+	"nav.settings": "Settings",
 	"nav.admin": "Admin",
 	"nav.logout": "Log out",
 	"nav.expandFolder": "Expand {name}",
@@ -126,6 +127,11 @@
 	"favorites.hint": "Files and folders you've starred — yours or shared with you.",
 	"favorites.empty": "No favorites yet. Star a file or folder to find it here.",
 	"favorites.errors.couldNotLoad": "Could not load favorites.",
+
+	"settings.title": "Settings",
+	"settings.tabbarHeading": "Bottom tab bar",
+	"settings.tabbarHint": "Home always stays first. Pick what fills the other 3 slots on a phone-width screen.",
+	"settings.tabbarSlot": "Slot {n}",
 
 	"sharedWithMe.hint": "Files and folders someone else shared directly with you.",
 	"sharedWithMe.empty": "Nothing has been shared with you yet.",
