@@ -17,6 +17,8 @@
 	import { newMenuActions } from '$lib/newMenu';
 	import GlobalDialog from '$lib/GlobalDialog.svelte';
 	import { avatarColor } from '$lib/avatarColor';
+	import { tabbarConfig, TAB_POOL } from '$lib/tabbarConfig';
+	import TabIcon from '$lib/TabIcon.svelte';
 
 	let { children } = $props();
 
@@ -323,11 +325,12 @@
 				{/if}
 				<!-- Home/Shares/Shared with me/Trash — hidden below the mobile
 				     breakpoint (see app.css), where .bottom-tabbar now covers
-				     the same four destinations in one tap instead of
-				     hamburger-then-tap; still the real nav on desktop, which
-				     has no tab bar. Admin (below, outside this wrapper) stays
-				     drawer-only everywhere — it's not one of the four common
-				     destinations the tab bar was built for. -->
+				     Home plus whichever 3 of these (or Recent/Favorites) the
+				     user picked in /settings (lib/tabbarConfig.ts) in one tap
+				     instead of hamburger-then-tap; still the real nav on
+				     desktop, which has no tab bar. Admin (below, outside this
+				     wrapper) stays drawer-only everywhere — it's not part of
+				     the tab bar's pool. -->
 				<div class="sidebar-nav-primary">
 				<div class="tree-root">
 					<div class="tree-row">
@@ -419,6 +422,17 @@
 					</svg>
 					{$t('nav.favorites')}
 				</a>
+				<a href="/settings" class:active={$page.url.pathname === '/settings'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<circle cx="12" cy="12" r="3" />
+						<path
+							d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2.06 2.06 0 1 1-2.92 2.92l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56v.17a2.06 2.06 0 1 1-4.12 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2.06 2.06 0 1 1-2.92-2.92l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H4.5a2.06 2.06 0 1 1 0-4.12h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2.06 2.06 0 1 1 2.92-2.92l.06.06a1.7 1.7 0 0 0 1.87.34H10.5a1.7 1.7 0 0 0 1.03-1.56V4.5a2.06 2.06 0 1 1 4.12 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2.06 2.06 0 1 1 2.92 2.92l-.06.06a1.7 1.7 0 0 0-.34 1.87V10.5a1.7 1.7 0 0 0 1.56 1.03h.17a2.06 2.06 0 1 1 0 4.12h-.09a1.7 1.7 0 0 0-1.56 1.03Z"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					{$t('nav.settings')}
+				</a>
 				{#if $me?.is_admin}
 					<a href="/admin" class:active={$page.url.pathname === '/admin'}>
 						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -498,9 +512,10 @@
 				{@render children()}
 			</main>
 
-			<!-- Mobile only (see the media query in app.css) — the same four
-			     primary destinations already in .sidebar-nav above, reachable
-			     in one tap instead of hamburger-then-tap. The sidebar itself
+			<!-- Mobile only (see the media query in app.css) — Home plus the
+			     3 destinations configured in /settings ($tabbarConfig,
+			     lib/tabbarConfig.ts), reachable in one tap instead of
+			     hamburger-then-tap. The sidebar itself
 			     stays the nav on desktop, where there's no bottom tab bar and
 			     screen width was never the constraint driving this. Hidden
 			     during an active file-list selection via a :has() rule in
@@ -515,32 +530,12 @@
 					</svg>
 					{$t('common.home')}
 				</a>
-				<a href="/shares" class:active={$page.url.pathname === '/shares'}>
-					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<circle cx="6" cy="12" r="2.2" />
-						<circle cx="17" cy="6" r="2.2" />
-						<circle cx="17" cy="18" r="2.2" />
-						<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
-					</svg>
-					{$t('nav.myShares')}
-				</a>
-				<a href="/shared-with-me" class:active={$page.url.pathname === '/shared-with-me'}>
-					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<circle cx="12" cy="8" r="3.2" />
-						<path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke-linecap="round" stroke-linejoin="round" />
-					</svg>
-					{$t('nav.sharedWithMe')}
-				</a>
-				<a href="/trash" class:active={$page.url.pathname === '/trash'}>
-					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<path
-							d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-					{$t('nav.trash')}
-				</a>
+				{#each $tabbarConfig as key (key)}
+					<a href={TAB_POOL[key].href} class:active={$page.url.pathname === TAB_POOL[key].href}>
+						<TabIcon kind={key} />
+						{$t(TAB_POOL[key].labelKey)}
+					</a>
+				{/each}
 			</nav>
 		</div>
 	</div>

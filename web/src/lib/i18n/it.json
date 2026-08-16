@@ -50,6 +50,7 @@
 	"nav.myShares": "Condivisioni",
 	"nav.sharedWithMe": "Condiviso con me",
 	"nav.trash": "Cestino",
+	"nav.settings": "Impostazioni",
 	"nav.admin": "Amministrazione",
 	"nav.logout": "Esci",
 	"nav.expandFolder": "Espandi {name}",
@@ -126,6 +127,11 @@
 	"favorites.hint": "File e cartelle che hai contrassegnato con una stella — tuoi o condivisi con te.",
 	"favorites.empty": "Nessun preferito ancora. Contrassegna un file o una cartella con una stella per trovarlo qui.",
 	"favorites.errors.couldNotLoad": "Impossibile caricare i preferiti.",
+
+	"settings.title": "Impostazioni",
+	"settings.tabbarHeading": "Barra di navigazione inferiore",
+	"settings.tabbarHint": "Home resta sempre al primo posto. Scegli cosa occupa gli altri 3 spazi su schermo formato telefono.",
+	"settings.tabbarSlot": "Posizione {n}",
 
 	"sharedWithMe.hint": "File e cartelle che qualcun altro ha condiviso direttamente con te.",
 	"sharedWithMe.empty": "Non c'è ancora nulla condiviso con te.",
