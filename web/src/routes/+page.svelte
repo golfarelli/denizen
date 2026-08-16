@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import { loadPersisted, savePersisted } from '$lib/persistedState';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { newMenuActions } from '$lib/newMenu';
@@ -167,11 +168,17 @@
 		searchOwnerFilter = 'any';
 	}
 
-	// Not persisted (unlike $viewMode, see lib/viewMode.ts) — resets to
-	// name/ascending each visit, same as most desktop file managers do
-	// rather than remembering a sort that might not make sense next time.
-	let sortField = $state<SortField>('name');
-	let sortDirection = $state<SortDirection>('asc');
+	// Persisted (same reasoning as $viewMode in lib/viewMode.ts — see
+	// lib/persistedState.ts's own doc comment) — Fabio asked for this
+	// 2026-08-16, having it reset each visit was more annoying than useful.
+	const storedSort = loadPersisted<{ field: SortField; direction: SortDirection }>('denizen.sort.files', {
+		field: 'name',
+		direction: 'asc'
+	});
+	let sortField = $state<SortField>(storedSort.field);
+	let sortDirection = $state<SortDirection>(storedSort.direction);
+
+	$effect(() => savePersisted('denizen.sort.files', { field: sortField, direction: sortDirection }));
 
 	function toggleSort(field: SortField) {
 		if (sortField === field) {

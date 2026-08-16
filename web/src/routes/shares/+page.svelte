@@ -6,6 +6,7 @@
 	import SkeletonList from '$lib/SkeletonList.svelte';
 	import { t } from '$lib/i18n';
 	import { confirmDialog } from '$lib/dialog';
+	import { loadPersisted, savePersisted } from '$lib/persistedState';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
 
@@ -64,8 +65,14 @@
 	// isn't an Item, it wraps one) — a small local comparator instead.
 	type SortField = 'name' | 'status' | 'expires';
 	type SortDirection = 'asc' | 'desc';
-	let sortField = $state<SortField>('name');
-	let sortDirection = $state<SortDirection>('asc');
+	const storedSort = loadPersisted<{ field: SortField; direction: SortDirection }>('denizen.sort.shares', {
+		field: 'name',
+		direction: 'asc'
+	});
+	let sortField = $state<SortField>(storedSort.field);
+	let sortDirection = $state<SortDirection>(storedSort.direction);
+
+	$effect(() => savePersisted('denizen.sort.shares', { field: sortField, direction: sortDirection }));
 
 	function toggleSort(field: SortField) {
 		if (sortField === field) {

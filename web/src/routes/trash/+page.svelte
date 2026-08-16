@@ -10,15 +10,21 @@
 	import SortMenu from '$lib/SortMenu.svelte';
 	import { t } from '$lib/i18n';
 	import { confirmDialog } from '$lib/dialog';
+	import { loadPersisted, savePersisted } from '$lib/persistedState';
 
 	let items = $state<Item[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 
-	// Same convention as routes/+page.svelte: resets to name/ascending each
-	// visit rather than persisting.
-	let sortField = $state<SortField>('name');
-	let sortDirection = $state<SortDirection>('asc');
+	// Same convention as routes/+page.svelte: persisted across visits.
+	const storedSort = loadPersisted<{ field: SortField; direction: SortDirection }>('denizen.sort.trash', {
+		field: 'name',
+		direction: 'asc'
+	});
+	let sortField = $state<SortField>(storedSort.field);
+	let sortDirection = $state<SortDirection>(storedSort.direction);
+
+	$effect(() => savePersisted('denizen.sort.trash', { field: sortField, direction: sortDirection }));
 
 	function toggleSort(field: SortField) {
 		if (sortField === field) {

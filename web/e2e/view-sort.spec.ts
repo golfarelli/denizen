@@ -69,6 +69,29 @@ test('clicking a column header sorts the list, and clicking again reverses it', 
 	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[2], names[0], names[1]]);
 });
 
+test('sort field and direction survive a reload (lib/persistedState.ts)', async ({ page }) => {
+	await page.goto('/');
+
+	// Switch to Modified/descending — anything other than the default
+	// Name/ascending, so a reload that silently fell back to the default
+	// wouldn't accidentally look like a pass.
+	await page.getByRole('button', { name: 'Modified', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Modified', exact: true }).locator('.sort-arrow')).toBeVisible();
+
+	await page.reload();
+
+	// The column header carries the same active-sort indicator the toolbar
+	// SortMenu trigger does — checking the SortMenu trigger's own label is
+	// the more direct read of persisted state (it's what actually got
+	// written to/read from localStorage), the header arrow is the visible
+	// consequence of the same state.
+	await expect(page.getByRole('button', { name: 'Sort by' })).toContainText('Modified');
+	await expect(page.getByRole('button', { name: 'Modified', exact: true }).locator('.sort-arrow')).toBeVisible();
+	// No cleanup needed — each test gets its own fresh browser context
+	// (storageState is re-applied per test, not carried over), so this
+	// choice doesn't leak into whichever test runs next.
+});
+
 // .item-list-header (the column headers sorting normally hangs off) is
 // display:none below 640px (see app.css) — a real, pre-existing mobile
 // layout choice, not a bug. Sorting still has to be reachable there
