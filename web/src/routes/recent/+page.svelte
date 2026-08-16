@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import SkeletonList from '$lib/SkeletonList.svelte';
 	import { t } from '$lib/i18n';
 
 	// A flat, read-only jump list — every row here is one of the caller's
@@ -69,7 +70,7 @@
 {/if}
 
 {#if loading}
-	<p>{$t('common.loading')}</p>
+	<SkeletonList />
 {:else if items.length === 0}
 	<div class="empty-state">{$t('recent.empty')}</div>
 {:else}

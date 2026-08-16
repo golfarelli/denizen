@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { answerPrompt } from './helpers/dialog';
 
 // Flat "recently modified files, whole drive" list — routes/recent/
 // +page.svelte, backend GET /api/v1/recent (ItemService.ListRecent).
@@ -9,9 +10,9 @@ test('shows uploaded files across folders sorted by recency, opens one, folders 
 	await page.goto('/');
 
 	const folderName = `E2E Recent Folder ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();
 

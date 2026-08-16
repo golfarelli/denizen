@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { newMenuActions } from '$lib/newMenu';
+	import { promptDialog, confirmDialog } from '$lib/dialog';
 	import { api, ApiError, type Item } from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { startUpload } from '$lib/upload';
@@ -11,6 +14,7 @@
 	import AdvancedSearchDialog from '$lib/AdvancedSearchDialog.svelte';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import Thumbnail from '$lib/Thumbnail.svelte';
+	import SkeletonList from '$lib/SkeletonList.svelte';
 	import { fileKind } from '$lib/fileKind';
 	import {
 		dateFilterCutoff,
@@ -74,6 +78,26 @@
 	let moveDialogMode = $state<'move' | 'shortcut'>('move');
 	let sharingItems = $state<Item[] | null>(null);
 	let scanOpen = $state(false);
+
+	// The sidebar's global "+ New" button (routes/+layout.svelte) calls into
+	// these — see lib/newMenu.ts's own doc comment for why the trigger and
+	// its actions live in different components now. Registered only while
+	// this page is actually mounted, so navigating to Trash/Shares (which
+	// don't register anything) correctly hides the button there instead of
+	// leaving it wired to a page that's gone.
+	// $effect, not a one-time onMount: canCreate needs to track
+	// currentFolderCanEdit live as it changes (navigating between folders
+	// with different permissions), not just its value at mount time.
+	$effect(() => {
+		newMenuActions.set({
+			upload: () => fileInput.click(),
+			scan: () => (scanOpen = true),
+			newFolder: () => handleNewFolder(),
+			newBlankDocument: (ext) => handleNewBlankDocument(ext),
+			canCreate: currentFolderCanEdit
+		});
+	});
+	onDestroy(() => newMenuActions.set(null));
 	// Multi-select for bulk actions (Share/Move/Download/Delete) — ids
 	// rather than Items so it survives a `load()` refresh (a fresh array
 	// of Item objects each time) without losing track of what's selected.
@@ -469,28 +493,6 @@
 		};
 	});
 
-	// The desktop toolbar's single "+ Nuovo" button (Upload/Scan/New folder
-	// consolidated into one dropdown, Drive-style, instead of three
-	// always-visible buttons) — same open/close shape as fabMenuOpen above,
-	// just for the desktop-only trigger (.fab itself is mobile-only, see
-	// app.css).
-	let newMenuOpen = $state(false);
-
-	$effect(() => {
-		if (!newMenuOpen) return;
-		function handlePointerDown() {
-			newMenuOpen = false;
-		}
-		function handleKeydown(e: KeyboardEvent) {
-			if (e.key === 'Escape') newMenuOpen = false;
-		}
-		window.addEventListener('click', handlePointerDown);
-		window.addEventListener('keydown', handleKeydown);
-		return () => {
-			window.removeEventListener('click', handlePointerDown);
-			window.removeEventListener('keydown', handleKeydown);
-		};
-	});
 
 	// A local tracking key for the upload progress panel below — doesn't
 	// need to be globally unique or unguessable, just distinct within this
@@ -591,7 +593,7 @@
 	}
 
 	async function handleNewFolder() {
-		const name = prompt($t('fileBrowser.folderNamePrompt'));
+		const name = await promptDialog($t('fileBrowser.folderNamePrompt'), { confirmLabel: $t('common.create') });
 		if (!name) return;
 		try {
 			await api.createFolder(name, currentFolderId);
@@ -633,7 +635,7 @@
 	async function handleDelete(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		if (!confirm($t('common.confirmTrash', { name: item.name }))) return;
+		if (!(await confirmDialog($t('common.confirmTrash', { name: item.name }), { confirmLabel: $t('common.delete'), danger: true }))) return;
 		try {
 			await api.deleteItem(item.id);
 			await load(currentFolderId);
@@ -649,7 +651,7 @@
 	async function handleRename(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		const newName = prompt($t('common.newNamePrompt'), item.name);
+		const newName = await promptDialog($t('common.newNamePrompt'), { defaultValue: item.name, confirmLabel: $t('common.rename') });
 		if (!newName || newName === item.name) return;
 		try {
 			await api.move(item.id, newName, currentFolderId);
@@ -748,7 +750,7 @@
 	async function handleBulkDelete() {
 		const targets = selectedItems;
 		if (targets.length === 0) return;
-		if (!confirm($t('common.confirmTrashMultiple', { count: targets.length }))) return;
+		if (!(await confirmDialog($t('common.confirmTrashMultiple', { count: targets.length }), { confirmLabel: $t('common.delete'), danger: true }))) return;
 		const results = await Promise.allSettled(targets.map((item) => api.deleteItem(item.id)));
 		const failed = results.filter((r) => r.status === 'rejected').length;
 		clearSelection();
@@ -900,8 +902,11 @@
 	{/each}
 </nav>
 
-<div class="toolbar">
-	<h1 style="margin:0">{$t('fileBrowser.title')}</h1>
+<!-- Its own full-width row, not sharing space with a title/sort/view —
+     "give the search bar the importance Drive gives it" was the explicit
+     ask (secondbrain session 2026-08-16): a title here was redundant with
+     the breadcrumb above anyway. -->
+<div class="search-bar-row">
 	<div class="search-box">
 		<svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 			<circle cx="11" cy="11" r="6" />
@@ -927,6 +932,18 @@
 			</svg>
 		</button>
 	</div>
+</div>
+
+<!-- Sort (left) / view toggle (right) — .toolbar's own justify-content:
+     space-between already does exactly this with just these two children,
+     no extra layout needed now that the title and search box are gone. -->
+<!-- Sort — its own row now; the view toggle used to share this row but
+     moved below (where "+ Nuovo" used to be), and "+ Nuovo" itself moved
+     again from there to the sidebar (routes/+layout.svelte) — see
+     lib/newMenu.ts. .toolbar's own justify-content:space-between puts a
+     single child like this at the start (left) with nothing to push it
+     anywhere else. -->
+<div class="toolbar">
 	<SortMenu
 		fields={[
 			{ key: 'name', label: $t('common.name') },
@@ -936,6 +953,14 @@
 		bind:sortField
 		bind:sortDirection
 	/>
+</div>
+
+<!-- View toggle — where "+ Nuovo" used to sit. Right-aligned (unlike the
+     old row, which had "+ Nuovo" as its only/rightmost child by luck of
+     being alone) via .toolbar-actions' own justify-content:flex-end. Not
+     gated by currentFolderCanEdit — that only ever applied to the creation
+     actions that lived here before, switching views needs no edit right. -->
+<div class="toolbar-actions view-toggle-row">
 	<div class="view-toggle" role="group" aria-label={$t('fileBrowser.viewGroupLabel')}>
 		<button
 			class="view-toggle-btn"
@@ -963,88 +988,6 @@
 			</svg>
 		</button>
 	</div>
-	{#if currentFolderCanEdit}
-		<!-- Desktop-only (see app.css's .toolbar-actions mobile rule) — the
-		     FAB further down covers the same three actions on mobile. One
-		     "+ Nuovo" trigger instead of three always-visible buttons,
-		     Drive-style, reusing the FAB menu's own items/handlers below. -->
-		<div class="toolbar-actions new-menu">
-			<button
-				class="btn btn-primary"
-				aria-haspopup="true"
-				aria-expanded={newMenuOpen}
-				onclick={(e) => {
-					e.stopPropagation();
-					newMenuOpen = !newMenuOpen;
-				}}
-			>
-				{$t('fileBrowser.new')}
-			</button>
-			{#if newMenuOpen}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<!-- svelte-ignore a11y_interactive_supports_focus -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
-					<button
-						role="menuitem"
-						onclick={() => {
-							newMenuOpen = false;
-							fileInput.click();
-						}}
-					>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-							<path d="M12 15V4M8 8l4-4 4 4M5 20h14" stroke-linecap="round" stroke-linejoin="round" />
-						</svg>
-						{$t('fileBrowser.uploadPlain')}
-					</button>
-					<button
-						role="menuitem"
-						onclick={() => {
-							newMenuOpen = false;
-							scanOpen = true;
-						}}
-					>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-							<path d="M8 7l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3Z" stroke-linejoin="round" />
-							<circle cx="12" cy="13.5" r="3.2" />
-						</svg>
-						{$t('fileBrowser.scanPlain')}
-					</button>
-					<button
-						role="menuitem"
-						onclick={() => {
-							newMenuOpen = false;
-							handleNewFolder();
-						}}
-					>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-							<path
-								d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
-								stroke-linejoin="round"
-							/>
-							<path d="M12 11v4M10 13h4" stroke-linecap="round" />
-						</svg>
-						{$t('fileBrowser.newFolderPlain')}
-					</button>
-					{#each ['docx', 'xlsx', 'pptx'] as const as ext}
-						<button
-							role="menuitem"
-							onclick={() => {
-								newMenuOpen = false;
-								handleNewBlankDocument(ext);
-							}}
-						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-								<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
-								<path d="M14 3v4h4" stroke-linejoin="round" />
-							</svg>
-							{$t(BLANK_DOCUMENT_MENU_LABEL_KEYS[ext])}
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	{/if}
 </div>
 
 {#if searchResults !== null}
@@ -1159,6 +1102,14 @@
 	onpointerup={endMarquee}
 	onpointercancel={endMarquee}
 >
+	{#if dragging}
+		<div class="dropzone-overlay" aria-hidden="true">
+			<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+				<path d="M12 15V4M8 8l4-4 4 4M5 20h14" stroke-linecap="round" stroke-linejoin="round" />
+			</svg>
+			<span>{$t('fileBrowser.dropOverlay')}</span>
+		</div>
+	{/if}
 	{#if marqueeActive}
 		<div
 			class="marquee"
@@ -1169,7 +1120,7 @@
 		></div>
 	{/if}
 	{#if loading || (searching && searchResults === null)}
-		<p>{$t('common.loading')}</p>
+		<SkeletonList />
 	{:else if visibleItems.length === 0}
 		<div class="empty-state">
 			{searchQuery.trim() ? $t('fileBrowser.noSearchMatches', { query: searchQuery }) : $t('fileBrowser.emptyFolder')}

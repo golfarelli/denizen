@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 import { readFileSync } from 'fs';
 import { forceEnglishLocale } from './helpers/locale';
+import { answerPrompt, acceptConfirm } from './helpers/dialog';
 
 const FIXTURE_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.txt');
 const PDF_BYTES = readFileSync(path.join(import.meta.dirname, 'fixtures', 'sample.pdf'));
@@ -92,8 +93,8 @@ test('share a file, a visitor with no account can fetch it, then revoking the li
 	await expect(shareRow).toBeVisible();
 
 	await shareRow.getByRole('button', { name: 'Actions for' }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await shareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
+	await acceptConfirm(page);
 	await expect(shareRow).not.toBeVisible();
 
 	const afterRevokeRes = await page.request.get(`${shareUrl}/meta`);
@@ -131,8 +132,8 @@ test('a revoked share\'s landing page says so instead of erroring', async ({ pag
 	const shareRow = page.locator('.item-row', { hasText: name });
 	await expect(shareRow).toBeVisible();
 	await shareRow.getByRole('button', { name: 'Actions for' }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await shareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
+	await acceptConfirm(page);
 	await expect(shareRow).toBeHidden();
 
 	const visitor = await page.context().browser()!.newContext(ANONYMOUS);
@@ -169,9 +170,9 @@ test('a requires_auth share prompts an anonymous visitor to log in, then lands b
 test('sharing a folder shows its name but no broken Download button', async ({ page }) => {
 	await page.goto('/');
 	const folderName = `E2E Share Folder ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();

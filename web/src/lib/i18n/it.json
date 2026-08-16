@@ -1,5 +1,7 @@
 {
 	"common.cancel": "Annulla",
+	"common.ok": "OK",
+	"common.create": "Crea",
 	"common.loading": "Caricamento…",
 	"common.download": "Scarica",
 	"common.downloading": "Download in corso…",
@@ -74,6 +76,7 @@
 	"fileBrowser.dismiss": "Chiudi",
 	"fileBrowser.addAriaLabel": "Aggiungi",
 	"fileBrowser.emptyFolder": "Questa cartella è vuota. Trascina qui i file, oppure usa \"+ Nuovo\".",
+	"fileBrowser.dropOverlay": "Rilascia per caricare",
 	"fileBrowser.noSearchMatches": "Nulla corrisponde a \"{query}\" — né per nome né per contenuto.",
 	"fileBrowser.searchResultsHint": "{count} risultati per \"{query}\" — per nome o contenuto, in tutto il drive.",
 	"fileBrowser.folderNamePrompt": "Nome della cartella",

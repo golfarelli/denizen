@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerSecondUser } from './helpers/secondUser';
+import { answerPrompt, acceptConfirm } from './helpers/dialog';
 
 test('adding a shortcut to your own file: badge shown, opens the real target, rename/delete never touch the original', async ({
 	page
@@ -7,9 +8,9 @@ test('adding a shortcut to your own file: badge shown, opens the real target, re
 	await page.goto('/');
 
 	const destName = `E2E Shortcut Dest ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(destName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, destName);
 	await expect(page.locator('.item-row', { hasText: destName })).toBeVisible();
 
 	const original = uniqueTxtName('shortcut-original');
@@ -53,12 +54,10 @@ test('adding a shortcut to your own file: badge shown, opens the real target, re
 	await expect(page).toHaveURL(/\?folder=/);
 
 	// --- rename the shortcut leaves the original untouched --------------------------
-	page.once('dialog', (dialog) => {
-		expect(dialog.defaultValue()).toBe(original);
-		dialog.accept('renamed-shortcut-only.txt');
-	});
 	await shortcutRow.getByRole('button', { name: 'Actions for' }).click();
 	await shortcutRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Rename' }).click();
+	await expect(page.locator('dialog[open] input[type="text"]')).toHaveValue(original);
+	await answerPrompt(page, 'renamed-shortcut-only.txt');
 	await expect(page.locator('.item-row', { hasText: 'renamed-shortcut-only.txt' })).toBeVisible();
 
 	await page.getByRole('link', { name: 'Home', exact: true }).click();
@@ -70,8 +69,8 @@ test('adding a shortcut to your own file: badge shown, opens the real target, re
 	await stillThereRow.getByRole('button', { name: 'Actions for' }).click();
 	const menu = stillThereRow.locator('.dropdown-menu');
 	await expect(menu.getByRole('menuitem', { name: 'Remove shortcut' })).toBeVisible();
-	page.once('dialog', (d) => d.accept());
 	await menu.getByRole('menuitem', { name: 'Remove shortcut' }).click();
+	await acceptConfirm(page);
 	await expect(stillThereRow).toHaveCount(0);
 
 	await page.getByRole('link', { name: 'Home', exact: true }).click();

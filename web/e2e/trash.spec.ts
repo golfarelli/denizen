@@ -1,19 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { answerPrompt, acceptConfirm } from './helpers/dialog';
 
 test('delete a folder, see it in trash, and restore it', async ({ page }) => {
 	await page.goto('/');
 
 	const name = `E2E Trash Restore ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(name));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, name);
 
 	const row = page.locator('.item-row', { hasText: name });
 	await expect(row).toBeVisible();
 
 	await row.getByRole('button', { name: 'Actions for' }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Delete' }).click();
+	await acceptConfirm(page);
 	await expect(row).not.toBeVisible();
 
 	await page.goto('/trash');
@@ -36,16 +37,16 @@ test('delete a folder, then permanently delete it from trash', async ({ page }) 
 	await page.goto('/');
 
 	const name = `E2E Trash Purge ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(name));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, name);
 
 	const row = page.locator('.item-row', { hasText: name });
 	await expect(row).toBeVisible();
 
 	await row.getByRole('button', { name: 'Actions for' }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Delete' }).click();
+	await acceptConfirm(page);
 	await expect(row).not.toBeVisible();
 
 	await page.goto('/trash');
@@ -53,8 +54,8 @@ test('delete a folder, then permanently delete it from trash', async ({ page }) 
 	await expect(trashRow).toBeVisible();
 
 	await trashRow.getByRole('button', { name: 'Actions for' }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await trashRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Delete forever' }).click();
+	await acceptConfirm(page);
 	await expect(trashRow).not.toBeVisible();
 
 	// Gone for good: it must not reappear anywhere, trash included.
@@ -74,8 +75,8 @@ test('a trashed file can be opened for a quick look before restoring or deleting
 	const row = page.locator('.item-row', { hasText: name });
 	await expect(row).toBeVisible({ timeout: 15_000 });
 	await row.getByRole('button', { name: `Actions for ${name}` }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Delete' }).click();
+	await acceptConfirm(page);
 	await expect(row).not.toBeVisible();
 
 	await page.goto('/trash');

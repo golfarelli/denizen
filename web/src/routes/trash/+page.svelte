@@ -4,10 +4,12 @@
 	import { api, ApiError, type Item } from '$lib/api';
 	import { invalidateTree } from '$lib/folderTree';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import SkeletonList from '$lib/SkeletonList.svelte';
 	import { sortItems, type SortField, type SortDirection } from '$lib/sortItems';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
 	import { t } from '$lib/i18n';
+	import { confirmDialog } from '$lib/dialog';
 
 	let items = $state<Item[]>([]);
 	let loading = $state(true);
@@ -101,7 +103,7 @@
 	async function handleDeleteForever(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		if (!confirm($t('trash.confirmDeleteForever', { name: item.name }))) return;
+		if (!(await confirmDialog($t('trash.confirmDeleteForever', { name: item.name }), { confirmLabel: $t('trash.deleteForever'), danger: true }))) return;
 		try {
 			await api.permanentlyDeleteItem(item.id);
 			await load();
@@ -154,7 +156,7 @@
 {/if}
 
 {#if loading}
-	<p>{$t('common.loading')}</p>
+	<SkeletonList />
 {:else if items.length === 0}
 	<div class="empty-state">{$t('trash.empty')}</div>
 {:else}

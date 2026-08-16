@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type ReceivedShare, type Item } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import SkeletonList from '$lib/SkeletonList.svelte';
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import { t } from '$lib/i18n';
 	import SortArrow from '$lib/SortArrow.svelte';
@@ -162,7 +163,7 @@
 {/if}
 
 {#if loading}
-	<p>{$t('common.loading')}</p>
+	<SkeletonList />
 {:else if shares.length === 0}
 	<div class="empty-state">{$t('sharedWithMe.empty')}</div>
 {:else}

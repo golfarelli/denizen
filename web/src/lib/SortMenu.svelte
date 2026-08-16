@@ -29,6 +29,12 @@
 
 	let open = $state(false);
 
+	// The trigger itself now shows what it's sorting by, not just a generic
+	// icon — always one of fields (sortField always starts as one of the
+	// keys the caller passes in), so the fallback here is only ever a
+	// type-narrowing safety net, not a real runtime case.
+	let currentLabel = $derived(fields.find((f) => f.key === sortField)?.label ?? '');
+
 	function choose(key: T) {
 		if (sortField === key) {
 			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -62,7 +68,7 @@
 
 <div class="sort-menu">
 	<button
-		class="btn icon-btn"
+		class="btn sort-menu-trigger"
 		aria-label={$t('common.sortBy')}
 		aria-haspopup="true"
 		aria-expanded={open}
@@ -71,9 +77,11 @@
 			open = !open;
 		}}
 	>
-		<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 			<path d="M4 6h16M4 12h10M4 18h6" stroke-linecap="round" />
 		</svg>
+		{currentLabel}
+		<SortArrow direction={sortDirection} />
 	</button>
 	{#if open}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->

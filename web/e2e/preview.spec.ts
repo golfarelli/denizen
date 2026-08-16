@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 import { readFileSync } from 'fs';
 import { openViaDblclick } from './helpers/dblclick';
+import { answerPrompt } from './helpers/dialog';
 
 const PHOTO_PATH = path.join(import.meta.dirname, 'fixtures', 'sample-photo.jpg');
 const PDF_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.pdf');
@@ -132,9 +133,9 @@ test('opening a text file shows its content, and back returns to the same folder
 	await page.goto('/');
 
 	const folderName = `E2E Preview Folder ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	await page.locator('.item-row', { hasText: folderName }).dblclick();
 	await expect(page).toHaveURL(/folder=/);
 

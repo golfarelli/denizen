@@ -9,6 +9,7 @@
 	import MoveDialog from '$lib/MoveDialog.svelte';
 	import ShareDialog from '$lib/ShareDialog.svelte';
 	import { t } from '$lib/i18n';
+	import { promptDialog, confirmDialog } from '$lib/dialog';
 	// Dynamically imported below (`{#await import(...)}`), not statically
 	// here: pdf.js + docx-preview + xlsx together are a genuinely heavy
 	// ~290KB (gzipped) payload, and a static import would bundle all three
@@ -207,7 +208,7 @@
 	async function handleRename() {
 		closeMenu();
 		if (!item) return;
-		const newName = prompt($t('common.newNamePrompt'), item.name);
+		const newName = await promptDialog($t('common.newNamePrompt'), { defaultValue: item.name, confirmLabel: $t('common.rename') });
 		if (!newName || newName === item.name) return;
 		try {
 			await api.move(item.id, newName, item.parent_id);
@@ -252,7 +253,7 @@
 	async function handleDelete() {
 		closeMenu();
 		if (!item) return;
-		if (!confirm($t('common.confirmTrash', { name: item.name }))) return;
+		if (!(await confirmDialog($t('common.confirmTrash', { name: item.name }), { confirmLabel: $t('common.delete'), danger: true }))) return;
 		try {
 			await api.deleteItem(item.id);
 			goto(backHref);

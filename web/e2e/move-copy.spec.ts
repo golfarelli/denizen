@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { answerPrompt } from './helpers/dialog';
 
 const FIXTURE_PATH = path.join(import.meta.dirname, 'fixtures', 'sample.txt');
 
@@ -7,15 +8,15 @@ test('move a folder into another folder via the destination picker', async ({ pa
 	await page.goto('/');
 
 	const destName = `E2E Move Dest ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(destName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, destName);
 	await expect(page.locator('.item-row', { hasText: destName })).toBeVisible();
 
 	const sourceName = `E2E Move Source ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(sourceName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, sourceName);
 	const sourceRow = page.locator('.item-row', { hasText: sourceName });
 	await expect(sourceRow).toBeVisible();
 

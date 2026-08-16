@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerSecondUser } from './helpers/secondUser';
+import { answerPrompt } from './helpers/dialog';
 
 test('advanced search: type filter narrows results and shows a removable chip', async ({ page }) => {
 	await page.goto('/');
@@ -11,9 +12,9 @@ test('advanced search: type filter narrows results and shows a removable chip', 
 	const folderName = `advsearch-${stamp}-folder`;
 	const fileName = `advsearch-${stamp}-file.txt`;
 
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	await expect(page.locator('.item-row', { hasText: folderName })).toBeVisible();
 
 	await page.locator('input[type="file"]').setInputFiles({
