@@ -1819,11 +1819,24 @@ dialog::backdrop {
 		padding-bottom: calc(var(--bottom-tabbar-height) + var(--space-4));
 	}
 
-	/* Home/Shares/Shared with me/Trash move to .bottom-tabbar (below) at
-	   this same breakpoint — no point listing them twice in the drawer too.
-	   Admin (outside this wrapper — see routes/+layout.svelte) stays put,
-	   still reachable via the hamburger drawer at any width. */
+	/* Home moves to .bottom-tabbar's fixed first slot at this same
+	   breakpoint — no point listing it twice in the drawer too. */
 	.sidebar-nav-primary {
+		display: none;
+	}
+
+	/* Whichever of Shares/Shared with me/Trash/Recent/Favorites the user
+	   currently has in the tab bar's 3 configurable slots (routes/
+	   +layout.svelte, $tabbarConfig — lib/tabbarConfig.ts) — same reasoning
+	   as .sidebar-nav-primary above, just per-link instead of the whole
+	   block, since which 3 those are can change. Settings/Admin have no
+	   tab bar counterpart, so they're never given this class and stay put. */
+	/* a.drawer-hide-mobile, not just .drawer-hide-mobile — .sidebar-nav a
+	   (line ~300) has higher specificity (class + type) than a bare class
+	   selector, so a plain .drawer-hide-mobile lost outright regardless of
+	   which came later in the file; matching its class+type shape ties it,
+	   and this rule comes after in source, so it wins the tie. */
+	a.drawer-hide-mobile {
 		display: none;
 	}
 

@@ -32,3 +32,32 @@ test('the same destination cannot be picked in two slots', async ({ page }) => {
 	const firstValue = await selects.first().inputValue();
 	expect(secondOptionValues).not.toContain(firstValue);
 });
+
+// The mobile drawer (routes/+layout.svelte's .sidebar) shouldn't repeat
+// whatever's already one tap away in .bottom-tabbar — see .drawer-hide-mobile
+// in app.css.
+test('the mobile drawer hides only whatever is currently in the tab bar, and updates live when settings change', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+
+	const drawer = page.locator('.sidebar');
+	await page.getByRole('button', { name: 'Open menu' }).click();
+	await expect(drawer).toHaveClass(/open/);
+
+	// Default slots are Shares/Shared with me/Trash — those hide, Recent/
+	// Favorites (not in the tab bar) stay visible.
+	await expect(drawer.getByRole('link', { name: 'My shares' })).toBeHidden();
+	await expect(drawer.getByRole('link', { name: 'Shared with me' })).toBeHidden();
+	await expect(drawer.getByRole('link', { name: 'Trash' })).toBeHidden();
+	await expect(drawer.getByRole('link', { name: 'Recent' })).toBeVisible();
+	await expect(drawer.getByRole('link', { name: 'Favorites' })).toBeVisible();
+	await expect(drawer.getByRole('link', { name: 'Settings' })).toBeVisible();
+
+	await page.goto('/settings');
+	await page.locator('.settings-row select').first().selectOption('recent');
+
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Open menu' }).click();
+	await expect(drawer.getByRole('link', { name: 'Recent' })).toBeHidden();
+	await expect(drawer.getByRole('link', { name: 'My shares' })).toBeVisible();
+});
