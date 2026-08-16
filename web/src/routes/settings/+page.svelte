@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { tabbarConfig, TAB_POOL, type TabKey } from '$lib/tabbarConfig';
+	import { tabbarConfig, TAB_POOL, ALL_KEYS, type TabKey } from '$lib/tabbarConfig';
 	import { t } from '$lib/i18n';
-
-	const ALL_KEYS = Object.keys(TAB_POOL) as TabKey[];
 
 	// Each slot's own current value stays in its own dropdown (so picking it
 	// doesn't make it vanish from itself) but is excluded from the other two,

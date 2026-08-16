@@ -15,6 +15,11 @@ export const TAB_POOL: Record<TabKey, { href: string; labelKey: string }> = {
 	trash: { href: '/trash', labelKey: 'nav.trash' }
 };
 
+// The pool's own keys, in the fixed order used both by the settings page's
+// dropdown options and by the sidebar drawer's link order (routes/
+// +layout.svelte) — one ordering, not two to keep in sync.
+export const ALL_KEYS = Object.keys(TAB_POOL) as TabKey[];
+
 const STORAGE_KEY = 'denizen.tabbar';
 
 // Matches the tab bar's pre-customization fixed order (feature/bottom-tabbar)

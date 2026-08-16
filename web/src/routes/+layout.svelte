@@ -17,7 +17,7 @@
 	import { newMenuActions } from '$lib/newMenu';
 	import GlobalDialog from '$lib/GlobalDialog.svelte';
 	import { avatarColor } from '$lib/avatarColor';
-	import { tabbarConfig, TAB_POOL } from '$lib/tabbarConfig';
+	import { tabbarConfig, TAB_POOL, ALL_KEYS } from '$lib/tabbarConfig';
 	import TabIcon from '$lib/TabIcon.svelte';
 
 	let { children } = $props();
@@ -323,14 +323,15 @@
 						{/if}
 					</div>
 				{/if}
-				<!-- Home/Shares/Shared with me/Trash — hidden below the mobile
-				     breakpoint (see app.css), where .bottom-tabbar now covers
-				     Home plus whichever 3 of these (or Recent/Favorites) the
-				     user picked in /settings (lib/tabbarConfig.ts) in one tap
-				     instead of hamburger-then-tap; still the real nav on
-				     desktop, which has no tab bar. Admin (below, outside this
-				     wrapper) stays drawer-only everywhere — it's not part of
-				     the tab bar's pool. -->
+				<!-- Home only — hidden below the mobile breakpoint (see
+				     app.css) since Home is always .bottom-tabbar's fixed
+				     first slot there; still the real nav on desktop, which
+				     has no tab bar. The other 4 pool destinations (Shares/
+				     Shared with me/Trash/Recent/Favorites) render below,
+				     outside this wrapper, each hidden on mobile only when
+				     it's currently one of the tab bar's 3 chosen slots — see
+				     .drawer-hide-mobile — so the drawer never repeats what a
+				     single tap down in the tab bar already reaches. -->
 				<div class="sidebar-nav-primary">
 				<div class="tree-root">
 					<div class="tree-row">
@@ -377,51 +378,17 @@
 						</ul>
 					{/if}
 				</div>
-				<a href="/shares" class:active={$page.url.pathname === '/shares'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<circle cx="6" cy="12" r="2.2" />
-						<circle cx="17" cy="6" r="2.2" />
-						<circle cx="17" cy="18" r="2.2" />
-						<path d="M8 10.8 15 7M8 13.2 15 17" stroke-linecap="round" />
-					</svg>
-					{$t('nav.myShares')}
-				</a>
-				<a href="/shared-with-me" class:active={$page.url.pathname === '/shared-with-me'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<circle cx="12" cy="8" r="3.2" />
-						<path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke-linecap="round" stroke-linejoin="round" />
-					</svg>
-					{$t('nav.sharedWithMe')}
-				</a>
-				<a href="/trash" class:active={$page.url.pathname === '/trash'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<path
-							d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-					{$t('nav.trash')}
-				</a>
 				</div>
-				<!-- Outside .sidebar-nav-primary on purpose: unlike Home/Shares/
-				     Shared with me/Trash, this one has no .bottom-tabbar
-				     counterpart (that stayed scoped to the four it was built
-				     for — see feature/bottom-tabbar), so it stays reachable via
-				     the drawer at every width, mobile included. -->
-				<a href="/recent" class:active={$page.url.pathname === '/recent'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<circle cx="12" cy="12" r="9" />
-						<path d="M12 7v5l3.5 2" stroke-linecap="round" stroke-linejoin="round" />
-					</svg>
-					{$t('nav.recent')}
-				</a>
-				<a href="/favorites" class:active={$page.url.pathname === '/favorites'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-						<path d="M12 3.5l2.7 5.9 6.3.7-4.7 4.4 1.3 6.2-5.6-3.2-5.6 3.2 1.3-6.2-4.7-4.4 6.3-.7L12 3.5Z" stroke-linejoin="round" />
-					</svg>
-					{$t('nav.favorites')}
-				</a>
+				{#each ALL_KEYS as key (key)}
+					<a
+						href={TAB_POOL[key].href}
+						class:active={$page.url.pathname === TAB_POOL[key].href}
+						class:drawer-hide-mobile={$tabbarConfig.includes(key)}
+					>
+						<TabIcon kind={key} />
+						{$t(TAB_POOL[key].labelKey)}
+					</a>
+				{/each}
 				<a href="/settings" class:active={$page.url.pathname === '/settings'}>
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
 						<circle cx="12" cy="12" r="3" />
