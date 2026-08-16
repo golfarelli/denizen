@@ -8,6 +8,7 @@
 	import { t } from '$lib/i18n';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
+	import { loadPersisted, savePersisted } from '$lib/persistedState';
 
 	interface EnrichedReceivedShare extends ReceivedShare {
 		item?: Item;
@@ -29,8 +30,14 @@
 	// shares/+page.svelte's identical reasoning for the same choice).
 	type SortField = 'name' | 'sharedBy' | 'sharedOn';
 	type SortDirection = 'asc' | 'desc';
-	let sortField = $state<SortField>('sharedOn');
-	let sortDirection = $state<SortDirection>('desc');
+	const storedSort = loadPersisted<{ field: SortField; direction: SortDirection }>('denizen.sort.sharedWithMe', {
+		field: 'sharedOn',
+		direction: 'desc'
+	});
+	let sortField = $state<SortField>(storedSort.field);
+	let sortDirection = $state<SortDirection>(storedSort.direction);
+
+	$effect(() => savePersisted('denizen.sort.sharedWithMe', { field: sortField, direction: sortDirection }));
 
 	function toggleSort(field: SortField) {
 		if (sortField === field) {
