@@ -3,6 +3,32 @@
    dependencies" rule, and this app's surface (auth forms, a file browser)
    doesn't need more than a a few reusable primitives. */
 
+/* Inter, self-hosted (web/static/fonts — 2 variable-font files, weight
+   400-700, latin + latin-ext subsets, ~133KB total) rather than a Google
+   Fonts <link>: this app's whole point is self-hosted/private, so pulling
+   a live font from Google on every page load — leaking every visitor's IP
+   to them — would undercut that. The files were fetched once at
+   build/dev time and vendored, the running app never talks to Google.
+   system-ui stays first in --font-sans below as the fallback while a
+   visitor's browser is still fetching this. */
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/inter-latin.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/inter-latin-ext.woff2') format('woff2');
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
 	--color-bg: #ffffff;
 	--color-surface: #f7f8fa;
@@ -29,6 +55,7 @@
 	--radius-lg: 12px;
 	--bottom-tabbar-height: 3.75rem; /* .bottom-tabbar, mobile only — see app.css's own media query */
 	--font-sans:
+		'Inter',
 		system-ui,
 		-apple-system,
 		'Segoe UI',
@@ -49,9 +76,17 @@
 
 @media (prefers-color-scheme: dark) {
 	:root {
-		--color-bg: #17171d;
-		--color-surface: #1f1f27;
-		--color-sidebar-bg: #1b1b22;
+		/* Wider steps between these three than before (was #17171d/#1f1f27/
+		   #1b1b22 — a few points per channel, nearly imperceptible on a
+		   phone screen) so a raised panel (dropdown menus, the mobile
+		   bottom sheet, the selection toolbar, the bottom tab bar — see
+		   their own rules further down, several of which used to just
+		   reuse --color-bg outright) actually reads as a distinct layer
+		   instead of blending into the page behind it. Shadows alone don't
+		   carry that job on a dark background the way they do on light. */
+		--color-bg: #131318;
+		--color-surface: #242431;
+		--color-sidebar-bg: #1c1c25;
 		--color-border: #303038;
 		--color-text: #f1f1f5;
 		--color-text-muted: #9a9aab;
@@ -108,15 +143,27 @@ input {
 	border-radius: var(--radius);
 	padding: var(--space-2) var(--space-4);
 	cursor: pointer;
+	transition:
+		border-color 0.12s ease,
+		filter 0.12s ease,
+		transform 0.06s ease;
 }
 
 .btn:hover {
 	border-color: var(--color-accent);
 }
 
+/* A small press-down on click — every .btn (plain and .btn-primary alike,
+   the latter already has its own :hover brightness below) gets this same
+   tactile feedback for free. */
+.btn:active {
+	transform: scale(0.97);
+}
+
 .btn:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
+	transform: none;
 }
 
 .btn-primary {
@@ -126,6 +173,20 @@ input {
 }
 
 .btn-primary:hover {
+	filter: brightness(1.08);
+}
+
+/* Same shape as .btn-primary, --color-danger instead — GlobalDialog.svelte's
+   confirmDialog(..., {danger: true}) uses this for destructive confirms
+   (permanent delete, revoke), the filled-button counterpart to
+   .dropdown-menu button.danger's plain red text for a menu item. */
+.btn-danger {
+	background: var(--color-danger);
+	border-color: var(--color-danger);
+	color: var(--color-accent-contrast);
+}
+
+.btn-danger:hover {
 	filter: brightness(1.08);
 }
 
@@ -371,11 +432,16 @@ input {
 
 .storage-bar-fill {
 	height: 100%;
-	background: var(--color-accent);
+	/* A slight top-to-bottom sheen instead of one flat tone — cheap depth
+	   cue on an otherwise very thin element. color-mix() over a second
+	   named color, not a second custom property, since this needs no
+	   further reuse elsewhere. */
+	background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 80%, white), var(--color-accent));
+	transition: width 0.2s ease;
 }
 
 .storage-bar-fill.storage-full {
-	background: var(--color-danger);
+	background: linear-gradient(180deg, color-mix(in srgb, var(--color-danger) 80%, white), var(--color-danger));
 }
 
 .storage-label {
@@ -541,7 +607,7 @@ input {
 	bottom: 0;
 	height: var(--bottom-tabbar-height);
 	z-index: 30;
-	background: var(--color-bg);
+	background: var(--color-surface); /* raised panel, not the page — see the dark-mode token comment */
 	border-top: 1px solid var(--color-border);
 	box-shadow: var(--shadow-md);
 }
@@ -554,6 +620,10 @@ input {
 	justify-content: center;
 	gap: 2px;
 	color: var(--color-text-muted);
+	/* Every other nav link (.sidebar-nav a et al.) resets this — missed it
+	   here, which is why the labels showed a plain browser-default
+	   underline. */
+	text-decoration: none;
 	font-size: 0.68rem;
 	text-align: center;
 	line-height: 1.15;
@@ -722,6 +792,33 @@ main.fullscreen {
 
 .item-row:hover {
 	background: var(--color-surface);
+}
+
+/* SkeletonList.svelte's own placeholder bars — a plain CSS animation
+   (background-position sweep across a gradient) rather than a JS-driven
+   one, cheapest possible "this is loading" motion. */
+.skeleton-block {
+	display: block;
+	height: 0.85rem;
+	border-radius: 4px;
+	background: linear-gradient(90deg, var(--color-border) 25%, var(--color-surface) 50%, var(--color-border) 75%);
+	background-size: 200% 100%;
+	animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-circle {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+}
+
+@keyframes skeleton-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
 }
 
 /* For rows that don't fit the file browser's 5-column shape (icon / name /
@@ -957,13 +1054,22 @@ main.fullscreen {
 	color: var(--color-accent);
 }
 
-/* List/grid toggle — same visual language as .icon-btn (borderless until
-   hovered/active) so it sits comfortably next to the search box instead of
-   reading as a heavier, more important control than it is. */
+/* List/grid toggle — a genuine two-way switch now (secondbrain session
+   2026-08-16: the old surface+border "raised card" look on the active
+   button read as its own inconsistent style, not the selected state
+   language the rest of the app already commits to elsewhere), same
+   segmented-track construction as .language-toggle right above: a bordered
+   track, the active option filled solid with --color-accent rather than
+   merely tinted — .sidebar-nav a.active's softer accent-tinted background
+   is the right call for a list of many links, but for a strict either/or
+   pair a filled segment reads more immediately as "this one, not that one". */
 .view-toggle {
 	display: flex;
 	gap: 2px;
 	flex-shrink: 0;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: 2px;
 }
 
 .view-toggle-btn {
@@ -972,20 +1078,24 @@ main.fullscreen {
 	justify-content: center;
 	padding: var(--space-2);
 	line-height: 1;
-	border-color: transparent;
+	border: none;
+	border-radius: calc(var(--radius) - 2px);
 	background: none;
 	color: var(--color-text-muted);
+	transition: background 0.12s ease, color 0.12s ease;
 }
 
 .view-toggle-btn:hover {
 	background: var(--color-surface);
-	border-color: transparent;
 }
 
 .view-toggle-btn.active {
-	background: var(--color-surface);
-	border-color: var(--color-border);
-	color: var(--color-text);
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
+.view-toggle-btn.active:hover {
+	background: var(--color-accent);
 }
 
 /* Grid view — a wrap of square-ish cards instead of the list's rows. Each
@@ -1003,11 +1113,20 @@ main.fullscreen {
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
 	background: var(--color-bg);
-	transition: background 0.12s ease;
+	transition:
+		background 0.12s ease,
+		transform 0.12s ease,
+		box-shadow 0.12s ease;
 }
 
+/* A slight lift instead of just a flat color swap — a card that visibly
+   responds to the pointer reads as more "alive" than one that only
+   recolors (secondbrain session 2026-08-16, part of the same pass that
+   already gave the view toggle and buttons real hover/press feedback). */
 .item-tile:hover {
 	background: var(--color-surface);
+	transform: translateY(-2px);
+	box-shadow: var(--shadow-md);
 }
 
 .item-tile .row-menu {
@@ -1055,6 +1174,35 @@ main.fullscreen {
 	font-size: 0.75rem;
 }
 
+/* routes/+page.svelte only — search gets its own full-width row instead of
+   competing with a title and the sort/view controls in one line (see
+   .search-bar-row .search-box below for the actual widening/prominence —
+   this wrapper just owns the row's own spacing). */
+.search-bar-row {
+	margin-bottom: var(--space-4);
+}
+
+.search-bar-row .search-box {
+	/* .search-box's own default (flex:1, max-width:22rem — right for
+	   sharing a row with other controls) is too cramped once it owns the
+	   whole row: Google Drive gives its search real width, this matches
+	   that instead of leaving most of the row as dead space either side. */
+	max-width: none;
+	min-width: 0;
+}
+
+.search-bar-row .search-box input {
+	/* Taller and larger than the shared .search-box default — the row
+	   exists specifically to make this control read as more important. */
+	padding: 0.7rem 2.5rem;
+	font-size: 1rem;
+	box-shadow: var(--shadow-sm);
+}
+
+.search-bar-row .search-box input:focus {
+	box-shadow: var(--shadow-md);
+}
+
 .toolbar {
 	display: flex;
 	justify-content: space-between;
@@ -1064,15 +1212,49 @@ main.fullscreen {
 	flex-wrap: wrap;
 }
 
+/* Page titles ("File", "Recenti", ...) rendered at the browser's default
+   h1 size (~2rem here) read as oversized next to the search bar sitting
+   right below — this is the one thing on the page actually worth top
+   billing. Knocked down to something that still reads as a heading but
+   stops competing with it. Scoped to .toolbar's own h1 rather than h1
+   globally, so this doesn't touch h1 usage elsewhere (e.g. the auth pages). */
+.toolbar h1 {
+	font-size: 1.375rem;
+	font-weight: 600;
+}
+
 .toolbar-actions {
 	display: flex;
+	justify-content: flex-end;
 	gap: var(--space-2);
+	margin-bottom: var(--space-4);
 }
 
 /* Anchors the "+ Nuovo" dropdown (routes/+page.svelte) the same way
    .row-menu/.sort-menu anchor theirs. */
 .new-menu {
 	position: relative;
+}
+
+/* The sidebar's own "+ New" — first item in .sidebar-nav (routes/
+   +layout.svelte), Drive-style: full width instead of the toolbar
+   trigger's own inline-flex sizing, and enough margin below to read as
+   its own thing above the Home/Shares/... links rather than one more
+   item in that list. */
+.sidebar-new-menu {
+	margin-bottom: var(--space-3);
+}
+
+.sidebar-new-menu .btn-primary {
+	width: 100%;
+	justify-content: center;
+	padding: var(--space-3);
+}
+
+.sidebar-new-menu .dropdown-menu {
+	left: 0;
+	right: 0;
+	width: auto;
 }
 
 /* The bulk-action bar shown when one or more rows are selected
@@ -1098,7 +1280,7 @@ main.fullscreen {
 	gap: var(--space-3);
 	flex-wrap: wrap;
 	padding: var(--space-3) var(--space-6);
-	background: var(--color-bg);
+	background: var(--color-surface); /* raised panel, not the page — see the dark-mode token comment */
 	border-top: 1px solid var(--color-border);
 	box-shadow: var(--shadow-md);
 }
@@ -1187,6 +1369,7 @@ main.fullscreen {
    start from, and a bigger, more forgiving drop target for a file drag
    over an otherwise-sparse folder. */
 .dropzone {
+	position: relative;
 	min-height: 16rem;
 }
 
@@ -1194,6 +1377,30 @@ main.fullscreen {
 	outline: 2px dashed var(--color-accent);
 	outline-offset: 4px;
 	border-radius: var(--radius);
+}
+
+/* A real "drop it here" moment instead of just the dashed outline above —
+   a translucent backdrop over the existing list plus a centered icon/label,
+   Drive-style, rather than leaving a visitor to infer the outline alone
+   means "yes, this is a valid target". pointer-events: none so the drag
+   events firing on .dropzone underneath (ondragover/ondrop) keep working
+   uninterrupted — this is purely a visual layer. */
+.dropzone-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-3);
+	background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+	backdrop-filter: blur(2px);
+	border-radius: var(--radius);
+	color: var(--color-accent);
+	font-size: 1.05rem;
+	font-weight: 500;
+	pointer-events: none;
 }
 
 /* Click-and-drag rubber-band selection (routes/+page.svelte's
@@ -1441,12 +1648,15 @@ dialog::backdrop {
 	position: relative;
 }
 
-.sort-menu .icon-btn {
+.sort-menu-trigger {
 	border-color: transparent;
 	background: none;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	font-weight: 500;
 }
 
-.sort-menu .icon-btn:hover {
+.sort-menu-trigger:hover {
 	background: var(--color-border);
 	border-color: transparent;
 }
@@ -1461,7 +1671,10 @@ dialog::backdrop {
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
-	background: var(--color-bg);
+	/* --color-surface (a raised panel), not --color-bg (the page itself) —
+	   see the dark-mode token comment above for why this matters in
+	   practice, not just in theory. */
+	background: var(--color-surface);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius);
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
@@ -1550,6 +1763,11 @@ dialog::backdrop {
 	justify-content: center;
 	z-index: 30;
 	cursor: pointer;
+	transition: filter 0.12s ease, transform 0.08s ease;
+}
+
+.fab:active {
+	transform: scale(0.94);
 }
 
 .fab:hover {
@@ -1637,8 +1855,11 @@ dialog::backdrop {
 	}
 
 	/* The FAB (.fab, styled above) takes over Upload/Scan/New folder on
-	   mobile — see its own comment for why. */
-	.toolbar-actions {
+	   mobile — see its own comment for why. .toolbar-actions itself is
+	   NOT hidden here anymore: it only ever holds the view toggle now
+	   (the "+ New" trigger moved to .sidebar-new-menu below — see
+	   routes/+layout.svelte), which mobile still needs same as desktop. */
+	.sidebar-new-menu {
 		display: none;
 	}
 

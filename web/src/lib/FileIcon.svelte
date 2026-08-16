@@ -103,6 +103,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		/* A thin top highlight + a slight drop shadow — enough to read as a
+		   glossy chip instead of a flat color swatch, without changing the
+		   per-type color language itself. */
+		box-shadow:
+			inset 0 1px 0 rgb(255 255 255 / 20%),
+			0 1px 2px rgb(0 0 0 / 18%);
 	}
 
 	.file-icon-label {

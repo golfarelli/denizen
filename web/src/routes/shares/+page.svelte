@@ -3,7 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type Share, type GrantedShare, type Item, type SharePermission } from '$lib/api';
 	import FileIcon from '$lib/FileIcon.svelte';
+	import SkeletonList from '$lib/SkeletonList.svelte';
 	import { t } from '$lib/i18n';
+	import { confirmDialog } from '$lib/dialog';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
 
@@ -189,10 +191,10 @@
 	async function handleRevoke(share: EnrichedShare, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
-		const prompt = share.kind === 'person'
+		const message = share.kind === 'person'
 			? $t('shares.confirmRevokePerson', { name: share.shared_with_username ?? '' })
 			: $t('shares.confirmRevoke');
-		if (!confirm(prompt)) return;
+		if (!(await confirmDialog(message, { confirmLabel: $t('shares.revoke'), danger: true }))) return;
 		try {
 			if (share.kind === 'person') {
 				await api.revokeUserShare(share.id);
@@ -237,7 +239,7 @@
 {/if}
 
 {#if loading}
-	<p>{$t('common.loading')}</p>
+	<SkeletonList />
 {:else if shares.length === 0}
 	<div class="empty-state">{$t('shares.empty')}</div>
 {:else}

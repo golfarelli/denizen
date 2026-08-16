@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerSecondUser } from './helpers/secondUser';
+import { answerPrompt, acceptConfirm } from './helpers/dialog';
 
 // Mirrors auth.setup.ts's own ADMIN_USERNAME constant — can't import it
 // directly, Playwright disallows a regular spec importing a *.setup.ts
@@ -82,9 +83,9 @@ test('sharing a folder offers both the per-person section and a link', async ({ 
 	await page.goto('/');
 
 	const folderName = `E2E Folder Share ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 
 	const row = page.locator('.item-row', { hasText: folderName });
 	await expect(row).toBeVisible();
@@ -143,8 +144,8 @@ test('"My shares" shows both link shares and direct person shares, not just link
 
 	// --- revoking the person share from here works too --------------------------------
 	await personShareRow.getByRole('button', { name: `Actions for ${personName}` }).click();
-	page.once('dialog', (d) => d.accept());
 	await personShareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
+	await acceptConfirm(page);
 	await expect(personShareRow).not.toBeVisible();
 	await expect(linkedShareRow).toBeVisible(); // untouched
 });

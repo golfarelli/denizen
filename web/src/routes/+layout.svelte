@@ -14,8 +14,45 @@
 	import { walkAncestors } from '$lib/ancestorChain';
 	import { autoExpandFolderIds, treeVersion } from '$lib/folderTree';
 	import FolderTreeItem from '$lib/FolderTreeItem.svelte';
+	import { newMenuActions } from '$lib/newMenu';
+	import GlobalDialog from '$lib/GlobalDialog.svelte';
+	import { avatarColor } from '$lib/avatarColor';
 
 	let { children } = $props();
+
+	// The sidebar's own "+ New" trigger — Drive-style, first item, so it's
+	// always the same tap regardless of which page you're on (secondbrain
+	// session 2026-08-16, moved out of routes/+page.svelte's toolbar). What
+	// it actually does is registered by whichever page supports it — see
+	// lib/newMenu.ts's own doc comment; $newMenuActions is null on a page
+	// that doesn't (Trash, Shares, ...), which hides this button entirely
+	// rather than showing a trigger with nothing to do.
+	let newMenuOpen = $state(false);
+
+	// Mirrors routes/+page.svelte's own const of the same name — small
+	// enough (just an i18n key lookup) that duplicating it here beats
+	// threading a shared import in for three lines.
+	const BLANK_DOCUMENT_MENU_LABEL_KEYS = {
+		docx: 'fileBrowser.newDocxPlain',
+		xlsx: 'fileBrowser.newXlsxPlain',
+		pptx: 'fileBrowser.newPptxPlain'
+	} as const;
+
+	$effect(() => {
+		if (!newMenuOpen) return;
+		function handlePointerDown() {
+			newMenuOpen = false;
+		}
+		function handleKeydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') newMenuOpen = false;
+		}
+		window.addEventListener('click', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('click', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
 
 	onMount(registerServiceWorker);
 
@@ -203,6 +240,87 @@
 			</a>
 
 			<nav class="sidebar-nav">
+				{#if $newMenuActions?.canCreate}
+					<div class="new-menu sidebar-new-menu">
+						<button
+							class="btn btn-primary"
+							aria-haspopup="true"
+							aria-expanded={newMenuOpen}
+							onclick={(e) => {
+								e.stopPropagation();
+								newMenuOpen = !newMenuOpen;
+							}}
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+								<path d="M12 5v14M5 12h14" stroke-linecap="round" />
+							</svg>
+							{$t('fileBrowser.new')}
+						</button>
+						{#if newMenuOpen}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<!-- svelte-ignore a11y_interactive_supports_focus -->
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<div class="dropdown-menu" onclick={(e) => e.stopPropagation()} role="menu">
+								<button
+									role="menuitem"
+									onclick={() => {
+										newMenuOpen = false;
+										$newMenuActions?.upload();
+									}}
+								>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+										<path d="M12 15V4M8 8l4-4 4 4M5 20h14" stroke-linecap="round" stroke-linejoin="round" />
+									</svg>
+									{$t('fileBrowser.uploadPlain')}
+								</button>
+								<button
+									role="menuitem"
+									onclick={() => {
+										newMenuOpen = false;
+										$newMenuActions?.scan();
+									}}
+								>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+										<path d="M8 7l1.2-2h5.6L16 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3Z" stroke-linejoin="round" />
+										<circle cx="12" cy="13.5" r="3.2" />
+									</svg>
+									{$t('fileBrowser.scanPlain')}
+								</button>
+								<button
+									role="menuitem"
+									onclick={() => {
+										newMenuOpen = false;
+										$newMenuActions?.newFolder();
+									}}
+								>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+										<path
+											d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
+											stroke-linejoin="round"
+										/>
+										<path d="M12 11v4M10 13h4" stroke-linecap="round" />
+									</svg>
+									{$t('fileBrowser.newFolderPlain')}
+								</button>
+								{#each ['docx', 'xlsx', 'pptx'] as const as ext}
+									<button
+										role="menuitem"
+										onclick={() => {
+											newMenuOpen = false;
+											$newMenuActions?.newBlankDocument(ext);
+										}}
+									>
+										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+											<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
+											<path d="M14 3v4h4" stroke-linejoin="round" />
+										</svg>
+										{$t(BLANK_DOCUMENT_MENU_LABEL_KEYS[ext])}
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 				<!-- Home/Shares/Shared with me/Trash — hidden below the mobile
 				     breakpoint (see app.css), where .bottom-tabbar now covers
 				     the same four destinations in one tap instead of
@@ -365,7 +483,7 @@
 				<div class="topbar-spacer"></div>
 				{#if $me}
 					<span class="user-chip">
-						<span class="user-avatar">{initial}</span>
+						<span class="user-avatar" style:background={avatarColor($me.username)}>{initial}</span>
 						{$me.username}
 					</span>
 				{/if}
@@ -420,6 +538,7 @@
 			</nav>
 		</div>
 	</div>
+	<GlobalDialog />
 {:else}
 	<main>
 		{@render children()}

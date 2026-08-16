@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { answerPrompt } from './helpers/dialog';
 
 // Grid/list toggle and column sorting — routes/+page.svelte
 // (lib/viewMode.ts, lib/sortItems.ts).
@@ -7,9 +8,9 @@ test('switching to grid view shows tiles and persists across a reload', async ({
 	await page.goto('/');
 
 	const folderName = `E2E Grid ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	await expect(page.locator('.item-row', { hasText: folderName })).toBeVisible();
 
 	await expect(page.locator('.item-list')).toBeVisible();
@@ -49,9 +50,9 @@ test('clicking a column header sorts the list, and clicking again reverses it', 
 	const stamp = Date.now();
 	const names = [`b-e2e-sort-${stamp}`, `a-e2e-sort-${stamp}`, `c-e2e-sort-${stamp}`];
 	for (const name of names) {
-		page.once('dialog', (dialog) => dialog.accept(name));
 		await page.getByRole('button', { name: '+ New' }).click();
 		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await answerPrompt(page, name);
 		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
 	}
 
@@ -82,12 +83,12 @@ test('on a mobile-width viewport, sorting is reachable via the toolbar SortMenu,
 	const stamp = Date.now();
 	const names = [`b-e2e-mobile-sort-${stamp}`, `a-e2e-mobile-sort-${stamp}`];
 	for (const name of names) {
-		page.once('dialog', (dialog) => dialog.accept(name));
 		// The toolbar's own New folder/Upload/Scan buttons are hidden on
 		// mobile (see app.css) in favor of the FAB — same reason this test
 		// has to go through it instead of "+ New folder" directly.
 		await page.locator('.fab').click();
 		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await answerPrompt(page, name);
 		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
 	}
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { answerPrompt } from './helpers/dialog';
 
 // The sidebar's own folder tree (routes/+layout.svelte's "Home" entry +
 // lib/FolderTreeItem.svelte) — collapsed by default, lazily loads each
@@ -20,9 +21,9 @@ test('folder tree: collapsed by default, auto-reveals the current folder, expand
 	const parentName = `E2E Tree Parent ${stamp}`;
 	const childName = `E2E Tree Child ${stamp}`;
 
-	page.once('dialog', (dialog) => dialog.accept(parentName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, parentName);
 	const parentRow = page.locator('.item-row', { hasText: parentName });
 	await expect(parentRow).toBeVisible();
 
@@ -36,9 +37,9 @@ test('folder tree: collapsed by default, auto-reveals the current folder, expand
 	const parentTreeRow = sidebar.locator('.tree-row', { hasText: parentName });
 	await expect(parentTreeRow).toBeVisible();
 
-	page.once('dialog', (dialog) => dialog.accept(childName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, childName);
 	await expect(page.locator('.item-row', { hasText: childName })).toBeVisible();
 
 	// The parent's own node isn't auto-expanded (only its ancestors are) —

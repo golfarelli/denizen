@@ -1,5 +1,7 @@
 {
 	"common.cancel": "Cancel",
+	"common.ok": "OK",
+	"common.create": "Create",
 	"common.loading": "Loading…",
 	"common.download": "Download",
 	"common.downloading": "Downloading…",
@@ -74,6 +76,7 @@
 	"fileBrowser.dismiss": "Dismiss",
 	"fileBrowser.addAriaLabel": "Add",
 	"fileBrowser.emptyFolder": "This folder is empty. Drop files here, or use \"+ New\".",
+	"fileBrowser.dropOverlay": "Drop to upload",
 	"fileBrowser.noSearchMatches": "Nothing matches \"{query}\" — by name or by content.",
 	"fileBrowser.searchResultsHint": "{count} result(s) for \"{query}\" — by name or by content, across your whole drive.",
 	"fileBrowser.folderNamePrompt": "Folder name",

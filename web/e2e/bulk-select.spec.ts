@@ -1,4 +1,5 @@
 import { test, expect, devices } from '@playwright/test';
+import { answerPrompt, acceptConfirm } from './helpers/dialog';
 
 function uniqueName(base: string): string {
 	return `${base}-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`;
@@ -59,9 +60,9 @@ test('a click selects a row instead of opening it; double-click opens it (deskto
 	await page.goto('/');
 
 	const folderName = `E2E Click Select ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	const row = page.locator('.item-row', { hasText: folderName });
 	await expect(row).toBeVisible();
 
@@ -77,9 +78,9 @@ test('a click selects a row instead of opening it; double-click opens it (deskto
 	// A plain click on a *different*, unselected row replaces the
 	// selection instead of adding to it — Ctrl+click is what adds.
 	const secondFolderName = `E2E Click Select Second ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(secondFolderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, secondFolderName);
 	const secondRow = page.locator('.item-row', { hasText: secondFolderName });
 	await expect(secondRow).toBeVisible();
 
@@ -100,17 +101,17 @@ test('shift+click selects a range, ctrl+click toggles individual rows', async ({
 	// which the shared root (full of leftovers from every other test in
 	// this file) can't guarantee for three specific names.
 	const containerName = `E2E Range Container ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(containerName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, containerName);
 	await page.locator('.item-row', { hasText: containerName }).dblclick();
 	await expect(page).toHaveURL(/\?folder=/);
 
 	const names = ['a-range', 'b-range', 'c-range'];
 	for (const name of names) {
-		page.once('dialog', (dialog) => dialog.accept(name));
 		await page.getByRole('button', { name: '+ New' }).click();
 		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await answerPrompt(page, name);
 		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
 	}
 	// Default sort (name/ascending) plus these being the only three items
@@ -137,17 +138,17 @@ test('dragging over empty space rubber-band-selects the rows it touches', async 
 	await page.goto('/');
 
 	const containerName = `E2E Marquee Container ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(containerName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, containerName);
 	await page.locator('.item-row', { hasText: containerName }).dblclick();
 	await expect(page).toHaveURL(/\?folder=/);
 
 	const names = ['a-marquee', 'b-marquee', 'c-marquee'];
 	for (const name of names) {
-		page.once('dialog', (dialog) => dialog.accept(name));
 		await page.getByRole('button', { name: '+ New' }).click();
 		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await answerPrompt(page, name);
 		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
 	}
 	const [rowA, rowB, rowC] = names.map((name) => page.locator('.item-row', { hasText: name }));
@@ -186,9 +187,9 @@ test('the native long-press context menu is suppressed on an item row', async ({
 	await page.goto('/');
 
 	const folderName = `E2E Context Menu ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	const row = page.locator('.item-row', { hasText: folderName });
 	await expect(row).toBeVisible();
 
@@ -230,9 +231,9 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 	await page.goto('/');
 
 	const destName = `Bulk Move Dest ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(destName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, destName);
 	await expect(page.locator('.item-row', { hasText: destName })).toBeVisible();
 
 	const toDelete = uniqueName('to-delete');
@@ -247,8 +248,8 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 
 	// --- bulk delete -----------------------------------------------------------------
 	await page.locator('.item-row', { hasText: toDelete }).click();
-	page.once('dialog', (dialog) => dialog.accept());
 	await page.locator('.selection-toolbar').getByRole('button', { name: 'Delete' }).click();
+	await acceptConfirm(page);
 	await expect(page.locator('.item-row', { hasText: toDelete })).toHaveCount(0);
 	await expect(page.locator('.selection-toolbar')).toHaveCount(0); // selection clears after the bulk action
 
@@ -332,9 +333,9 @@ test('selecting a second row still works when tapping where it was *before* the 
 	// toolbar's own "+ New folder" (display:none below 640px — see
 	// app.css — and this context's own device profile is phone-width).
 	const folderName = `E2E Regress Shift ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: 'Add' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	// .tap(), not .click() — this context has hasTouch: true, but a plain
 	// Playwright .click() still simulates a mouse regardless (see
 	// routes/+page.svelte's startLongPress: a real mouse now skips the

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { answerPrompt } from './helpers/dialog';
 
 let counter = 0;
 function uniqueName(base: string, ext: string): string {
@@ -10,9 +11,9 @@ test('the search box finds a file in a different folder by name, and by content'
 	await page.goto('/');
 
 	const folderName = `Search Folder ${Date.now()}`;
-	page.once('dialog', (dialog) => dialog.accept(folderName));
 	await page.getByRole('button', { name: '+ New' }).click();
 	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
 	const folderRow = page.locator('.item-row', { hasText: folderName });
 	await expect(folderRow).toBeVisible();
 	await folderRow.locator('.item-name').dblclick();
