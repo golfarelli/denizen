@@ -12,6 +12,8 @@
 	"common.copyLink": "Copia link",
 	"common.copied": "Copiato!",
 	"common.addShortcut": "Aggiungi collegamento",
+	"common.addToFavorites": "Aggiungi ai preferiti",
+	"common.removeFromFavorites": "Rimuovi dai preferiti",
 	"common.removeShortcut": "Rimuovi collegamento",
 	"common.delete": "Elimina",
 	"common.open": "Apri",
@@ -40,8 +42,11 @@
 	"common.errors.couldNotCreateShareLink": "Impossibile creare il link di condivisione.",
 	"common.errors.couldNotDownload": "Impossibile scaricare questo file.",
 	"common.errors.couldNotDeleteSome": "{count} elemento/i non è stato possibile eliminare.",
+	"common.errors.couldNotUpdateFavorite": "Impossibile aggiornare i preferiti.",
+	"common.errors.couldNotFavoriteSome": "{count} elemento/i non è stato possibile aggiungere ai preferiti.",
 
 	"nav.recent": "Recenti",
+	"nav.favorites": "Preferiti",
 	"nav.myShares": "Condivisioni",
 	"nav.sharedWithMe": "Condiviso con me",
 	"nav.trash": "Cestino",
@@ -117,6 +122,10 @@
 	"recent.hint": "I tuoi file modificati o caricati più di recente, da tutte le cartelle.",
 	"recent.empty": "Nessun file recente.",
 	"recent.errors.couldNotLoad": "Impossibile caricare i file recenti.",
+
+	"favorites.hint": "File e cartelle che hai contrassegnato con una stella — tuoi o condivisi con te.",
+	"favorites.empty": "Nessun preferito ancora. Contrassegna un file o una cartella con una stella per trovarlo qui.",
+	"favorites.errors.couldNotLoad": "Impossibile caricare i preferiti.",
 
 	"sharedWithMe.hint": "File e cartelle che qualcun altro ha condiviso direttamente con te.",
 	"sharedWithMe.empty": "Non c'è ancora nulla condiviso con te.",

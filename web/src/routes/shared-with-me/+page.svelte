@@ -125,6 +125,23 @@
 		if (share.item) shortcutTarget = [share.item];
 	}
 
+	async function handleToggleFavorite(share: EnrichedReceivedShare, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		const item = share.item;
+		if (!item) return;
+		try {
+			if (item.is_favorite) {
+				await api.removeFavorite(item.id);
+			} else {
+				await api.addFavorite(item.id);
+			}
+			item.is_favorite = !item.is_favorite;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotUpdateFavorite');
+		}
+	}
+
 	function openItem(share: EnrichedReceivedShare) {
 		if (!share.item) return;
 		if (share.item.type === 'folder') {
@@ -245,6 +262,20 @@
 										<path d="M8 16 16 8M10.5 8H16v5.5" stroke-linecap="round" stroke-linejoin="round" />
 									</svg>
 									{$t('common.addShortcut')}
+								</button>
+								<button role="menuitem" onclick={(e) => handleToggleFavorite(share, e)}>
+									<svg
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill={share.item.is_favorite ? 'currentColor' : 'none'}
+										stroke="currentColor"
+										stroke-width="1.8"
+										aria-hidden="true"
+									>
+										<path d="M12 3.5l2.7 5.9 6.3.7-4.7 4.4 1.3 6.2-5.6-3.2-5.6 3.2 1.3-6.2-4.7-4.4 6.3-.7L12 3.5Z" stroke-linejoin="round" />
+									</svg>
+									{$t(share.item.is_favorite ? 'common.removeFromFavorites' : 'common.addToFavorites')}
 								</button>
 							{/if}
 							<button class="dropdown-menu-cancel" onclick={closeMenu}>{$t('common.cancel')}</button>

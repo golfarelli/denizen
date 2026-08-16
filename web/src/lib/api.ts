@@ -113,6 +113,14 @@ export interface Item {
 	// why), but opening/navigating should always go to target_id instead
 	// of id.
 	target_id?: string;
+	// Whether the caller has starred this item — can be true even when
+	// owned is false (favoriting a shared item is explicitly in scope, see
+	// ItemService.ListFavorites). Only List/Get/ListRecent/ListFavorites
+	// fill this in (see itemResponse.IsFavorite's own comment) — absent
+	// elsewhere (Search, trash, shares, shared-with-me) means "unknown",
+	// not "definitely not favorited", though the UI treats the two the
+	// same (falls back to showing "Add to favorites").
+	is_favorite?: boolean;
 }
 
 export interface Me {
@@ -246,6 +254,14 @@ export const api = {
 	// own comment for what makes the response a shortcut.
 	createShortcut: (id: string, parentId: string | null) =>
 		req<Item>(`/api/v1/items/${id}/shortcut`, jsonInit({ parent_id: parentId })),
+
+	// The caller's own starred items, owned or shared alike — see
+	// ItemService.ListFavorites's own doc comment for scope.
+	listFavorites: () => req<Item[]>('/api/v1/favorites'),
+
+	addFavorite: (id: string) => req<void>(`/api/v1/items/${id}/favorite`, jsonInit({})),
+
+	removeFavorite: (id: string) => req<void>(`/api/v1/items/${id}/favorite`, { method: 'DELETE' }),
 
 	listTrash: () => req<Item[]>('/api/v1/trash'),
 

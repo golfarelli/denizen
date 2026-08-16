@@ -52,6 +52,7 @@
 		if (from === 'shares') return '/shares';
 		if (from === 'shared-with-me') return '/shared-with-me';
 		if (from === 'recent') return '/recent';
+		if (from === 'favorites') return '/favorites';
 		return `/?folder=${encodeURIComponent(from)}`;
 	});
 
@@ -163,6 +164,20 @@
 			if (revoke) URL.revokeObjectURL(url);
 		} catch {
 			error = $t('common.errors.couldNotDownload');
+		}
+	}
+
+	async function handleToggleFavorite() {
+		if (!item) return;
+		try {
+			if (item.is_favorite) {
+				await api.removeFavorite(item.id);
+			} else {
+				await api.addFavorite(item.id);
+			}
+			item.is_favorite = !item.is_favorite;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotUpdateFavorite');
 		}
 	}
 
@@ -304,6 +319,20 @@
 								<path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
 							</svg>
 							{$t('common.download')}
+						</button>
+						<button role="menuitem" onclick={handleToggleFavorite}>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill={item.is_favorite ? 'currentColor' : 'none'}
+								stroke="currentColor"
+								stroke-width="1.8"
+								aria-hidden="true"
+							>
+								<path d="M12 3.5l2.7 5.9 6.3.7-4.7 4.4 1.3 6.2-5.6-3.2-5.6 3.2 1.3-6.2-4.7-4.4 6.3-.7L12 3.5Z" stroke-linejoin="round" />
+							</svg>
+							{$t(item.is_favorite ? 'common.removeFromFavorites' : 'common.addToFavorites')}
 						</button>
 						{#if item.can_edit}
 							<button role="menuitem" onclick={handleRename}>

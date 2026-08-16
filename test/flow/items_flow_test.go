@@ -27,6 +27,7 @@ type apiItem struct {
 	Owned      bool     `json:"owned"`
 	CanEdit    bool     `json:"can_edit"`
 	SharedWith []string `json:"shared_with,omitempty"`
+	IsFavorite bool     `json:"is_favorite,omitempty"`
 }
 
 type registeredUser struct {

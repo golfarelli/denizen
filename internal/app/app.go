@@ -53,12 +53,13 @@ func New(cfg config.Config) (*App, error) {
 	userShares := repository.NewUserShareRepository(cn)
 	search := repository.NewSearchRepository(cn)
 	ocr := repository.NewOCRRepository(cn)
+	favorites := repository.NewFavoriteRepository(cn)
 	tokens := token.NewIssuer(cfg.JWTSecret)
 	store := storage.New(cfg.DataDir)
 
 	authService := service.NewAuthService(users, invites, refreshTokens, tokens,
 		cfg.DefaultQuotaBytes, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	itemService := service.NewItemService(items, users, userShares, search, ocr, int(cfg.OCRBatchSize), store)
+	itemService := service.NewItemService(items, users, userShares, search, ocr, int(cfg.OCRBatchSize), favorites, store)
 	shareService := service.NewShareService(shares, itemService)
 	userShareService := service.NewUserShareService(userShares, itemService, users)
 	userService := service.NewUserService(users)

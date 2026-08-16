@@ -1293,10 +1293,16 @@ main.fullscreen {
 
 /* Enough room for the fixed .selection-toolbar not to cover the last row
    — a little more than its own typical height, since it can wrap to two
-   lines on a narrow screen with every action button showing full text. */
+   (now, with a 6th action button added for favorites — secondbrain session
+   2026-08-16 — sometimes three) lines on a narrow screen with every action
+   button showing full text. Bumped from 5.5rem: a real, reproducible
+   e2e failure (files.spec.ts's dblclick-to-open test, only ever failing
+   deep into the full suite once root had accumulated enough rows to push
+   the target below the old, now-insufficient reserve) confirmed the old
+   value no longer covered the toolbar's real worst-case height. */
 .item-list.has-selection,
 .item-grid.has-selection {
-	padding-bottom: 5.5rem;
+	padding-bottom: 7.5rem;
 }
 
 .selection-toolbar-actions .danger {
