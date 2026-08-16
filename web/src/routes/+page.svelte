@@ -736,6 +736,25 @@
 	// A plain <a href> can't carry the Authorization header a download
 	// needs, so the file is fetched as a blob and handed to the browser via
 	// a throwaway object URL instead.
+	// Mutates item.is_favorite in place rather than reloading the list —
+	// items is a $state array, so this alone is enough to flip the star
+	// icon/menu label immediately (same reactivity Svelte 5 already gives
+	// any other in-place object mutation inside a $state array).
+	async function handleToggleFavorite(item: Item, event: MouseEvent) {
+		event.stopPropagation();
+		closeMenu();
+		try {
+			if (item.is_favorite) {
+				await api.removeFavorite(item.id);
+			} else {
+				await api.addFavorite(item.id);
+			}
+			item.is_favorite = !item.is_favorite;
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : $t('common.errors.couldNotUpdateFavorite');
+		}
+	}
+
 	async function handleDownload(item: Item, event: MouseEvent) {
 		event.stopPropagation();
 		closeMenu();
@@ -806,6 +825,20 @@
 
 	function handleBulkShare() {
 		if (selectedItems.length > 0) sharingItems = selectedItems;
+	}
+
+	// Always adds, never toggles — Drive's own bulk selection doesn't offer
+	// a mixed-state "un-favorite the starred ones, star the rest" either,
+	// and selectedItems here can already be a mix of favorited/not.
+	async function handleBulkFavorite() {
+		const targets = selectedItems;
+		if (targets.length === 0) return;
+		const results = await Promise.allSettled(targets.map((item) => api.addFavorite(item.id)));
+		targets.forEach((item, i) => {
+			if (results[i].status === 'fulfilled') item.is_favorite = true;
+		});
+		const failed = results.filter((r) => r.status === 'rejected').length;
+		if (failed > 0) error = $t('common.errors.couldNotFavoriteSome', { count: failed });
 	}
 
 	function uploadFiles(fileList: FileList | File[]) {
@@ -1048,6 +1081,9 @@
 			<button class="btn" onclick={handleBulkShare} disabled={!selectedItems.every((i) => i.owned)}>
 				{$t('common.share')}
 			</button>
+			<button class="btn" onclick={handleBulkFavorite}>
+				{$t('common.addToFavorites')}
+			</button>
 			<button
 				class="btn danger"
 				onclick={handleBulkDelete}
@@ -1185,6 +1221,20 @@
 								{$t('common.download')}
 							</button>
 						{/if}
+						<button role="menuitem" onclick={(e) => handleToggleFavorite(item, e)}>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill={item.is_favorite ? 'currentColor' : 'none'}
+								stroke="currentColor"
+								stroke-width="1.8"
+								aria-hidden="true"
+							>
+								<path d="M12 3.5l2.7 5.9 6.3.7-4.7 4.4 1.3 6.2-5.6-3.2-5.6 3.2 1.3-6.2-4.7-4.4 6.3-.7L12 3.5Z" stroke-linejoin="round" />
+							</svg>
+							{$t(item.is_favorite ? 'common.removeFromFavorites' : 'common.addToFavorites')}
+						</button>
 						{#if item.can_edit}
 							<button role="menuitem" onclick={(e) => handleRename(item, e)}>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

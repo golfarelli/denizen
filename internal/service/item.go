@@ -34,6 +34,7 @@ type ItemService struct {
 	search       *repository.SearchRepository    // content search index — see indexContent/Search
 	ocr          *repository.OCRRepository       // scanned-PDF/photo OCR attempt tracking — see RunOCRSweep
 	ocrBatchSize int                             // see TriggerOCRSweep
+	favorites    *repository.FavoriteRepository  // per-user starred items — see AddFavorite/ListFavorites
 	storage      *storage.Store
 	now          func() time.Time // swappable in tests; defaults to time.Now
 
@@ -42,8 +43,8 @@ type ItemService struct {
 	ocrSweeping atomic.Bool
 }
 
-func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, ocr *repository.OCRRepository, ocrBatchSize int, store *storage.Store) *ItemService {
-	return &ItemService{items: items, users: users, grants: grants, search: search, ocr: ocr, ocrBatchSize: ocrBatchSize, storage: store, now: time.Now}
+func NewItemService(items *repository.ItemRepository, users *repository.UserRepository, grants *repository.UserShareRepository, search *repository.SearchRepository, ocr *repository.OCRRepository, ocrBatchSize int, favorites *repository.FavoriteRepository, store *storage.Store) *ItemService {
+	return &ItemService{items: items, users: users, grants: grants, search: search, ocr: ocr, ocrBatchSize: ocrBatchSize, favorites: favorites, storage: store, now: time.Now}
 }
 
 // --- name/path helpers -----------------------------------------------------
@@ -466,6 +467,82 @@ func (s *ItemService) Thumbnail(ctx context.Context, callerID, id string) ([]byt
 // what's the same kind of bounded listing.
 func (s *ItemService) ListRecent(ctx context.Context, callerID string) ([]*model.Item, error) {
 	return s.items.ListRecentFiles(ctx, callerID, searchResultLimit)
+}
+
+// AddFavorite stars id for callerID — requires read access (getReadable:
+// owned, or a direct/inherited share grant at any permission, not
+// trashed), the same bar Content/Get already use, since favoriting is
+// itself just a bookmark to something you can already see. Idempotent —
+// see FavoriteRepository.Add's own comment.
+func (s *ItemService) AddFavorite(ctx context.Context, callerID, id string) error {
+	item, err := s.getReadable(ctx, callerID, id)
+	if err != nil {
+		return err
+	}
+	return s.favorites.Add(ctx, idgen.New(), item.ID, callerID, s.now().Unix())
+}
+
+// RemoveFavorite un-stars id for callerID. No read-access check unlike
+// AddFavorite: un-favoriting something you've lost access to since (a
+// revoked share) has to still work, otherwise a stale favorite could never
+// be cleared — Remove is idempotent either way (FavoriteRepository.Remove),
+// so there's nothing unsafe about not gating it.
+func (s *ItemService) RemoveFavorite(ctx context.Context, callerID, id string) error {
+	return s.favorites.Remove(ctx, id, callerID)
+}
+
+// ListFavorites resolves callerID's starred items into real *model.Item
+// rows, most recently starred first. Unlike Recent, deliberately not
+// scoped to owned-only: Fabio asked explicitly for shared items to be
+// favoritable too (2026-08-16) — a starred item some else owns needs its
+// access re-checked here (resolveGrant), not just trusted from favoriting
+// time, since a share can be revoked after the fact; anything no longer
+// reachable is silently dropped from the list rather than erroring the
+// whole request, same "it just stops showing up" behavior a revoked grant
+// already has everywhere else (Shared with me, folder browsing, ...) —
+// no separate cleanup of the orphaned item_favorites row needed, it simply
+// never resolves to anything visible again unless access is restored.
+// Folders are included here, unlike Recent, which deliberately excludes
+// them — Drive lets you star a folder too, no reason this shouldn't.
+func (s *ItemService) ListFavorites(ctx context.Context, callerID string) ([]*model.Item, error) {
+	ids, err := s.favorites.ListItemIDs(ctx, callerID)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*model.Item, 0, len(ids))
+	for _, id := range ids {
+		item, err := s.items.GetByID(ctx, id)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				continue // permanently deleted since it was favorited
+			}
+			return nil, err
+		}
+		if item.DeletedAt != nil {
+			continue // trashed — same "not visible" treatment as everywhere else
+		}
+		if item.OwnerID != callerID {
+			grant, err := s.resolveGrant(ctx, item, callerID)
+			if err != nil {
+				return nil, err
+			}
+			if grant == nil {
+				continue // access revoked since it was favorited
+			}
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// FavoritedSet is FavoriteRepository.FavoritedSet passed straight through —
+// ItemHandler's enrichFavorites is the only caller, kept as a thin service
+// method rather than reaching into the repository directly so the handler
+// never touches a repository type, same layering every other handler here
+// already follows.
+func (s *ItemService) FavoritedSet(ctx context.Context, callerID string, itemIDs []string) (map[string]bool, error) {
+	return s.favorites.FavoritedSet(ctx, callerID, itemIDs)
 }
 
 // ListChildren lists the active direct children of parentID (nil = root).

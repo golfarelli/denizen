@@ -413,6 +413,12 @@
 					</svg>
 					{$t('nav.recent')}
 				</a>
+				<a href="/favorites" class:active={$page.url.pathname === '/favorites'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<path d="M12 3.5l2.7 5.9 6.3.7-4.7 4.4 1.3 6.2-5.6-3.2-5.6 3.2 1.3-6.2-4.7-4.4 6.3-.7L12 3.5Z" stroke-linejoin="round" />
+					</svg>
+					{$t('nav.favorites')}
+				</a>
 				{#if $me?.is_admin}
 					<a href="/admin" class:active={$page.url.pathname === '/admin'}>
 						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

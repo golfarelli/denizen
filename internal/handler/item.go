@@ -71,6 +71,14 @@ type itemResponse struct {
 	// access" row badge. Omitted, not just empty, when there's nothing to
 	// show, so most rows carry no extra payload at all.
 	SharedWith []string `json:"shared_with,omitempty"`
+	// IsFavorite reflects the caller's own item_favorites row, regardless
+	// of Owned — a favorite can point at someone else's shared item just as
+	// well as your own (see ItemService.ListFavorites). Filled in by
+	// enrichFavorites below; false (the zero value) wherever that isn't
+	// called (Search, trash, shares, shared-with-me), same "not every
+	// listing enriches every optional field" precedent SharedWith already
+	// sets.
+	IsFavorite bool `json:"is_favorite,omitempty"`
 }
 
 func toItemResponse(item *model.Item, callerID string) itemResponse {
@@ -175,6 +183,10 @@ func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
 		httpio.WriteError(res, err)
 		return
 	}
+	if err := h.enrichFavorites(req.Context(), ownerID(req), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
 
 	httpio.WriteJSON(res, http.StatusOK, out)
 }
@@ -199,6 +211,73 @@ func (h *ItemHandler) enrichSharedWith(ctx context.Context, out []itemResponse) 
 	return nil
 }
 
+// enrichFavorites fills IsFavorite on every row in out — called by List/
+// Get/ListRecent (see itemResponse.IsFavorite's own comment on why not
+// everywhere). Unlike enrichSharedWith, not scoped to owned rows: a
+// favorite can point at a shared item just as well as an owned one.
+func (h *ItemHandler) enrichFavorites(ctx context.Context, callerID string, out []itemResponse) error {
+	ids := make([]string, len(out))
+	for i := range out {
+		ids[i] = out[i].ID
+	}
+	favorited, err := h.items.FavoritedSet(ctx, callerID, ids)
+	if err != nil {
+		return err
+	}
+	for i := range out {
+		out[i].IsFavorite = favorited[out[i].ID]
+	}
+	return nil
+}
+
+// AddFavorite handles POST /api/v1/items/{id}/favorite.
+func (h *ItemHandler) AddFavorite(res http.ResponseWriter, req *http.Request) {
+	if err := h.items.AddFavorite(req.Context(), ownerID(req), req.PathValue("id")); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.WriteHeader(http.StatusNoContent)
+}
+
+// RemoveFavorite handles DELETE /api/v1/items/{id}/favorite.
+func (h *ItemHandler) RemoveFavorite(res http.ResponseWriter, req *http.Request) {
+	if err := h.items.RemoveFavorite(req.Context(), ownerID(req), req.PathValue("id")); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.WriteHeader(http.StatusNoContent)
+}
+
+// ListFavorites handles GET /api/v1/favorites — the caller's own starred
+// items, owned or shared alike (see ItemService.ListFavorites's own scope
+// comment), for the "Favorites" nav item (routes/favorites/+page.svelte).
+// Every row here is IsFavorite by definition — no need to round-trip
+// through enrichFavorites just to confirm what's already known.
+func (h *ItemHandler) ListFavorites(res http.ResponseWriter, req *http.Request) {
+	items, err := h.items.ListFavorites(req.Context(), ownerID(req))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+	for i := range out {
+		out[i].IsFavorite = true
+		if !out[i].Owned {
+			canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), items[i])
+			if err != nil {
+				httpio.WriteError(res, err)
+				return
+			}
+			out[i].CanEdit = canEdit
+		}
+	}
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
 // ListRecent handles GET /api/v1/recent — the caller's own most recently
 // modified files across the whole drive, for the "Recent" nav item
 // (routes/recent/+page.svelte) — see ItemService.ListRecent's own scope
@@ -213,6 +292,10 @@ func (h *ItemHandler) ListRecent(res http.ResponseWriter, req *http.Request) {
 	}
 	out := toItemResponses(items, ownerID(req))
 	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	if err := h.enrichFavorites(req.Context(), ownerID(req), out); err != nil {
 		httpio.WriteError(res, err)
 		return
 	}
@@ -275,7 +358,12 @@ func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
 		}
 		out.CanEdit = canEdit
 	}
-	httpio.WriteJSON(res, http.StatusOK, out)
+	single := []itemResponse{out}
+	if err := h.enrichFavorites(req.Context(), ownerID(req), single); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, single[0])
 }
 
 // Content handles GET /api/v1/items/{id}/content — streams a file's bytes,

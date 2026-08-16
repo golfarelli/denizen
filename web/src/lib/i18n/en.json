@@ -12,6 +12,8 @@
 	"common.copyLink": "Copy link",
 	"common.copied": "Copied!",
 	"common.addShortcut": "Add shortcut",
+	"common.addToFavorites": "Add to favorites",
+	"common.removeFromFavorites": "Remove from favorites",
 	"common.removeShortcut": "Remove shortcut",
 	"common.delete": "Delete",
 	"common.open": "Open",
@@ -40,8 +42,11 @@
 	"common.errors.couldNotCreateShareLink": "Could not create a share link.",
 	"common.errors.couldNotDownload": "Could not download this file.",
 	"common.errors.couldNotDeleteSome": "{count} item(s) could not be deleted.",
+	"common.errors.couldNotUpdateFavorite": "Could not update favorites.",
+	"common.errors.couldNotFavoriteSome": "{count} item(s) could not be added to favorites.",
 
 	"nav.recent": "Recent",
+	"nav.favorites": "Favorites",
 	"nav.myShares": "My shares",
 	"nav.sharedWithMe": "Shared with me",
 	"nav.trash": "Trash",
@@ -117,6 +122,10 @@
 	"recent.hint": "Your most recently modified or uploaded files, across every folder.",
 	"recent.empty": "No recent files.",
 	"recent.errors.couldNotLoad": "Could not load recent files.",
+
+	"favorites.hint": "Files and folders you've starred — yours or shared with you.",
+	"favorites.empty": "No favorites yet. Star a file or folder to find it here.",
+	"favorites.errors.couldNotLoad": "Could not load favorites.",
 
 	"sharedWithMe.hint": "Files and folders someone else shared directly with you.",
 	"sharedWithMe.empty": "Nothing has been shared with you yet.",
