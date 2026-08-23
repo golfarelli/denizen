@@ -214,6 +214,19 @@ func (r *ItemRepository) UpdateNameParent(ctx context.Context, id, name string, 
 	return err
 }
 
+// UpdateMimeType corrects a file item's stored MIME type in place, without
+// touching its name/parent/content — used to backfill items that ended up
+// with none (a migration tool that didn't pass a real mime type for a
+// source file whose own name had no extension, see the 2026-08-23
+// Drive→Denizen migration backfill; there's no other way to fix this
+// short of deleting and re-uploading, which would change the item's id
+// and break every link already pointing at it).
+func (r *ItemRepository) UpdateMimeType(ctx context.Context, id, mimeType string) error {
+	sql := `UPDATE items SET mime_type = ? WHERE id = ?`
+	_, err := r.cn.ExecContext(ctx, sql, mimeType, id)
+	return err
+}
+
 // UpdateContent updates a file item's content metadata after its bytes on
 // disk were replaced in place — name and parent are untouched, unlike
 // UpdateNameParent (see internal/service.ReplaceContent, used by the

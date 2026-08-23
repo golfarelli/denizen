@@ -55,6 +55,7 @@ func New(auth *handler.AuthHandler, items *handler.ItemHandler, shares *handler.
 	mux.Handle("POST /api/v1/items/{id}/favorite", requireAuth(http.HandlerFunc(items.AddFavorite)))
 	mux.Handle("DELETE /api/v1/items/{id}/favorite", requireAuth(http.HandlerFunc(items.RemoveFavorite)))
 	mux.Handle("PATCH /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Move)))
+	mux.Handle("PATCH /api/v1/items/{id}/mimetype", requireAuth(http.HandlerFunc(items.SetMimeType)))
 	mux.Handle("DELETE /api/v1/items/{id}", requireAuth(http.HandlerFunc(items.Delete)))
 	mux.Handle("POST /api/v1/items/{id}/restore", requireAuth(http.HandlerFunc(items.Restore)))
 	mux.Handle("POST /api/v1/items/{id}/copy", requireAuth(http.HandlerFunc(items.Copy)))

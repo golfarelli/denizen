@@ -1360,6 +1360,31 @@ func (s *ItemService) Move(ctx context.Context, callerID, id string, in MoveInpu
 	return item, nil
 }
 
+// SetMimeType corrects a file item's stored MIME type in place — a narrow
+// fix-up, not part of the regular rename/move flow (Move above), for a
+// case that flow can't reach: an item that was created with no MIME type
+// at all. See ItemRepository.UpdateMimeType's own comment for how that
+// happens and why an in-place fix (not delete-and-re-upload) is the only
+// option that preserves the item's id.
+func (s *ItemService) SetMimeType(ctx context.Context, callerID, id, mimeType string) (*model.Item, error) {
+	item, err := s.GetForWrite(ctx, callerID, id)
+	if err != nil {
+		return nil, err
+	}
+	if item.Type != model.ItemTypeFile {
+		return nil, apperr.Validation("only files have a mime type")
+	}
+	mimeType = strings.TrimSpace(mimeType)
+	if mimeType == "" {
+		return nil, apperr.Validation("mime_type is required")
+	}
+	if err := s.items.UpdateMimeType(ctx, id, mimeType); err != nil {
+		return nil, err
+	}
+	item.MimeType = &mimeType
+	return item, nil
+}
+
 // checkNotSelfOrDescendant rejects moving a folder into itself or into one
 // of its own descendants, which would either be a no-op cycle or orphan the
 // folder (and everything in it) from the tree entirely.

@@ -465,6 +465,27 @@ func (h *ItemHandler) Move(res http.ResponseWriter, req *http.Request) {
 	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
 }
 
+type setMimeTypeRequest struct {
+	MimeType string `json:"mime_type"`
+}
+
+// SetMimeType handles PATCH /api/v1/items/{id}/mimetype — a narrow fix-up
+// endpoint separate from Move above (which never touches mime_type): for
+// correcting an item that ended up with none. See ItemService.SetMimeType.
+func (h *ItemHandler) SetMimeType(res http.ResponseWriter, req *http.Request) {
+	var in setMimeTypeRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+	item, err := h.items.SetMimeType(req.Context(), ownerID(req), req.PathValue("id"), in.MimeType)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
+}
+
 // Delete handles DELETE /api/v1/items/{id} — moves the item to trash (soft
 // delete), it isn't gone for good until DeletePermanently.
 func (h *ItemHandler) Delete(res http.ResponseWriter, req *http.Request) {
