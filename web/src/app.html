@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<!-- The app manages its own bilingual UI (lib/i18n) — a browser's
+		     own auto-translate should never kick in on top of that (it
+		     would also sweep up the "Denizen" brand name into translation,
+		     not just the UI text — see routes/+layout.svelte's own comment
+		     on the lang= mismatch that used to invite it in the first
+		     place). -->
+		<meta name="google" content="notranslate" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		<link rel="manifest" href="/manifest.json" />
+		<meta name="theme-color" content="#5b5bd6" />
+		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

@@ -1,0 +1,14 @@
+-- Shortcuts: a pointer to another item, not a copy of it — "Aggiungi
+-- collegamento", same idea as Google Drive's own shortcuts. `type` stays
+-- 'file'/'folder' (what the shortcut represents, for every existing query/
+-- icon/navigation check that already switches on it) — target_id is the
+-- only new marker of "this row has no counterpart on disk, it just points
+-- at target_id's real one". NULL for every ordinary item, same as before
+-- this migration. No CHECK constraint change needed (SQLite can't ALTER
+-- one in place anyway, that would mean the full table-rebuild dance) since
+-- 'file'/'folder' remains the only two values `type` ever takes.
+--
+-- size_bytes stays 0 and checksum stays NULL for a shortcut row (no real
+-- content of its own — see ItemService.CreateShortcut), same convention
+-- already used for folders.
+ALTER TABLE items ADD COLUMN target_id TEXT REFERENCES items(id);

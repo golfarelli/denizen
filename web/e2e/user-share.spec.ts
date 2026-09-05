@@ -1,0 +1,151 @@
+import { test, expect } from '@playwright/test';
+import { registerSecondUser } from './helpers/secondUser';
+import { answerPrompt, acceptConfirm } from './helpers/dialog';
+
+// Mirrors auth.setup.ts's own ADMIN_USERNAME constant — can't import it
+// directly, Playwright disallows a regular spec importing a *.setup.ts
+// file.
+const ADMIN_USERNAME = 'e2e-admin';
+
+let uploadCounter = 0;
+function uniqueName(ext: string): string {
+	uploadCounter += 1;
+	return `user-share-test-${uploadCounter}-${Date.now()}.${ext}`;
+}
+
+test('sharing a file with a specific person: they see it view-only in Shared with me, and losing the grant cuts them off', async ({
+	page,
+	browser
+}) => {
+	const { page: annaPage, username: anna } = await registerSecondUser(page, browser);
+
+	// --- alice uploads a file and shares it directly with anna --------------------
+	await page.goto('/');
+	const name = uniqueName('txt');
+	await page
+		.locator('input[type="file"]')
+		.setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from('hello anna') });
+	const row = page.locator('.item-row', { hasText: name });
+	await expect(row).toBeVisible({ timeout: 15_000 });
+	await row.getByRole('button', { name: `Actions for ${name}` }).click();
+	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+
+	const dialog = page.locator('dialog.card[open]');
+	await expect(dialog.getByRole('heading', { name: 'People with access', level: 3 })).toBeVisible();
+	await dialog.locator('.share-person-select').selectOption({ label: anna });
+	await dialog.locator('.share-people-add').getByRole('button', { name: 'Share', exact: true }).click();
+	await expect(dialog.locator('.share-people-list')).toContainText(anna);
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dialog).not.toBeVisible();
+
+	// --- anna sees it in her own "Shared with me", view-only ----------------------
+	await annaPage.goto('/shared-with-me');
+	const annaRow = annaPage.locator('.item-row', { hasText: name });
+	await expect(annaRow).toBeVisible();
+	await expect(annaRow).toContainText(ADMIN_USERNAME); // the "Shared by" column
+
+	await annaRow.locator('.item-name').click();
+	await expect(annaPage).toHaveURL(/\/file\//);
+	await expect(annaPage.locator('.preview-title')).toHaveText(name);
+	await expect(annaPage.locator('.preview-text')).toContainText('hello anna');
+
+	await annaPage.getByRole('button', { name: `Actions for ${name}` }).click();
+	const annaMenu = annaPage.locator('.dropdown-menu');
+	await expect(annaMenu.getByRole('menuitem', { name: 'Download' })).toBeVisible();
+	// View-only: none of the owner-only actions exist for her at all — not
+	// just disabled, since the backend would 404 them anyway (see
+	// internal/service/item.go's GetIncludingTrashed).
+	await expect(annaMenu.getByRole('menuitem', { name: 'Rename' })).toHaveCount(0);
+	await expect(annaMenu.getByRole('menuitem', { name: 'Move', exact: true })).toHaveCount(0);
+	await expect(annaMenu.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
+	await annaMenu.getByRole('button', { name: 'Cancel' }).click();
+
+	await annaPage.locator('.preview-back').click();
+	await expect(annaPage).toHaveURL('/shared-with-me');
+
+	// --- alice revokes access -------------------------------------------------------
+	await page.goto('/');
+	await row.getByRole('button', { name: `Actions for ${name}` }).click();
+	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+	await expect(dialog.locator('.share-people-list')).toContainText(anna);
+	await dialog.locator('.share-people-list li', { hasText: anna }).getByRole('button').click();
+	// The whole list unmounts once it's empty (`{#if grants.length > 0}` —
+	// see ShareDialog.svelte), not just anna's own row disappearing.
+	await expect(dialog.locator('.share-people-list')).toHaveCount(0);
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+	// --- anna loses access immediately ----------------------------------------------
+	await annaPage.goto('/shared-with-me');
+	await expect(annaPage.locator('.item-row', { hasText: name })).toHaveCount(0);
+});
+
+test('sharing a folder offers both the per-person section and a link', async ({ page }) => {
+	await page.goto('/');
+
+	const folderName = `E2E Folder Share ${Date.now()}`;
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
+
+	const row = page.locator('.item-row', { hasText: folderName });
+	await expect(row).toBeVisible();
+	await row.getByRole('button', { name: `Actions for ${folderName}` }).click();
+	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+
+	const dialog = page.locator('dialog.card[open]');
+	await expect(dialog.getByRole('heading', { name: `Share "${folderName}"` })).toBeVisible();
+	// Folders get the same per-person section files do now — a grant on a
+	// folder is inherited by everything nested inside it.
+	await expect(dialog.getByRole('heading', { name: 'People with access', level: 3 })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Create link' })).toBeVisible();
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+});
+
+test('"My shares" shows both link shares and direct person shares, not just links', async ({ page, browser }) => {
+	const { username: anna } = await registerSecondUser(page, browser);
+
+	await page.goto('/');
+	const linkedName = uniqueName('txt');
+	const personName = uniqueName('txt');
+	await page.locator('input[type="file"]').setInputFiles([
+		{ name: linkedName, mimeType: 'text/plain', buffer: Buffer.from('shared via link') },
+		{ name: personName, mimeType: 'text/plain', buffer: Buffer.from('shared with anna') }
+	]);
+	await expect(page.locator('.item-row', { hasText: linkedName })).toBeVisible({ timeout: 15_000 });
+	await expect(page.locator('.item-row', { hasText: personName })).toBeVisible({ timeout: 15_000 });
+
+	// --- a token link on one file ---------------------------------------------------
+	const linkedRow = page.locator('.item-row', { hasText: linkedName });
+	await linkedRow.getByRole('button', { name: `Actions for ${linkedName}` }).click();
+	await linkedRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+	const dialog = page.locator('dialog.card[open]');
+	await dialog.getByRole('button', { name: 'Create link' }).click();
+	await expect(dialog.getByRole('button', { name: 'Done' })).toBeVisible();
+	await dialog.getByRole('button', { name: 'Done' }).click();
+
+	// --- a direct grant to anna on the other file ------------------------------------
+	const personRow = page.locator('.item-row', { hasText: personName });
+	await personRow.getByRole('button', { name: `Actions for ${personName}` }).click();
+	await personRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();
+	await dialog.locator('.share-person-select').selectOption({ label: anna });
+	await dialog.locator('.share-people-add').getByRole('button', { name: 'Share', exact: true }).click();
+	await expect(dialog.locator('.share-people-list')).toContainText(anna);
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+	// --- "My shares" lists both, correctly labeled -----------------------------------
+	await page.goto('/shares');
+	const linkedShareRow = page.locator('.item-row', { hasText: linkedName });
+	const personShareRow = page.locator('.item-row', { hasText: personName });
+	await expect(linkedShareRow).toBeVisible();
+	await expect(personShareRow).toBeVisible();
+	await expect(linkedShareRow).toContainText('Public');
+	await expect(personShareRow).toContainText(anna);
+	await expect(personShareRow).toContainText('Can view');
+
+	// --- revoking the person share from here works too --------------------------------
+	await personShareRow.getByRole('button', { name: `Actions for ${personName}` }).click();
+	await personShareRow.locator('.dropdown-menu').getByRole('menuitem', { name: 'Revoke' }).click();
+	await acceptConfirm(page);
+	await expect(personShareRow).not.toBeVisible();
+	await expect(linkedShareRow).toBeVisible(); // untouched
+});

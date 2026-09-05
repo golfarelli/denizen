@@ -1,0 +1,42 @@
+# Optional overlay: adds a real OnlyOffice Document Server, and points
+# Denizen at it — unlocks viewing Word/Excel/PowerPoint documents with
+# genuine fidelity (the same engine Nextcloud's own "Nextcloud Office"
+# integration uses), instead of the built-in client-side preview
+# (docx-preview/xlsx), which stays the default when this isn't used.
+#
+# This is a genuinely heavy addition — a real Office-compatible rendering
+# engine in its own container, not a small dependency — so it's kept
+# entirely separate from docker-compose.yml rather than baked into it. Only
+# use it if you actually want this:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.onlyoffice.yml up -d --build
+#
+# Phase 1 only (see internal/onlyoffice's own doc comment): viewing, not
+# yet editing — DENIZEN_ONLYOFFICE_JWT_SECRET below is still required
+# (OnlyOffice's own security model expects a signed config regardless of
+# whether editing is enabled).
+services:
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    restart: unless-stopped
+    ports:
+      - '8091:80'
+    environment:
+      JWT_ENABLED: 'true'
+      JWT_SECRET: 'change-me-to-a-real-random-secret' # must match denizen's DENIZEN_ONLYOFFICE_JWT_SECRET below
+    volumes:
+      - ./onlyoffice-data:/var/www/onlyoffice/Data
+
+  denizen:
+    environment:
+      # Reachable by a browser — same host:port this compose file exposes
+      # onlyoffice on above. Change if you're putting either service behind
+      # a reverse proxy with a different externally-visible address.
+      DENIZEN_ONLYOFFICE_URL: 'http://localhost:8091'
+      # Reachable by the onlyoffice *container itself*, not a browser —
+      # commonly different from the URL above once anything sits in front
+      # of Denizen (see internal/config/config.go's own field comment).
+      # "denizen" here is this compose file's own service name, resolvable
+      # on the network the two containers already share.
+      DENIZEN_ONLYOFFICE_DOCUMENT_BASE_URL: 'http://denizen:8080'
+      DENIZEN_ONLYOFFICE_JWT_SECRET: 'change-me-to-a-real-random-secret' # must match onlyoffice's JWT_SECRET above

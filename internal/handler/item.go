@@ -1,0 +1,572 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/golfarelli/denizen/internal/apperr"
+	"github.com/golfarelli/denizen/internal/blanktemplates"
+	"github.com/golfarelli/denizen/internal/httpio"
+	"github.com/golfarelli/denizen/internal/middleware"
+	"github.com/golfarelli/denizen/internal/model"
+	"github.com/golfarelli/denizen/internal/service"
+	"github.com/golfarelli/denizen/internal/token"
+)
+
+// ItemHandler exposes /api/v1/items* and /api/v1/trash*. Every route here
+// is expected to run behind middleware.RequireAuth, except .../content —
+// see middleware.RequireAuthOrContentToken and ContentToken below.
+type ItemHandler struct {
+	items  *service.ItemService
+	tokens *token.Issuer // only for ContentToken
+}
+
+func NewItemHandler(items *service.ItemService, tokens *token.Issuer) *ItemHandler {
+	return &ItemHandler{items: items, tokens: tokens}
+}
+
+// contentTokenTTL is generous relative to the access token's own default
+// (15 minutes) on purpose: it's scoped to exactly one item's content (see
+// middleware.RequireAuthOrContentToken), so the blast radius of a leaked
+// one is far narrower — and cutting a video's playback short mid-watch
+// because the token it's streaming through expired would be a worse
+// tradeoff than that narrow extra exposure window.
+const contentTokenTTL = time.Hour
+
+type itemResponse struct {
+	ID        string  `json:"id"`
+	ParentID  *string `json:"parent_id"`
+	Name      string  `json:"name"`
+	Type      string  `json:"type"`
+	SizeBytes int64   `json:"size_bytes"`
+	MimeType  *string `json:"mime_type,omitempty"`
+	// TargetID, when present, makes this a shortcut — see model.Item's own
+	// comment. Everything else in this response (Name, Type, MimeType,
+	// CanEdit, ...) already describes the shortcut's own row correctly on
+	// its own; the frontend only needs TargetID to know where a click
+	// should actually navigate/open, and to render its badge.
+	TargetID  *string `json:"target_id,omitempty"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
+	DeletedAt *int64  `json:"deleted_at,omitempty"`
+	// Owned is false only when callerID reached this item through a direct
+	// share grant (model.UserShare), not ownership — every other call site
+	// below only ever deals in the caller's own items, where it's always
+	// true.
+	Owned bool `json:"owned"`
+	// CanEdit is always true when Owned is. When it isn't, this reflects
+	// the caller's own share grant (direct or inherited from a shared
+	// ancestor folder — see ItemService.CanEdit): the frontend uses it to
+	// show or hide Rename/Move/Delete/Upload/New folder/editable OnlyOffice
+	// for an item reached via a share — see routes/file/[id]/+page.svelte
+	// and routes/+page.svelte. List/Get are responsible for setting this
+	// correctly on a non-owned item; toItemResponse's own default below
+	// only covers the (common) owned case.
+	CanEdit bool `json:"can_edit"`
+	// SharedWith lists the usernames this item has been directly shared
+	// with — only ever populated on an owned item (List/Get fill it in
+	// via ItemService.SharedUsernames), the file browser's "who has
+	// access" row badge. Omitted, not just empty, when there's nothing to
+	// show, so most rows carry no extra payload at all.
+	SharedWith []string `json:"shared_with,omitempty"`
+	// IsFavorite reflects the caller's own item_favorites row, regardless
+	// of Owned — a favorite can point at someone else's shared item just as
+	// well as your own (see ItemService.ListFavorites). Filled in by
+	// enrichFavorites below; false (the zero value) wherever that isn't
+	// called (Search, trash, shares, shared-with-me), same "not every
+	// listing enriches every optional field" precedent SharedWith already
+	// sets.
+	IsFavorite bool `json:"is_favorite,omitempty"`
+}
+
+func toItemResponse(item *model.Item, callerID string) itemResponse {
+	owned := item.OwnerID == callerID
+	return itemResponse{
+		ID:        item.ID,
+		ParentID:  item.ParentID,
+		Name:      item.Name,
+		Type:      string(item.Type),
+		SizeBytes: item.SizeBytes,
+		MimeType:  item.MimeType,
+		TargetID:  item.TargetID,
+		CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt,
+		DeletedAt: item.DeletedAt,
+		Owned:     owned,
+		CanEdit:   owned,
+	}
+}
+
+func toItemResponses(items []*model.Item, callerID string) []itemResponse {
+	out := make([]itemResponse, len(items))
+	for i, item := range items {
+		out[i] = toItemResponse(item, callerID)
+	}
+	return out
+}
+
+// ownerID reads the authenticated user's ID out of the request context —
+// always present on a route wrapped with middleware.RequireAuth.
+func ownerID(req *http.Request) string {
+	claims, _ := middleware.ClaimsFromContext(req.Context())
+	return claims.UserID
+}
+
+type createItemRequest struct {
+	Type     string  `json:"type"`
+	Name     string  `json:"name"`
+	ParentID *string `json:"parent_id"`
+}
+
+// Create makes a folder ("type": "folder") or a new blank Word/Excel/
+// PowerPoint document ("type": one of blanktemplates.MimeTypes' own keys,
+// "docx"/"xlsx"/"pptx") — any other file needs real bytes, not just a
+// name, so those are still created via the upload endpoint instead.
+func (h *ItemHandler) Create(res http.ResponseWriter, req *http.Request) {
+	var in createItemRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+
+	if in.Type == string(model.ItemTypeFolder) {
+		item, err := h.items.CreateFolder(req.Context(), ownerID(req), in.ParentID, in.Name)
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
+		return
+	}
+
+	if _, ok := blanktemplates.MimeTypes[in.Type]; ok {
+		item, err := h.items.CreateBlankDocument(req.Context(), ownerID(req), in.ParentID, in.Type, in.Name)
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
+		return
+	}
+
+	httpio.WriteError(res, apperr.Validation(`type must be "folder", "docx", "xlsx", or "pptx" (any other file is created via upload)`))
+}
+
+// List handles GET /api/v1/items?parent_id=... — parent_id omitted or empty
+// means the user's root folder.
+func (h *ItemHandler) List(res http.ResponseWriter, req *http.Request) {
+	var parentID *string
+	if v := req.URL.Query().Get("parent_id"); v != "" {
+		parentID = &v
+	}
+
+	items, canEdit, err := h.items.ListChildren(req.Context(), ownerID(req), parentID)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+
+	for i := range out {
+		if !out[i].Owned {
+			// Browsing into a shared folder: every child inherits that
+			// folder's own resolved permission (a per-child grant more
+			// specific than its parent's is still honored by every
+			// mutating endpoint itself — see ItemService.resolveGrant —
+			// just not reflected in this bulk hint).
+			out[i].CanEdit = canEdit
+		}
+	}
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	if err := h.enrichFavorites(req.Context(), ownerID(req), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
+// enrichSharedWith fills SharedWith on every owned row in out — the badge
+// data List and Search both need, only ever meaningful for an item the
+// caller actually owns (see itemResponse.SharedWith's own comment).
+func (h *ItemHandler) enrichSharedWith(ctx context.Context, out []itemResponse) error {
+	var ownedIDs []string
+	for i := range out {
+		if out[i].Owned {
+			ownedIDs = append(ownedIDs, out[i].ID)
+		}
+	}
+	sharedWith, err := h.items.SharedUsernames(ctx, ownedIDs)
+	if err != nil {
+		return err
+	}
+	for i := range out {
+		out[i].SharedWith = sharedWith[out[i].ID]
+	}
+	return nil
+}
+
+// enrichFavorites fills IsFavorite on every row in out — called by List/
+// Get/ListRecent (see itemResponse.IsFavorite's own comment on why not
+// everywhere). Unlike enrichSharedWith, not scoped to owned rows: a
+// favorite can point at a shared item just as well as an owned one.
+func (h *ItemHandler) enrichFavorites(ctx context.Context, callerID string, out []itemResponse) error {
+	ids := make([]string, len(out))
+	for i := range out {
+		ids[i] = out[i].ID
+	}
+	favorited, err := h.items.FavoritedSet(ctx, callerID, ids)
+	if err != nil {
+		return err
+	}
+	for i := range out {
+		out[i].IsFavorite = favorited[out[i].ID]
+	}
+	return nil
+}
+
+// AddFavorite handles POST /api/v1/items/{id}/favorite.
+func (h *ItemHandler) AddFavorite(res http.ResponseWriter, req *http.Request) {
+	if err := h.items.AddFavorite(req.Context(), ownerID(req), req.PathValue("id")); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.WriteHeader(http.StatusNoContent)
+}
+
+// RemoveFavorite handles DELETE /api/v1/items/{id}/favorite.
+func (h *ItemHandler) RemoveFavorite(res http.ResponseWriter, req *http.Request) {
+	if err := h.items.RemoveFavorite(req.Context(), ownerID(req), req.PathValue("id")); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.WriteHeader(http.StatusNoContent)
+}
+
+// ListFavorites handles GET /api/v1/favorites — the caller's own starred
+// items, owned or shared alike (see ItemService.ListFavorites's own scope
+// comment), for the "Favorites" nav item (routes/favorites/+page.svelte).
+// Every row here is IsFavorite by definition — no need to round-trip
+// through enrichFavorites just to confirm what's already known.
+func (h *ItemHandler) ListFavorites(res http.ResponseWriter, req *http.Request) {
+	items, err := h.items.ListFavorites(req.Context(), ownerID(req))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+	for i := range out {
+		out[i].IsFavorite = true
+		if !out[i].Owned {
+			canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), items[i])
+			if err != nil {
+				httpio.WriteError(res, err)
+				return
+			}
+			out[i].CanEdit = canEdit
+		}
+	}
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
+// ListRecent handles GET /api/v1/recent — the caller's own most recently
+// modified files across the whole drive, for the "Recent" nav item
+// (routes/recent/+page.svelte) — see ItemService.ListRecent's own scope
+// comment. Every row here is Owned by definition (see ListRecentFiles), so
+// unlike List/Search there's no per-row CanEdit to resolve beyond
+// toItemResponse's own default.
+func (h *ItemHandler) ListRecent(res http.ResponseWriter, req *http.Request) {
+	items, err := h.items.ListRecent(req.Context(), ownerID(req))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	if err := h.enrichFavorites(req.Context(), ownerID(req), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
+// Search handles GET /api/v1/search?q=... — a name/content match across
+// everything the caller may read, own or shared with them (see
+// ItemService.Search's own doc comment).
+func (h *ItemHandler) Search(res http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query().Get("q")
+	items, err := h.items.Search(req.Context(), ownerID(req), q)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponses(items, ownerID(req))
+	for i := range out {
+		if !out[i].Owned {
+			canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), items[i])
+			if err != nil {
+				httpio.WriteError(res, err)
+				return
+			}
+			out[i].CanEdit = canEdit
+		}
+	}
+	if err := h.enrichSharedWith(req.Context(), out); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, out)
+}
+
+// Get handles GET /api/v1/items/{id} — deliberately allows a trashed item
+// too (GetIncludingTrashed, not Get): previewing something in the trash
+// before deciding whether to restore or delete it forever is exactly what
+// Trash's own "open to view" needs, and this is the same read a normal
+// preview does. Mutating routes (Move, Copy, ...) all check via Get
+// directly, in internal/service, and keep rejecting a trashed item.
+func (h *ItemHandler) Get(res http.ResponseWriter, req *http.Request) {
+	item, err := h.items.GetIncludingTrashed(req.Context(), ownerID(req), req.PathValue("id"))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	out := toItemResponse(item, ownerID(req))
+	if out.Owned {
+		sharedWith, err := h.items.SharedUsernames(req.Context(), []string{item.ID})
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		out.SharedWith = sharedWith[item.ID]
+	} else {
+		canEdit, err := h.items.CanEdit(req.Context(), ownerID(req), item)
+		if err != nil {
+			httpio.WriteError(res, err)
+			return
+		}
+		out.CanEdit = canEdit
+	}
+	single := []itemResponse{out}
+	if err := h.enrichFavorites(req.Context(), ownerID(req), single); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, single[0])
+}
+
+// Content handles GET /api/v1/items/{id}/content — streams a file's bytes,
+// with Range support (via http.ServeContent, so a paused download or a
+// video/PDF preview seeking around doesn't need custom byte-range logic
+// here). Trashed items are readable here too — see Get's own comment.
+func (h *ItemHandler) Content(res http.ResponseWriter, req *http.Request) {
+	item, err := h.items.ResolveContentItem(req.Context(), ownerID(req), req.PathValue("id"))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	path, err := h.items.FilePath(req.Context(), item)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	serveFileContent(res, req, item, path)
+}
+
+// Thumbnail handles GET /api/v1/items/{id}/thumbnail — a small JPEG preview
+// for the grid view (see routes/+page.svelte's Thumbnail.svelte), for the
+// file types ItemService.Thumbnail actually supports. Behind normal
+// middleware.RequireAuth, not RequireAuthOrContentToken: unlike <video>/
+// <audio> (see ContentToken's own comment), the frontend fetches this with
+// its usual Authorization header and turns the bytes into a blob: URL,
+// exactly like it already does for a single image's own preview (see
+// lib/api.ts's downloadContent) — no direct <img src> to a bearer-token-less
+// URL is ever needed here.
+func (h *ItemHandler) Thumbnail(res http.ResponseWriter, req *http.Request) {
+	data, err := h.items.Thumbnail(req.Context(), ownerID(req), req.PathValue("id"))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.Header().Set("Content-Type", "image/jpeg")
+	res.Header().Set("Cache-Control", "private, max-age=604800, immutable") // a week — cache key already changes on content change, see storage.ThumbnailPath
+	res.Write(data)
+}
+
+type contentTokenResponse struct {
+	Token     string `json:"token"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+// ContentToken handles POST /api/v1/items/{id}/content-token — mints a
+// short-lived token good only for GETting this one item's content via a
+// query parameter (?token=...), for <video>/<audio> elements that can't
+// attach the Authorization header this app's own fetch() calls use
+// instead (see lib/api.ts's downloadContent, used by everything else).
+// Trashed items included, same as Get/Content above — a trashed video
+// still needs to be previewable via <video>, which is what this token is
+// for.
+func (h *ItemHandler) ContentToken(res http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	// Same check Content itself uses — confirms the item exists and is
+	// actually readable by the caller (resolving a shortcut to its real
+	// target first) before minting anything for it, rather than minting a
+	// token for something Content would just reject the moment it's used.
+	if _, err := h.items.ResolveContentItem(req.Context(), ownerID(req), id); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+
+	raw, err := h.tokens.NewContentToken(ownerID(req), id, contentTokenTTL)
+	if err != nil {
+		httpio.WriteError(res, apperr.Internal)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, contentTokenResponse{
+		Token:     raw,
+		ExpiresAt: time.Now().Add(contentTokenTTL).Unix(),
+	})
+}
+
+type moveRequest struct {
+	Name     string  `json:"name"`
+	ParentID *string `json:"parent_id"`
+}
+
+// Move handles PATCH /api/v1/items/{id} — a full replacement of the item's
+// name and location, like this codebase's other PATCH endpoints (both
+// fields are always supplied, never merged in partially).
+func (h *ItemHandler) Move(res http.ResponseWriter, req *http.Request) {
+	var in moveRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+
+	item, err := h.items.Move(req.Context(), ownerID(req), req.PathValue("id"), service.MoveInput{
+		Name:     in.Name,
+		ParentID: in.ParentID,
+	})
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
+}
+
+type setMimeTypeRequest struct {
+	MimeType string `json:"mime_type"`
+}
+
+// SetMimeType handles PATCH /api/v1/items/{id}/mimetype — a narrow fix-up
+// endpoint separate from Move above (which never touches mime_type): for
+// correcting an item that ended up with none. See ItemService.SetMimeType.
+func (h *ItemHandler) SetMimeType(res http.ResponseWriter, req *http.Request) {
+	var in setMimeTypeRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+	item, err := h.items.SetMimeType(req.Context(), ownerID(req), req.PathValue("id"), in.MimeType)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
+}
+
+// Delete handles DELETE /api/v1/items/{id} — moves the item to trash (soft
+// delete), it isn't gone for good until DeletePermanently.
+func (h *ItemHandler) Delete(res http.ResponseWriter, req *http.Request) {
+	if err := h.items.Delete(req.Context(), ownerID(req), req.PathValue("id")); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.WriteHeader(http.StatusNoContent)
+}
+
+type copyRequest struct {
+	ParentID *string `json:"parent_id"`
+}
+
+// Copy handles POST /api/v1/items/{id}/copy. parent_id nil/absent means
+// root, consistently with every other endpoint that takes one — it is the
+// caller's job to pass the item's own current parent for a same-folder
+// "make a copy", not this endpoint's.
+func (h *ItemHandler) Copy(res http.ResponseWriter, req *http.Request) {
+	var in copyRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+
+	item, err := h.items.Copy(req.Context(), ownerID(req), req.PathValue("id"), in.ParentID)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
+}
+
+type createShortcutRequest struct {
+	ParentID *string `json:"parent_id"`
+}
+
+// CreateShortcut handles POST /api/v1/items/{id}/shortcut — {id} is the
+// real item being pointed at, parent_id (nil/absent = the caller's own
+// root) is where the new shortcut lands, same "id in the path is the
+// thing acted on, parent_id in the body is the destination" shape Copy
+// above already uses.
+func (h *ItemHandler) CreateShortcut(res http.ResponseWriter, req *http.Request) {
+	var in createShortcutRequest
+	if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+		httpio.WriteError(res, apperr.Validation("invalid JSON body"))
+		return
+	}
+
+	item, err := h.items.CreateShortcut(req.Context(), ownerID(req), req.PathValue("id"), in.ParentID)
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusCreated, toItemResponse(item, ownerID(req)))
+}
+
+func (h *ItemHandler) ListTrash(res http.ResponseWriter, req *http.Request) {
+	items, err := h.items.ListTrash(req.Context(), ownerID(req))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, toItemResponses(items, ownerID(req)))
+}
+
+func (h *ItemHandler) Restore(res http.ResponseWriter, req *http.Request) {
+	item, err := h.items.Restore(req.Context(), ownerID(req), req.PathValue("id"))
+	if err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	httpio.WriteJSON(res, http.StatusOK, toItemResponse(item, ownerID(req)))
+}
+
+// DeletePermanently handles DELETE /api/v1/trash/{id} — unlike Delete, this
+// one is not reversible.
+func (h *ItemHandler) DeletePermanently(res http.ResponseWriter, req *http.Request) {
+	if err := h.items.PermanentlyDelete(req.Context(), ownerID(req), req.PathValue("id")); err != nil {
+		httpio.WriteError(res, err)
+		return
+	}
+	res.WriteHeader(http.StatusNoContent)
+}

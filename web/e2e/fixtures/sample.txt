@@ -1,0 +1,5 @@
+This is a small fixture file used by the E2E upload/download tests.
+It has known, fixed content so a downloaded copy can be compared against
+it byte-for-byte — the browser-side counterpart to the Go backend's own
+flow tests, which do the same comparison over HTTP (see
+test/flow/upload_flow_test.go).

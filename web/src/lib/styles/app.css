@@ -1,0 +1,2171 @@
+/* Denizen's design system: deliberately small and hand-written rather than
+   a CSS framework dependency — consistent with CONTRIBUTING.md's "minimal
+   dependencies" rule, and this app's surface (auth forms, a file browser)
+   doesn't need more than a a few reusable primitives. */
+
+/* Inter, self-hosted (web/static/fonts — 2 variable-font files, weight
+   400-700, latin + latin-ext subsets, ~133KB total) rather than a Google
+   Fonts <link>: this app's whole point is self-hosted/private, so pulling
+   a live font from Google on every page load — leaking every visitor's IP
+   to them — would undercut that. The files were fetched once at
+   build/dev time and vendored, the running app never talks to Google.
+   system-ui stays first in --font-sans below as the fallback while a
+   visitor's browser is still fetching this. */
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/inter-latin.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/inter-latin-ext.woff2') format('woff2');
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+	--color-bg: #ffffff;
+	--color-surface: #f7f8fa;
+	--color-sidebar-bg: #f1f3f6;
+	--color-border: #e1e3e8;
+	--color-text: #1b1b23;
+	--color-text-muted: #666b78;
+	/* A blue in the same family Drive/Nextcloud both land on — the visual
+	   language this whole pass is chasing — without matching either one's
+	   exact brand hex. */
+	--color-accent: #3b6fe0;
+	--color-accent-contrast: #ffffff;
+	--color-accent-soft: rgb(59 111 224 / 12%); /* active nav row / selected state background */
+	--color-danger: #d1435b;
+
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+
+	--radius: 8px;
+	--radius-lg: 12px;
+	--bottom-tabbar-height: 3.75rem; /* .bottom-tabbar, mobile only — see app.css's own media query */
+	--font-sans:
+		'Inter',
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		Roboto,
+		sans-serif;
+
+	--sidebar-width: 248px;
+	--shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
+	--shadow-md: 0 6px 20px rgb(16 24 40 / 10%);
+
+	/* .topbar's real height, not a guess at its rendered one — applied to
+	   .topbar itself as a min-height below, so the two stay in sync by
+	   construction. Also .item-list-header's sticky offset (see its own
+	   comment), since .topbar is the only other fixed/sticky chrome above
+	   it. */
+	--topbar-height: 3.25rem;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		/* Wider steps between these three than before (was #17171d/#1f1f27/
+		   #1b1b22 — a few points per channel, nearly imperceptible on a
+		   phone screen) so a raised panel (dropdown menus, the mobile
+		   bottom sheet, the selection toolbar, the bottom tab bar — see
+		   their own rules further down, several of which used to just
+		   reuse --color-bg outright) actually reads as a distinct layer
+		   instead of blending into the page behind it. Shadows alone don't
+		   carry that job on a dark background the way they do on light. */
+		--color-bg: #131318;
+		--color-surface: #242431;
+		--color-sidebar-bg: #1c1c25;
+		--color-border: #303038;
+		--color-text: #f1f1f5;
+		--color-text-muted: #9a9aab;
+		--color-accent: #6d97ea;
+		--color-accent-contrast: #0f172a;
+		--color-accent-soft: rgb(109 151 234 / 16%);
+		--shadow-sm: 0 1px 2px rgb(0 0 0 / 25%);
+		--shadow-md: 0 6px 20px rgb(0 0 0 / 40%);
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--color-bg);
+	color: var(--color-text);
+	font-family: var(--font-sans);
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+	line-height: 1.2;
+	margin: 0 0 var(--space-2);
+}
+
+a {
+	color: var(--color-accent);
+}
+
+button,
+input {
+	font: inherit;
+	color: inherit;
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	color: var(--color-text);
+	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-4);
+	cursor: pointer;
+	transition:
+		border-color 0.12s ease,
+		filter 0.12s ease,
+		transform 0.06s ease;
+}
+
+.btn:hover {
+	border-color: var(--color-accent);
+}
+
+/* A small press-down on click — every .btn (plain and .btn-primary alike,
+   the latter already has its own :hover brightness below) gets this same
+   tactile feedback for free. */
+.btn:active {
+	transform: scale(0.97);
+}
+
+.btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	transform: none;
+}
+
+.btn-primary {
+	background: var(--color-accent);
+	border-color: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
+.btn-primary:hover {
+	filter: brightness(1.08);
+}
+
+/* Same shape as .btn-primary, --color-danger instead — GlobalDialog.svelte's
+   confirmDialog(..., {danger: true}) uses this for destructive confirms
+   (permanent delete, revoke), the filled-button counterpart to
+   .dropdown-menu button.danger's plain red text for a menu item. */
+.btn-danger {
+	background: var(--color-danger);
+	border-color: var(--color-danger);
+	color: var(--color-accent-contrast);
+}
+
+.btn-danger:hover {
+	filter: brightness(1.08);
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin-bottom: var(--space-4);
+}
+
+.field label {
+	font-size: 0.85rem;
+	color: var(--color-text-muted);
+}
+
+.field input,
+.field select {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-3);
+	background: var(--color-bg);
+	color: inherit;
+	font: inherit;
+}
+
+.field input:focus,
+.field select:focus {
+	outline: 2px solid var(--color-accent);
+	outline-offset: -1px;
+}
+
+.error-text {
+	color: var(--color-danger);
+	font-size: 0.9rem;
+}
+
+/* Transient positive feedback (e.g. "Copy link" — see lib/copyShareLink.ts)
+   — same treatment as .error-text, just the accent color instead of the
+   danger one. */
+.status-text {
+	color: var(--color-accent);
+	font-size: 0.9rem;
+}
+
+.card {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: var(--space-6);
+}
+
+/* App shell: a persistent left sidebar + main content column, the same
+   overall shape Google Drive and Nextcloud both use — the whole point of
+   this pass, replacing the plain full-width topbar this app had before.
+   Below --sidebar-breakpoint the sidebar becomes a slide-in drawer instead
+   (see .sidebar's own media query) rather than trying to keep a fixed-width
+   column on a phone screen. */
+.app-shell {
+	display: flex;
+	min-height: 100dvh;
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-weight: 600;
+	font-size: 1.1rem;
+	color: var(--color-text);
+	text-decoration: none;
+	padding: var(--space-4);
+}
+
+.brand svg {
+	flex-shrink: 0;
+}
+
+.sidebar {
+	width: var(--sidebar-width);
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--color-sidebar-bg);
+	border-right: 1px solid var(--color-border);
+	/* Pinned to the viewport with its own bounded height, rather than
+	   stretching to whatever height the tallest column in .app-shell ends
+	   up at (the main file list, almost always) and scrolling away with
+	   it — now that .sidebar-nav can hold a real, potentially long folder
+	   tree instead of five links that always fit, this row-of-links-still-
+	   fits-on-one-screen assumption doesn't hold anymore. Brand/storage/
+	   logout stay put; only .sidebar-nav itself scrolls (below). */
+	position: sticky;
+	top: 0;
+	height: 100dvh;
+	overflow: hidden;
+}
+
+.sidebar-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: var(--space-2);
+	flex: 1;
+	overflow-y: auto;
+	/* Without this a flex child's default min-height:auto refuses to
+	   shrink below its content size, so overflow-y above would never
+	   actually kick in — the standard fix for a scrollable flex child. */
+	min-height: 0;
+}
+
+.sidebar-nav a {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius);
+	color: var(--color-text);
+	text-decoration: none;
+	font-size: 0.95rem;
+}
+
+.sidebar-nav a svg {
+	flex-shrink: 0;
+	color: var(--color-text-muted);
+}
+
+.sidebar-nav a:hover {
+	background: var(--color-border);
+}
+
+.sidebar-nav a.active {
+	background: var(--color-accent-soft);
+	color: var(--color-accent);
+	font-weight: 600;
+}
+
+/* The sidebar's folder tree — routes/+layout.svelte's "Home" entry (the
+   tree's root) and lib/FolderTreeItem.svelte (every folder below that,
+   recursively) share these same classes so expanding/collapsing/selecting
+   look identical at every depth. */
+.tree-root {
+	margin-bottom: 2px;
+}
+
+.tree-row {
+	display: flex;
+	align-items: center;
+}
+
+.tree-children {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tree-loading {
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	padding: var(--space-1) var(--space-3);
+}
+
+.tree-toggle {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border: none;
+	background: none;
+	color: var(--color-text-muted);
+	border-radius: var(--radius);
+	cursor: pointer;
+}
+
+.tree-toggle:hover {
+	background: var(--color-border);
+}
+
+.tree-toggle svg {
+	transition: transform 0.12s ease;
+}
+
+.tree-toggle-expanded svg {
+	transform: rotate(90deg);
+}
+
+/* Covers both the tree root's own <a> (Home) and every FolderTreeItem's
+   <button> — a plain browser button reset so the two read identically
+   despite the different tag (a folder node has nowhere to href to that
+   isn't already a client-side navigation, so a button rather than an <a>
+   with a synthetic href). */
+.tree-name {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex: 1;
+	min-width: 0;
+	border: none;
+	background: none;
+	color: var(--color-text);
+	text-decoration: none;
+	font: inherit;
+	font-size: 0.95rem;
+	text-align: left;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius);
+	cursor: pointer;
+}
+
+.tree-name-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tree-name:hover {
+	background: var(--color-border);
+}
+
+.tree-name.active {
+	background: var(--color-accent-soft);
+	color: var(--color-accent);
+	font-weight: 600;
+}
+
+.sidebar-nav a.active svg {
+	color: var(--color-accent);
+}
+
+.storage-indicator {
+	padding: var(--space-4);
+	border-top: 1px solid var(--color-border);
+}
+
+.storage-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--color-border);
+	overflow: hidden;
+	margin-bottom: var(--space-2);
+}
+
+.storage-bar-fill {
+	height: 100%;
+	/* A slight top-to-bottom sheen instead of one flat tone — cheap depth
+	   cue on an otherwise very thin element. color-mix() over a second
+	   named color, not a second custom property, since this needs no
+	   further reuse elsewhere. */
+	background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 80%, white), var(--color-accent));
+	transition: width 0.2s ease;
+}
+
+.storage-bar-fill.storage-full {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--color-danger) 80%, white), var(--color-danger));
+}
+
+.storage-label {
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+}
+
+/* Two-way IT/EN switch, same visual language as .view-toggle — a plain
+   segmented pair rather than a dropdown, since there are only ever two
+   options right now (see lib/i18n's own comment on why a third language
+   later just means a third dictionary file, not a UI redesign). */
+.language-toggle {
+	display: flex;
+	gap: 2px;
+	margin: 0 var(--space-4) var(--space-4);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: 2px;
+}
+
+.language-toggle-btn {
+	flex: 1;
+	border: none;
+	background: none;
+	border-radius: calc(var(--radius) - 2px);
+	padding: var(--space-1) var(--space-2);
+	font-size: 0.8rem;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.language-toggle-btn:hover {
+	background: var(--color-surface);
+}
+
+.language-toggle-btn.active {
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
+.sidebar-logout {
+	margin: 0 var(--space-4) var(--space-4);
+}
+
+.sidebar-backdrop {
+	display: none;
+}
+
+/* Everything to the right of the sidebar: the slim topbar plus whatever
+   the current route renders, stacked so the topbar stays put and the page
+   content scrolls under it. */
+.app-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.topbar {
+	position: sticky;
+	top: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-height: var(--topbar-height);
+	padding: var(--space-3) var(--space-6);
+	border-bottom: 1px solid var(--color-border);
+	background: var(--color-bg);
+	z-index: 10;
+}
+
+.topbar-spacer {
+	flex: 1;
+}
+
+.user-chip {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
+}
+
+.user-avatar {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.8rem;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.hamburger {
+	display: none;
+	align-items: center;
+	border: none;
+	background: none;
+	color: var(--color-text);
+	padding: var(--space-1) var(--space-2);
+	cursor: pointer;
+}
+
+.mobile-brand {
+	display: none;
+}
+
+/* Below this, the sidebar can't keep its own permanent column width without
+   crowding out the file list it's supposed to be secondary to — it becomes
+   an overlay drawer instead, same as Drive's and Nextcloud's own mobile
+   apps. */
+@media (max-width: 900px) {
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		height: 100dvh;
+		z-index: 50;
+		transform: translateX(-100%);
+		transition: transform 0.2s ease;
+		box-shadow: var(--shadow-md);
+	}
+
+	.sidebar.open {
+		transform: translateX(0);
+	}
+
+	.sidebar-backdrop.visible {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgb(0 0 0 / 40%);
+		z-index: 40;
+	}
+
+	.hamburger {
+		display: flex;
+	}
+
+	.mobile-brand {
+		display: flex;
+		padding: 0;
+	}
+}
+
+/* .bottom-tabbar's own static shape — display stays "none" until the
+   max-width: 640px block far below switches it to "flex" (same breakpoint
+   as the FAB and the rest of this file's phone-specific layout, deliberately
+   narrower than the 900px sidebar-becomes-drawer breakpoint above: a fixed
+   bottom nav bar is a phone pattern, not a tablet one). Defined here,
+   ahead of that override, so the override — later in source — is what
+   actually wins; app.css's own convention throughout this file (see .fab's
+   base rule vs. its max-width: 640px flip). */
+.bottom-tabbar {
+	display: none;
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: var(--bottom-tabbar-height);
+	z-index: 30;
+	background: var(--color-surface); /* raised panel, not the page — see the dark-mode token comment */
+	border-top: 1px solid var(--color-border);
+	box-shadow: var(--shadow-md);
+}
+
+.bottom-tabbar a {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	color: var(--color-text-muted);
+	/* Every other nav link (.sidebar-nav a et al.) resets this — missed it
+	   here, which is why the labels showed a plain browser-default
+	   underline. */
+	text-decoration: none;
+	font-size: 0.68rem;
+	text-align: center;
+	line-height: 1.15;
+	padding: var(--space-1);
+}
+
+.bottom-tabbar a.active {
+	color: var(--color-accent);
+}
+
+main.with-topbar {
+	max-width: 960px;
+	width: 100%;
+	margin: 0 auto;
+	padding: var(--space-6);
+}
+
+/* Set by routes/+layout.svelte from lib/fullscreen.ts — the app's whole
+   shell (sidebar, topbar) and this main's usual centered/padded reading
+   width both give way entirely to whatever the page wants the full
+   viewport for (currently
+   just the file preview page's viewers, OnlyOffice most of all — its own
+   editor benefits far more from real screen space than this app's chrome
+   being visible while looking at a file does). 100dvh over 100vh: the
+   dynamic viewport unit accounts for a mobile browser's address bar
+   showing/hiding, where a plain 100vh would leave a gap or clip content
+   depending on its state at load time. */
+main.fullscreen {
+	max-width: none;
+	margin: 0;
+	padding: 0;
+	height: 100dvh;
+	display: flex;
+	flex-direction: column;
+}
+
+.auth-page {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-4);
+}
+
+.auth-page .card {
+	width: 100%;
+	max-width: 360px;
+}
+
+/* routes/s/[token]/+page.svelte — the public share landing page — reuses
+   .preview-page/.preview-header/.preview-content wholesale (same fullscreen
+   shape as the private file preview page, down to sharing lib/fullscreen.ts
+   itself) rather than a bespoke layout, now that it does real inline
+   previews (PdfViewer, DocxViewer, ...) instead of just a name/size card.
+   .share-card below is what's left of its own original layout — now only
+   used for the states that have nothing to actually preview (needs-login,
+   error, a folder, an unsupported file type). */
+.share-card {
+	width: 100%;
+	max-width: 420px;
+	text-align: center;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-8) var(--space-6);
+	/* Self-centers within .preview-content (a plain flex column that
+	   otherwise stretches its children — .preview-frame and the various
+	   viewers all want that stretch, but this card, used for states with
+	   nothing to actually preview, wants to be an island in the middle of
+	   the available space instead). */
+	margin: auto;
+}
+
+.share-card-icon {
+	display: flex;
+	justify-content: center;
+	margin-bottom: var(--space-4);
+}
+
+.share-card h1 {
+	font-size: 1.2rem;
+	word-break: break-word;
+}
+
+.breadcrumb {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: center;
+	margin-bottom: var(--space-4);
+	font-size: 1.2rem;
+	color: var(--color-text-muted);
+}
+
+.breadcrumb button {
+	background: none;
+	border: none;
+	color: inherit;
+	cursor: pointer;
+	padding: 0;
+	font: inherit;
+}
+
+.breadcrumb button:hover {
+	color: var(--color-accent);
+}
+
+/* The current crumb (disabled — see routes/+page.svelte's own
+   `disabled={i === breadcrumb.length - 1}`) reads as the page's actual
+   title, same emphasis Drive gives it, instead of the same muted weight as
+   the clickable ancestors before it. */
+.breadcrumb button:disabled {
+	color: var(--color-text);
+	font-weight: 600;
+	cursor: default;
+}
+
+/* No outer border/card and no per-row divider lines — Drive's own list
+   has neither, relying on consistent row height/padding and the hover
+   highlight alone to read as "a list" instead of a bordered box full of
+   ruled-off rows. */
+.item-list {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Grid, not flex: the mobile breakpoint below reflows this into two rows
+   (name on its own line, modified+size stacked as a subtitle under it —
+   the same shape Drive's own mobile app rows use, rather than this app's
+   old approach of just hiding those columns once they didn't fit) without
+   touching the markup's element order, which a flex-wrap approach can't
+   do cleanly once icon and row-menu both need to span both lines. */
+.item-row {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto auto;
+	grid-template-areas: 'icon name modified size menu';
+	align-items: center;
+	column-gap: var(--space-3);
+	padding: var(--space-4);
+	border-radius: var(--radius);
+	background: var(--color-bg);
+	position: relative;
+	transition: background 0.12s ease;
+	/* The file browser's own rows (not trash/shares/admin, which still use
+	   .item-name as their own <button> — see its own comment) are the
+	   press/long-press/click target as a whole row now, not just the name
+	   text: a real device long-press landing on the icon or anywhere else
+	   in the row used to reach nothing at all, since only .item-name (a
+	   fairly narrow column) ever had these handlers — found via an
+	   on-screen debug log reproduced on a real device (2026-08-10). cursor/
+	   touch-action/user-select/-webkit-touch-callout mirror .item-name's
+	   own, now needed here too since the row itself is what's interactive. */
+	cursor: pointer;
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
+}
+
+/* A hairline between rows, not around the list — fully dividerless read as
+   too little separation once there's no outer card border either. Skips
+   the last row so it doesn't sit flush against whatever follows the
+   list. */
+.item-row:not(:last-child) {
+	border-bottom: 1px solid var(--color-border);
+}
+
+.item-row:hover {
+	background: var(--color-surface);
+}
+
+/* SkeletonList.svelte's own placeholder bars — a plain CSS animation
+   (background-position sweep across a gradient) rather than a JS-driven
+   one, cheapest possible "this is loading" motion. */
+.skeleton-block {
+	display: block;
+	height: 0.85rem;
+	border-radius: 4px;
+	background: linear-gradient(90deg, var(--color-border) 25%, var(--color-surface) 50%, var(--color-border) 75%);
+	background-size: 200% 100%;
+	animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-circle {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+}
+
+@keyframes skeleton-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+/* For rows that don't fit the file browser's 5-column shape (icon / name /
+   modified / size / row-menu) — trash's own rows are just icon, name, and
+   two plain action buttons, with no modified/size cells to place, which
+   would otherwise leave two of .item-row's named grid columns empty
+   without actually collapsing their column-gap. A plain flex row sidesteps
+   that: .item-name's own flex: 1 (see below) still applies unchanged. */
+.item-row-flex {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.item-name {
+	grid-area: name;
+	/* Also usable under .item-row-flex (a plain flex row, not this grid) —
+	   flex and grid-area don't conflict, each is a no-op under the other's
+	   layout mode, so one rule covers both. */
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	background: none;
+	border: none;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	padding: 0;
+	/* Long-press-to-select (see .row-checkbox's own comment) needs a real
+	   hold without the browser's own long-press gestures — text-selection
+	   callout, "save/copy" menu — jumping in first and eating the touch. */
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
+}
+
+.item-name:disabled {
+	cursor: default;
+}
+
+.item-icon {
+	grid-area: icon;
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-shrink: 0;
+}
+
+/* Anchors .shortcut-badge to the icon it actually belongs to — a separate
+   wrapper from .item-icon/.item-tile-main themselves since those also
+   contain the checkbox/name, which the badge has no business overlapping.
+   Fixed size (rather than sizing to content) so every tile in a grid row
+   is the same height whether or not that particular item ends up showing
+   a real thumbnail (see .item-tile-thumb below) instead of the small
+   centered FileIcon glyph — an uneven row of tall/short tiles reads as
+   broken, not "some items have richer previews". List view's own
+   .icon-wrap usage (routes/+page.svelte) stays unaffected: that one never
+   renders a thumbnail, only ever the plain small icon. */
+.icon-wrap {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.item-tile .icon-wrap {
+	width: 4.5rem;
+	height: 4.5rem;
+}
+
+/* Fills .icon-wrap edge-to-edge when a real thumbnail loaded (see
+   Thumbnail.svelte) — object-fit: cover crops rather than letterboxes, same
+   as Drive's own grid tiles, since a cropped-but-filled square reads better
+   at this size than a small image floating in empty space. */
+.item-tile-thumb {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: calc(var(--radius) - 2px);
+}
+
+/* The small arrow-in-a-circle overlay marking a row as a shortcut
+   ("Aggiungi collegamento") — same glyph as that menu item's own icon, so
+   it reads as the same concept in both places. Bottom-right corner of the
+   icon, same convention as a Windows/macOS shortcut/alias badge. */
+.shortcut-badge {
+	position: absolute;
+	right: -3px;
+	bottom: -3px;
+	width: 0.9rem;
+	height: 0.9rem;
+	border-radius: 50%;
+	background: var(--color-bg);
+	color: var(--color-text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 0 0 1px var(--color-border);
+}
+
+/* A touch-only affordance now — desktop gets real click/Ctrl/Shift/drag
+   selection instead (routes/+page.svelte's handleItemClick/startMarquee),
+   so a checkbox sitting on every row all the time no longer earns its
+   keep there either. Shown again below the mobile breakpoint once a
+   selection actually exists (.has-selection, set from selectedIds.size >
+   0), so further items can be added to it with an ordinary tap instead of
+   another long-press each time — same "selection mode" behavior Drive/
+   Google Photos use on mobile. */
+.row-checkbox {
+	flex-shrink: 0;
+	cursor: pointer;
+	display: none;
+}
+
+@media (max-width: 640px) {
+	.item-list.has-selection .row-checkbox,
+	.item-grid.has-selection .row-checkbox {
+		display: inline-block;
+	}
+}
+
+.item-row-selected {
+	background: var(--color-surface);
+}
+
+.item-size {
+	grid-area: size;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	min-width: 5rem;
+	text-align: right;
+}
+
+.item-modified {
+	grid-area: modified;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	min-width: 7rem;
+	text-align: right;
+	flex-shrink: 0;
+}
+
+.row-menu {
+	grid-area: menu;
+}
+
+/* Mirrors .item-row's own column layout so headers line up with the cells
+   below them — Drive's and Nextcloud's own file lists both have this row,
+   this one didn't before. Same grid-template as .item-row (and the same
+   mobile override below), just with text labels instead of real cells. */
+/* Sticks right below .topbar (the only other fixed chrome above it, hence
+   reusing --topbar-height rather than a second guessed offset) so the
+   column names stay put while rows scroll underneath — breadcrumb/toolbar
+   above it scroll away normally, same as Drive. Hidden below 640px anyway
+   (see the mobile media query), so no separate mobile handling needed here.
+   ponytail: doesn't also pin .toolbar (the search/sort row) — would need a
+   second offset tracking .toolbar's own, wrap-prone height, not worth it
+   for a header that's only really tall on a narrow desktop window. Add a
+   --toolbar-height var (min-height'd the same way as --topbar-height) if
+   that's ever wanted too. */
+.item-list-header {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto auto;
+	grid-template-areas: 'icon name modified size menu';
+	align-items: center;
+	column-gap: var(--space-3);
+	padding: 0 var(--space-4) var(--space-2);
+	position: sticky;
+	top: var(--topbar-height);
+	z-index: 8;
+	background: var(--color-bg);
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.item-list-header .item-icon {
+	grid-area: icon;
+	width: 1.75rem;
+}
+
+.item-list-header .item-name-header {
+	grid-area: name;
+	min-width: 0;
+}
+
+.item-list-header .item-modified {
+	grid-area: modified;
+}
+
+.item-list-header .item-size {
+	grid-area: size;
+}
+
+.item-list-header .row-menu {
+	grid-area: menu;
+	width: 2.25rem;
+}
+
+/* Column headers double as sort triggers — reset the <button> chrome back
+   to plain text so they read exactly like the old <span> labels, just with
+   a pointer cursor and a hover tint hinting they're clickable. */
+.sort-header {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	text-transform: inherit;
+	letter-spacing: inherit;
+	cursor: pointer;
+}
+
+.item-list-header .item-modified.sort-header,
+.item-list-header .item-size.sort-header {
+	justify-content: flex-end;
+}
+
+.sort-header:hover {
+	color: var(--color-text);
+}
+
+.sort-arrow {
+	flex-shrink: 0;
+	color: var(--color-accent);
+}
+
+/* List/grid toggle — a genuine two-way switch now (the old surface+border
+   "raised card" look on the active
+   button read as its own inconsistent style, not the selected state
+   language the rest of the app already commits to elsewhere), same
+   segmented-track construction as .language-toggle right above: a bordered
+   track, the active option filled solid with --color-accent rather than
+   merely tinted — .sidebar-nav a.active's softer accent-tinted background
+   is the right call for a list of many links, but for a strict either/or
+   pair a filled segment reads more immediately as "this one, not that one". */
+.view-toggle {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	padding: 2px;
+}
+
+.view-toggle-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
+	line-height: 1;
+	border: none;
+	border-radius: calc(var(--radius) - 2px);
+	background: none;
+	color: var(--color-text-muted);
+	transition: background 0.12s ease, color 0.12s ease;
+}
+
+.view-toggle-btn:hover {
+	background: var(--color-surface);
+}
+
+.view-toggle-btn.active {
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
+.view-toggle-btn.active:hover {
+	background: var(--color-accent);
+}
+
+/* Grid view — a wrap of square-ish cards instead of the list's rows. Each
+   tile keeps the same kebab menu as a list row (see routes/+page.svelte's
+   shared #snippet rowMenu), just repositioned to the tile's own top-right
+   corner since there's no dedicated menu column in this layout. */
+.item-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+	gap: var(--space-3);
+}
+
+.item-tile {
+	position: relative;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-bg);
+	transition:
+		background 0.12s ease,
+		transform 0.12s ease,
+		box-shadow 0.12s ease;
+}
+
+/* A slight lift instead of just a flat color swap — a card that visibly
+   responds to the pointer reads as more "alive" than one that only
+   recolors (part of the same pass that already gave the view toggle and
+   buttons real hover/press feedback). */
+.item-tile:hover {
+	background: var(--color-surface);
+	transform: translateY(-2px);
+	box-shadow: var(--shadow-md);
+}
+
+.item-tile .row-menu {
+	position: absolute;
+	top: var(--space-1);
+	right: var(--space-1);
+}
+
+.tile-checkbox {
+	position: absolute;
+	top: var(--space-1);
+	left: var(--space-1);
+	z-index: 1;
+}
+
+.item-tile-main {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	background: none;
+	border: none;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	padding: var(--space-5) var(--space-3) var(--space-3);
+	/* See .item-name's own comment — same long-press-to-select need. */
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
+}
+
+.item-tile-name {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.85rem;
+	text-align: center;
+}
+
+.item-tile-size {
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+}
+
+/* routes/+page.svelte only — search gets its own full-width row instead of
+   competing with a title and the sort/view controls in one line (see
+   .search-bar-row .search-box below for the actual widening/prominence —
+   this wrapper just owns the row's own spacing). */
+.search-bar-row {
+	margin-bottom: var(--space-4);
+}
+
+.search-bar-row .search-box {
+	/* .search-box's own default (flex:1, max-width:22rem — right for
+	   sharing a row with other controls) is too cramped once it owns the
+	   whole row: Google Drive gives its search real width, this matches
+	   that instead of leaving most of the row as dead space either side. */
+	max-width: none;
+	min-width: 0;
+}
+
+.search-bar-row .search-box input {
+	/* Taller and larger than the shared .search-box default — the row
+	   exists specifically to make this control read as more important. */
+	padding: 0.7rem 2.5rem;
+	font-size: 1rem;
+	box-shadow: var(--shadow-sm);
+}
+
+.search-bar-row .search-box input:focus {
+	box-shadow: var(--shadow-md);
+}
+
+.toolbar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: var(--space-4);
+	gap: var(--space-3);
+	flex-wrap: wrap;
+}
+
+/* Page titles ("File", "Recenti", ...) rendered at the browser's default
+   h1 size (~2rem here) read as oversized next to the search bar sitting
+   right below — this is the one thing on the page actually worth top
+   billing. Knocked down to something that still reads as a heading but
+   stops competing with it. Scoped to .toolbar's own h1 rather than h1
+   globally, so this doesn't touch h1 usage elsewhere (e.g. the auth pages). */
+.toolbar h1 {
+	font-size: 1.375rem;
+	font-weight: 600;
+}
+
+.toolbar-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+}
+
+/* Anchors the "+ Nuovo" dropdown (routes/+page.svelte) the same way
+   .row-menu/.sort-menu anchor theirs. */
+.new-menu {
+	position: relative;
+}
+
+/* The sidebar's own "+ New" — first item in .sidebar-nav (routes/
+   +layout.svelte), Drive-style: full width instead of the toolbar
+   trigger's own inline-flex sizing, and enough margin below to read as
+   its own thing above the Home/Shares/... links rather than one more
+   item in that list. */
+.sidebar-new-menu {
+	margin-bottom: var(--space-3);
+}
+
+.sidebar-new-menu .btn-primary {
+	width: 100%;
+	justify-content: center;
+	padding: var(--space-3);
+}
+
+.sidebar-new-menu .dropdown-menu {
+	left: 0;
+	right: 0;
+	width: auto;
+}
+
+/* The bulk-action bar shown when one or more rows are selected
+   (routes/+page.svelte) — fixed to the bottom of the viewport, not laid
+   out inline above the list. It used to sit in normal flow there, which
+   pushed the whole list down the moment a selection started; a real
+   finger tapping a *second* row right after long-pressing the first
+   landed wherever that row used to be before the shift, not where it
+   ended up — confirmed by reproducing it with real touch events (not
+   just mouse) before landing on this fix. Fixed positioning removes it
+   from flow entirely, so selecting never moves anything above it.
+   .item-list.has-selection/.item-grid.has-selection (below) reserve
+   enough bottom padding so the fixed bar never covers the last row
+   either. */
+.selection-toolbar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 25;
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+	padding: var(--space-3) var(--space-6);
+	background: var(--color-surface); /* raised panel, not the page — see the dark-mode token comment */
+	border-top: 1px solid var(--color-border);
+	box-shadow: var(--shadow-md);
+}
+
+.selection-toolbar-actions {
+	display: flex;
+	gap: var(--space-2);
+	margin-left: auto;
+}
+
+/* Enough room for the fixed .selection-toolbar not to cover the last row
+   — a little more than its own typical height, since it can wrap to two
+   (now, with a 6th action button added for favorites — sometimes three)
+   lines on a narrow screen with every action
+   button showing full text. Bumped from 5.5rem: a real, reproducible
+   e2e failure (files.spec.ts's dblclick-to-open test, only ever failing
+   deep into the full suite once root had accumulated enough rows to push
+   the target below the old, now-insufficient reserve) confirmed the old
+   value no longer covered the toolbar's real worst-case height. */
+.item-list.has-selection,
+.item-grid.has-selection {
+	padding-bottom: 7.5rem;
+}
+
+.selection-toolbar-actions .danger {
+	color: var(--color-danger);
+	border-color: var(--color-danger);
+}
+
+/* GET /api/v1/search (name + indexed file content) across the caller's
+   whole drive, not a per-folder filter — see routes/+page.svelte's own
+   debounced $effect. */
+.search-box {
+	position: relative;
+	flex: 1;
+	min-width: 10rem;
+	max-width: 22rem;
+}
+
+.search-box .search-icon {
+	position: absolute;
+	left: var(--space-3);
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--color-text-muted);
+	pointer-events: none;
+}
+
+.search-box input {
+	width: 100%;
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
+	border-radius: 999px;
+	padding: var(--space-2) 2.25rem;
+}
+
+/* The "sliders" advanced-search trigger — right side of the box, same
+   spot Drive's own icon sits, mirroring .search-icon's own left-side
+   positioning. */
+.advanced-search-btn {
+	position: absolute;
+	right: var(--space-1);
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--color-text-muted);
+	border-color: transparent;
+	background: none;
+}
+
+.advanced-search-btn:hover {
+	background: var(--color-border);
+}
+
+.advanced-search-btn.active {
+	color: var(--color-accent);
+}
+
+.search-box input:focus {
+	outline: 2px solid var(--color-accent);
+	outline-offset: -1px;
+	background: var(--color-bg);
+}
+
+.empty-state {
+	padding: var(--space-8);
+	text-align: center;
+	color: var(--color-text-muted);
+}
+
+/* A real minimum, not just a test convenience: with a short list this is
+   also the empty canvas a drag-to-select rectangle (below) needs room to
+   start from, and a bigger, more forgiving drop target for a file drag
+   over an otherwise-sparse folder. */
+.dropzone {
+	position: relative;
+	min-height: 16rem;
+}
+
+.dropzone-active {
+	outline: 2px dashed var(--color-accent);
+	outline-offset: 4px;
+	border-radius: var(--radius);
+}
+
+/* A real "drop it here" moment instead of just the dashed outline above —
+   a translucent backdrop over the existing list plus a centered icon/label,
+   Drive-style, rather than leaving a visitor to infer the outline alone
+   means "yes, this is a valid target". pointer-events: none so the drag
+   events firing on .dropzone underneath (ondragover/ondrop) keep working
+   uninterrupted — this is purely a visual layer. */
+.dropzone-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-3);
+	background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+	backdrop-filter: blur(2px);
+	border-radius: var(--radius);
+	color: var(--color-accent);
+	font-size: 1.05rem;
+	font-weight: 500;
+	pointer-events: none;
+}
+
+/* Click-and-drag rubber-band selection (routes/+page.svelte's
+   startMarquee/moveMarquee) — fixed positioning since its left/top/width/
+   height are set from clientX/clientY (viewport-relative), matching a
+   plain drag rectangle rather than one scoped to a scrolled ancestor.
+   pointer-events: none so it never itself becomes the drag/drop target it
+   visually sits on top of. */
+.marquee {
+	position: fixed;
+	z-index: 15;
+	border: 1px solid var(--color-accent);
+	background: var(--color-accent-soft);
+	pointer-events: none;
+}
+
+.upload-entry {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
+}
+
+.upload-entry:not(:last-child) {
+	border-bottom: 1px solid var(--color-border);
+}
+
+.upload-name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.upload-bar {
+	width: 8rem;
+	height: 6px;
+	background: var(--color-border);
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.upload-bar-fill {
+	height: 100%;
+	background: var(--color-accent);
+	transition: width 0.2s ease;
+}
+
+.upload-percent {
+	min-width: 2.5rem;
+	text-align: right;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+}
+
+.upload-status-done {
+	color: var(--color-accent);
+	font-size: 0.85rem;
+}
+
+dialog.card {
+	border: 1px solid var(--color-border);
+	max-width: 420px;
+	width: 90vw;
+	padding: var(--space-6);
+}
+
+dialog::backdrop {
+	background: rgba(0, 0, 0, 0.4);
+}
+
+.field-inline {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+	cursor: pointer;
+}
+
+/* ShareDialog's "People with access" section — sits above the existing
+   link section, separated by .share-divider. */
+.share-people h3,
+.share-divider + h3 {
+	margin: 0 0 var(--space-2);
+	font-size: 0.85rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--color-text-muted);
+}
+
+.share-people-list {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 var(--space-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.share-people-list li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-2);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+}
+
+.share-people-add {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.share-people-add select {
+	flex: 1;
+	min-width: 0;
+	border: 1px solid var(--color-border);
+	background: var(--color-bg);
+	border-radius: var(--radius);
+	padding: var(--space-2);
+	color: inherit;
+	font: inherit;
+}
+
+.share-divider {
+	border: none;
+	border-top: 1px solid var(--color-border);
+	margin: var(--space-4) 0;
+}
+
+.dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-2);
+	margin-top: var(--space-4);
+}
+
+.hint {
+	color: var(--color-text-muted);
+	font-size: 0.9rem;
+	margin-top: 0;
+}
+
+/* Active advanced-search filters, shown as removable pills above the
+   results — a second surface for the exact same state
+   AdvancedSearchDialog's own selects set, not a separate input. */
+.search-filter-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+}
+
+.chip {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	border: 1px solid var(--color-accent);
+	background: var(--color-accent-soft);
+	color: var(--color-accent);
+	border-radius: 999px;
+	padding: var(--space-1) var(--space-3);
+	font-size: 0.85rem;
+	cursor: pointer;
+}
+
+.chip:hover {
+	filter: brightness(0.95);
+}
+
+.chip-clear {
+	border: none;
+	background: none;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	text-decoration: underline;
+	cursor: pointer;
+	padding: var(--space-1) var(--space-2);
+}
+
+.chip-clear:hover {
+	color: var(--color-text);
+}
+
+/* Per-row action menu (the "⋮" kebab button and its dropdown) — a plain
+   absolutely-positioned panel anchored to this wrapper, not the native
+   Popover API: positioning a popover next to its trigger needs CSS anchor
+   positioning, whose mobile browser support isn't reliable enough yet for
+   a menu whose whole point is to work well on mobile. (grid-area: menu
+   itself is set alongside .item-row's other cells, above.) */
+.row-menu {
+	position: relative;
+}
+
+.icon-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
+	line-height: 1;
+}
+
+/* The row kebab specifically goes borderless/flat — Drive's own row menu
+   trigger is just an icon, no visible button box, until you actually
+   interact with it. .icon-btn elsewhere (the upload panel's dismiss
+   button, ScanDialog's page-remove button) keeps .btn's normal bordered
+   look, so this is scoped to .row-menu rather than a blanket override. */
+.row-menu .icon-btn {
+	border-color: transparent;
+	background: none;
+}
+
+.row-menu .icon-btn:hover {
+	background: var(--color-border);
+	border-color: transparent;
+}
+
+/* The "who has access" badge — sits next to the row kebab, same flat/
+   borderless treatment, just muted until hovered since it's informational
+   first and a shortcut into ShareDialog second. */
+.shared-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
+	line-height: 1;
+	border: none;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.shared-badge:hover {
+	background: var(--color-border);
+	color: var(--color-text);
+}
+
+/* SortMenu.svelte's own toolbar trigger — same anchoring/flat-icon
+   treatment as .row-menu, just not tied to a grid row's own "menu"
+   column (this sits in a toolbar, not a list row). */
+.sort-menu {
+	position: relative;
+}
+
+.sort-menu-trigger {
+	border-color: transparent;
+	background: none;
+	color: var(--color-text-muted);
+	font-size: 0.85rem;
+	font-weight: 500;
+}
+
+.sort-menu-trigger:hover {
+	background: var(--color-border);
+	border-color: transparent;
+}
+
+.dropdown-menu {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	z-index: 20;
+	margin-top: var(--space-1);
+	min-width: 11rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	/* --color-surface (a raised panel), not --color-bg (the page itself) —
+	   see the dark-mode token comment above for why this matters in
+	   practice, not just in theory. */
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+	padding: var(--space-1);
+}
+
+.dropdown-menu button {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	background: none;
+	border: none;
+	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-3);
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.dropdown-menu button svg {
+	flex-shrink: 0;
+}
+
+.dropdown-menu button:hover {
+	background: var(--color-surface);
+}
+
+/* Separated from the actions above it, same as Drive's and Nextcloud's own
+   row menus — a destructive action sitting flush against "Make a copy"
+   invites a misclick in a way a visible break doesn't. */
+.dropdown-menu button.danger {
+	color: var(--color-danger);
+	border-top: 1px solid var(--color-border);
+	margin-top: 2px;
+	padding-top: calc(var(--space-2) + 2px);
+}
+
+/* Backdrop + Cancel button for the mobile bottom-sheet version of
+   .dropdown-menu (see the media query below) — inert on desktop, where
+   the small anchored dropdown still just closes via the existing
+   outside-click/Escape handling each page already has. A real sibling
+   element, not a ::before on .dropdown-menu itself: a pseudo-element's
+   clicks bubble to its own element (which stops propagation so its own
+   content clicks don't close the menu), so it could never register as
+   "outside" the menu the way a real separate element can. */
+.menu-backdrop {
+	display: none;
+}
+
+.dropdown-menu-cancel {
+	display: none;
+	width: 100%;
+	margin-top: var(--space-2);
+	padding: var(--space-3);
+	text-align: center;
+	border: none;
+	background: var(--color-surface);
+	border-radius: var(--radius);
+	font: inherit;
+	font-weight: 600;
+	color: inherit;
+	cursor: pointer;
+}
+
+/* Mobile only (see the media query below) — Drive's own floating "+"
+   replaces a permanently-visible row of Upload/Scan/New folder buttons,
+   which on a phone-width screen was a whole extra row eaten out of the
+   file list's own vertical space for actions that aren't needed most of
+   the time. Fixed to the viewport, not the page, so it stays reachable
+   regardless of scroll position. */
+.fab {
+	display: none;
+	position: fixed;
+	right: var(--space-4);
+	bottom: var(--space-4);
+	width: 3.5rem;
+	height: 3.5rem;
+	border-radius: 50%;
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+	border: none;
+	box-shadow: var(--shadow-md);
+	align-items: center;
+	justify-content: center;
+	z-index: 30;
+	cursor: pointer;
+	transition: filter 0.12s ease, transform 0.08s ease;
+}
+
+.fab:active {
+	transform: scale(0.94);
+}
+
+.fab:hover {
+	filter: brightness(1.08);
+}
+
+/* Reuses .dropdown-menu's own button styling (same class, applied
+   alongside this one) but not its positioning — that one anchors to a
+   position:relative wrapper above itself (a row's own .row-menu); this
+   one anchors to the viewport, above the fixed FAB that opens it, since
+   there's no scrolling wrapper to anchor to at the bottom of the screen. */
+.fab-menu {
+	position: fixed;
+	top: auto;
+	right: var(--space-4);
+	bottom: calc(3.5rem + var(--space-4) + var(--space-2));
+	z-index: 30;
+}
+
+/* Mobile: two lines per row (name, then modified+size as a muted subtitle
+   underneath) instead of the desktop's separate columns — Drive's own
+   mobile app shows exactly this shape, and it's strictly better than this
+   app's previous approach of just display:none-ing the columns that
+   didn't fit, which silently lost that information on a phone instead of
+   reflowing it. Icon and the row-menu both span the full two-row height
+   (repeating their area name down both grid-template-areas rows) so they
+   stay vertically centered against the row as a whole, not just its first
+   line. No markup changes needed for this — grid-area placement doesn't
+   care about DOM source order. */
+@media (max-width: 640px) {
+	/* Drive/Nextcloud both run their mobile lists close to the screen
+	   edge — main.with-topbar's normal var(--space-6) (24px) side padding
+	   reads as a lot of wasted width once the viewport itself is only
+	   ~390px, nearly a quarter of it given up to margins on a screen
+	   that's already tight on room. */
+	main.with-topbar {
+		padding: var(--space-4) var(--space-3);
+		/* Extra room so .bottom-tabbar (below) never covers the last row —
+		   same reasoning as .item-list.has-selection's own padding-bottom
+		   for .selection-toolbar. A second declaration, not merged into the
+		   shorthand above, so it's easy to scan as "this one's for the tab
+		   bar" on its own. */
+		padding-bottom: calc(var(--bottom-tabbar-height) + var(--space-4));
+	}
+
+	/* Home moves to .bottom-tabbar's fixed first slot at this same
+	   breakpoint — no point listing it twice in the drawer too. */
+	.sidebar-nav-primary {
+		display: none;
+	}
+
+	/* Whichever of Shares/Shared with me/Trash/Recent/Favorites the user
+	   currently has in the tab bar's 3 configurable slots (routes/
+	   +layout.svelte, $tabbarConfig — lib/tabbarConfig.ts) — same reasoning
+	   as .sidebar-nav-primary above, just per-link instead of the whole
+	   block, since which 3 those are can change. Settings/Admin have no
+	   tab bar counterpart, so they're never given this class and stay put. */
+	/* a.drawer-hide-mobile, not just .drawer-hide-mobile — .sidebar-nav a
+	   (line ~300) has higher specificity (class + type) than a bare class
+	   selector, so a plain .drawer-hide-mobile lost outright regardless of
+	   which came later in the file; matching its class+type shape ties it,
+	   and this rule comes after in source, so it wins the tie. */
+	a.drawer-hide-mobile {
+		display: none;
+	}
+
+	.bottom-tabbar {
+		display: flex;
+	}
+
+	.item-list-header {
+		display: none;
+	}
+
+	.item-row {
+		grid-template-columns: auto 1fr auto auto;
+		grid-template-areas:
+			'icon name  name  menu'
+			'icon modified size menu';
+		row-gap: 2px;
+		padding: var(--space-2) var(--space-3);
+	}
+
+	.item-name {
+		align-self: end;
+	}
+
+	.item-modified,
+	.item-size {
+		align-self: start;
+		min-width: 0;
+		text-align: left;
+		font-size: 0.78rem;
+	}
+
+	.toolbar {
+		flex-wrap: wrap;
+	}
+
+	/* The FAB (.fab, styled above) takes over Upload/Scan/New folder on
+	   mobile — see its own comment for why. .toolbar-actions itself is
+	   NOT hidden here anymore: it only ever holds the view toggle now
+	   (the "+ New" trigger moved to .sidebar-new-menu below — see
+	   routes/+layout.svelte), which mobile still needs same as desktop. */
+	.sidebar-new-menu {
+		display: none;
+	}
+
+	.fab {
+		display: flex;
+		/* Lifted above .bottom-tabbar (below), which now occupies the same
+		   bottom edge the FAB used to have all to itself. */
+		bottom: calc(var(--bottom-tabbar-height) + var(--space-3));
+	}
+
+	.fab-menu {
+		/* Same lift as .fab just above, plus its own base offset (see the
+		   unconditional .fab-menu rule this overrides: fab height + its two
+		   gaps) — the FAB's new bottom here isn't visible to a plain var()
+		   reference from that separate rule, so the whole expression is
+		   repeated rather than partially reused. */
+		bottom: calc(var(--bottom-tabbar-height) + var(--space-3) + 3.5rem + var(--space-2));
+	}
+
+	/* .item-row-flex rows (trash/shares/admin/move-picker — see its own
+	   comment above) aren't a fixed 5-column shape, so they can't reuse the
+	   grid reflow above: some carry two full-text buttons ("Restore",
+	   "Delete forever") that would otherwise squeeze the name down to
+	   nothing on a narrow screen. Wrapping instead — name on its own full
+	   line, then whatever buttons/fields follow flow below it — keeps the
+	   name actually readable instead of silently crushing it. */
+	.item-row-flex {
+		flex-wrap: wrap;
+	}
+
+	.item-row-flex .item-name {
+		flex-basis: 100%;
+	}
+
+	/* Every action menu (row kebabs across the file list/trash/shares, and
+	   the FAB's own .fab-menu, which carries this same .dropdown-menu
+	   class) becomes a fullscreen-width bottom sheet instead of a small
+	   anchored dropdown — much easier to hit the right option with a
+	   thumb than a compact popover pinned to wherever the trigger button
+	   happened to be. */
+	.menu-backdrop {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgb(0 0 0 / 45%);
+		z-index: 39;
+	}
+
+	.dropdown-menu {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		top: auto;
+		margin: 0;
+		min-width: 0;
+		max-width: none;
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+		box-shadow: 0 -8px 24px rgb(0 0 0 / 25%);
+		z-index: 40;
+		padding: var(--space-2);
+		padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+	}
+
+	.dropdown-menu button {
+		padding: var(--space-3);
+		font-size: 1rem;
+	}
+
+	.dropdown-menu-cancel {
+		display: block;
+	}
+}
+
+.scan-pages {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+}
+
+.scan-page-thumb {
+	position: relative;
+	width: 96px;
+	height: 128px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	overflow: hidden;
+	background: var(--color-surface);
+}
+
+.scan-page-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.scan-page-remove {
+	position: absolute;
+	top: var(--space-1);
+	right: var(--space-1);
+	padding: 0 var(--space-2);
+	background: rgba(0, 0, 0, 0.55);
+	border-color: transparent;
+	color: #fff;
+	line-height: 1.6;
+}
+
+.scan-page-remove:hover {
+	background: rgba(0, 0, 0, 0.75);
+}
+
+/* /file/[id] — scoped to that route alone (unlike .breadcrumb/.toolbar
+   above, which routes/+page.svelte and MoveDialog.svelte also use). Fills
+   main.fullscreen: a fixed-height header row plus a content area that takes
+   whatever's left, so the viewer classes below can go from the old
+   vh-based heights (a guess at how much of the viewport the app's own
+   chrome was leaving free) to a real height: 100% of that content area. */
+.preview-page {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.preview-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-3);
+	border-bottom: 1px solid var(--color-border);
+	flex: none;
+}
+
+.preview-back {
+	color: inherit;
+	text-decoration: none;
+	font-size: 1.2rem;
+	line-height: 1;
+	flex: none;
+}
+
+.preview-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.preview-status {
+	flex: none;
+	margin: 0;
+	padding: var(--space-2) var(--space-3) 0;
+}
+
+.preview-content {
+	flex: 1;
+	min-height: 0;
+	padding: var(--space-3);
+	display: flex;
+	flex-direction: column;
+}
+
+.preview-frame {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+	overflow: hidden;
+	flex: 1;
+	min-height: 0;
+}
+
+.preview-frame img,
+.preview-frame video {
+	max-width: 100%;
+	max-height: 100%;
+	display: block;
+}
+
+.pdf-pages {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-3);
+	height: 100%;
+	overflow-y: auto;
+	padding: var(--space-3);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+}
+
+.pdf-pages .pdf-page {
+	max-width: 100%;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+	background: #fff;
+}
+
+.preview-text {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+	padding: var(--space-4);
+	height: 100%;
+	overflow: auto;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.85rem;
+}
+
+.docx-container {
+	height: 100%;
+	overflow: auto;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	background: var(--color-surface);
+	padding: var(--space-3);
+	/* docx-preview renders a simulated page (white background, own text
+	   color) regardless of the app's own light/dark theme — same reasoning
+	   as the pdf.js canvas pages above, a document's own colors shouldn't
+	   invert with the UI around it. */
+	color-scheme: light;
+}
+
+.docx-container .docx-page {
+	max-width: 100%;
+	margin: 0 auto var(--space-3);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* .xlsx-tabs and .xlsx-table-wrap are XlsxViewer's own root-level elements
+   (no wrapper — Svelte allows multiple root nodes), so both land as direct
+   flex children of .preview-content above: the tabs row takes its natural
+   height, the table wrapper takes whatever's left. */
+.xlsx-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-bottom: var(--space-3);
+	flex: none;
+}
+
+.xlsx-table-wrap {
+	flex: 1;
+	min-height: 0;
+	max-width: 100%;
+	overflow: auto;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+}
+
+.xlsx-table {
+	border-collapse: collapse;
+	font-size: 0.85rem;
+	white-space: nowrap;
+}
+
+.xlsx-table td {
+	border: 1px solid var(--color-border);
+	padding: var(--space-1) var(--space-2);
+}
+
+.onlyoffice-container {
+	/* DocsAPI.DocEditor mounts an iframe that fills this element — it needs
+	   a real height to render into, not just "however tall its content
+	   ends up being" the way the other viewers above can get away with. */
+	height: 100%;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+/* Deliberately last in the file: this has to win over the max-width: 640px
+   block's ".bottom-tabbar { display: flex }" whenever both are true (narrow
+   viewport AND an active selection), and two same-specificity rules for the
+   same property resolve by source order — .selection-toolbar (routes/
+   +page.svelte) already owns this exact screen edge once a selection
+   exists, same reasoning the FAB already hides for (see its own JS-level
+   condition in +page.svelte) — :has() gets the same result here as a pure
+   CSS rule instead of new state threaded down from that page into this
+   layout just to hide one element. */
+.app-main:has(.item-list.has-selection, .item-grid.has-selection) .bottom-tabbar {
+	display: none;
+}

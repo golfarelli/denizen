@@ -1,0 +1,141 @@
+import { test, expect } from '@playwright/test';
+import { answerPrompt } from './helpers/dialog';
+
+// Grid/list toggle and column sorting — routes/+page.svelte
+// (lib/viewMode.ts, lib/sortItems.ts).
+
+test('switching to grid view shows tiles and persists across a reload', async ({ page }) => {
+	await page.goto('/');
+
+	const folderName = `E2E Grid ${Date.now()}`;
+	await page.getByRole('button', { name: '+ New' }).click();
+	await page.getByRole('menuitem', { name: 'New folder' }).click();
+	await answerPrompt(page, folderName);
+	await expect(page.locator('.item-row', { hasText: folderName })).toBeVisible();
+
+	await expect(page.locator('.item-list')).toBeVisible();
+	await expect(page.locator('.item-grid')).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Grid view' }).click();
+
+	await expect(page.locator('.item-grid')).toBeVisible();
+	await expect(page.locator('.item-list')).toHaveCount(0);
+	await expect(page.locator('.item-tile', { hasText: folderName })).toBeVisible();
+
+	// Persisted (localStorage), unlike sort — a reload should still be grid.
+	await page.reload();
+	await expect(page.locator('.item-grid')).toBeVisible();
+
+	// A tile's own kebab menu works the same as a list row's.
+	const tile = page.locator('.item-tile', { hasText: folderName });
+	await tile.getByRole('button', { name: 'Actions for' }).click();
+	await expect(tile.locator('.dropdown-menu')).toBeVisible();
+	await expect(tile.locator('.dropdown-menu').getByRole('menuitem', { name: 'Rename' })).toBeVisible();
+
+	// Opening a folder still works by double-clicking the tile itself — a
+	// single click now selects it instead (desktop click-select, same as
+	// list view — see routes/+page.svelte's handleItemClick).
+	await page.keyboard.press('Escape');
+	await page.locator('.item-tile-main', { hasText: folderName }).dblclick();
+	await expect(page.locator('.breadcrumb').getByText(folderName)).toBeVisible();
+
+	// Back to list view for the next test in this file.
+	await page.getByRole('button', { name: 'List view' }).click();
+});
+
+test('clicking a column header sorts the list, and clicking again reverses it', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
+
+	const stamp = Date.now();
+	const names = [`b-e2e-sort-${stamp}`, `a-e2e-sort-${stamp}`, `c-e2e-sort-${stamp}`];
+	for (const name of names) {
+		await page.getByRole('button', { name: '+ New' }).click();
+		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await answerPrompt(page, name);
+		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
+	}
+
+	// Default sort is name/ascending — the three new folders should already
+	// read a, b, c top-to-bottom among themselves.
+	const rowNames = () => page.locator('.item-row .item-name').allTextContents();
+	const orderOf = (all: string[]) => all.filter((n) => names.includes(n));
+	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[1], names[0], names[2]]);
+
+	// Click "Name" again to reverse to descending. exact: true, since the
+	// shared test folder accumulates rows like "E2E After Rename" whose own
+	// name text also matches the header's { name: 'Name' } substring query.
+	await page.getByRole('button', { name: 'Name', exact: true }).click();
+	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[2], names[0], names[1]]);
+});
+
+test('sort field and direction survive a reload (lib/persistedState.ts)', async ({ page }) => {
+	await page.goto('/');
+
+	// Switch to Modified/descending — anything other than the default
+	// Name/ascending, so a reload that silently fell back to the default
+	// wouldn't accidentally look like a pass.
+	await page.getByRole('button', { name: 'Modified', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Modified', exact: true }).locator('.sort-arrow')).toBeVisible();
+
+	await page.reload();
+
+	// The column header carries the same active-sort indicator the toolbar
+	// SortMenu trigger does — checking the SortMenu trigger's own label is
+	// the more direct read of persisted state (it's what actually got
+	// written to/read from localStorage), the header arrow is the visible
+	// consequence of the same state.
+	await expect(page.getByRole('button', { name: 'Sort by' })).toContainText('Modified');
+	await expect(page.getByRole('button', { name: 'Modified', exact: true }).locator('.sort-arrow')).toBeVisible();
+	// No cleanup needed — each test gets its own fresh browser context
+	// (storageState is re-applied per test, not carried over), so this
+	// choice doesn't leak into whichever test runs next.
+});
+
+// .item-list-header (the column headers sorting normally hangs off) is
+// display:none below 640px (see app.css) — a real, pre-existing mobile
+// layout choice, not a bug. Sorting still has to be reachable there
+// though: lib/SortMenu.svelte is the fix, a toolbar button that works
+// regardless of viewport width. Regression test for exactly that gap.
+test('on a mobile-width viewport, sorting is reachable via the toolbar SortMenu, not just the (hidden) column headers', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+
+	const stamp = Date.now();
+	const names = [`b-e2e-mobile-sort-${stamp}`, `a-e2e-mobile-sort-${stamp}`];
+	for (const name of names) {
+		// The toolbar's own New folder/Upload/Scan buttons are hidden on
+		// mobile (see app.css) in favor of the FAB — same reason this test
+		// has to go through it instead of "+ New folder" directly.
+		await page.locator('.fab').click();
+		await page.getByRole('menuitem', { name: 'New folder' }).click();
+		await answerPrompt(page, name);
+		await expect(page.locator('.item-row', { hasText: name })).toBeVisible();
+	}
+
+	// Confirm the premise: the column headers really are unreachable here.
+	await expect(page.locator('.item-list-header')).not.toBeVisible();
+
+	const sortButton = page.getByRole('button', { name: 'Sort by' });
+	await expect(sortButton).toBeVisible();
+	await sortButton.click();
+
+	const menu = page.locator('.dropdown-menu');
+	await expect(menu).toBeVisible();
+	await menu.getByRole('menuitem', { name: 'Name' }).click();
+
+	const rowNames = () => page.locator('.item-row .item-name').allTextContents();
+	const orderOf = (all: string[]) => all.filter((n) => names.includes(n));
+	// Default sort is already name/ascending (a before b) — since "Name"
+	// is already the active field, picking it from the menu toggles
+	// direction the same way clicking an already-active header does, so
+	// this first pick flips straight to descending (b before a).
+	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[0], names[1]]);
+
+	// Picking it again flips back to ascending.
+	await sortButton.click();
+	await menu.getByRole('menuitem', { name: 'Name' }).click();
+	await expect.poll(async () => orderOf(await rowNames())).toEqual([names[1], names[0]]);
+});
