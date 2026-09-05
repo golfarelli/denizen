@@ -18,13 +18,13 @@ func TestTrashPurgeFlow_RemovesOnlyExpiredEntries(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	oldItem := uploadFile(t, ts, fabio, nil, "old.txt", []byte("should be purged"))
-	recentItem := uploadFile(t, ts, fabio, nil, "recent.txt", []byte("should survive"))
+	oldItem := uploadFile(t, ts, alice, nil, "old.txt", []byte("should be purged"))
+	recentItem := uploadFile(t, ts, alice, nil, "recent.txt", []byte("should survive"))
 
 	for _, id := range []string{oldItem.ID, recentItem.ID} {
-		res := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+id, fabio, nil)
+		res := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+id, alice, nil)
 		if res.StatusCode != http.StatusNoContent {
 			t.Fatalf("delete %s: got status %d", id, res.StatusCode)
 		}
@@ -39,8 +39,8 @@ func TestTrashPurgeFlow_RemovesOnlyExpiredEntries(t *testing.T) {
 		t.Fatalf("back-date oldItem.deleted_at: %v", err)
 	}
 
-	oldTrashPath := store.TrashPath(fabio.username, oldItem.ID, "old.txt")
-	recentTrashPath := store.TrashPath(fabio.username, recentItem.ID, "recent.txt")
+	oldTrashPath := store.TrashPath(alice.username, oldItem.ID, "old.txt")
+	recentTrashPath := store.TrashPath(alice.username, recentItem.ID, "recent.txt")
 	mustExist(t, oldTrashPath)
 	mustExist(t, recentTrashPath)
 

@@ -493,8 +493,8 @@ func (s *ItemService) RemoveFavorite(ctx context.Context, callerID, id string) e
 
 // ListFavorites resolves callerID's starred items into real *model.Item
 // rows, most recently starred first. Unlike Recent, deliberately not
-// scoped to owned-only: Fabio asked explicitly for shared items to be
-// favoritable too (2026-08-16) — a starred item some else owns needs its
+// scoped to owned-only: shared items should be favoritable too — a
+// starred item someone else owns needs its
 // access re-checked here (resolveGrant), not just trusted from favoriting
 // time, since a share can be revoked after the fact; anything no longer
 // reachable is silently dropped from the list rather than erroring the
@@ -835,7 +835,7 @@ func (s *ItemService) CreateFolder(ctx context.Context, callerID string, parentI
 // resolved live on every future read — ponytail: renaming the real target
 // later won't update this shortcut's own displayed name; add a live JOIN
 // at read time (List/Get/Search) if that drifts enough in practice to
-// bother Fabio, not worth the extra query on every listing for a
+// matter, not worth the extra query on every listing for a
 // personal-scale drive today.
 func (s *ItemService) CreateShortcut(ctx context.Context, callerID, targetID string, destParentID *string) (*model.Item, error) {
 	target, err := s.getReadable(ctx, callerID, targetID)

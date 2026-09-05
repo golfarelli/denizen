@@ -107,15 +107,15 @@ func TestAuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 	// --- register: the bootstrap invite must grant admin -------------------
 	registerRes := postJSON(t, ts.URL+"/api/v1/auth/register", map[string]string{
 		"invite_code": code,
-		"username":    "fabio",
+		"username":    "alice",
 		"password":    "correct-horse-battery-staple",
 	})
 	if registerRes.StatusCode != http.StatusCreated {
 		t.Fatalf("register: got status %d, want %d", registerRes.StatusCode, http.StatusCreated)
 	}
 	registered := decodeJSON[registerResponse](t, registerRes)
-	if registered.Username != "fabio" {
-		t.Errorf("registered.Username = %q, want %q", registered.Username, "fabio")
+	if registered.Username != "alice" {
+		t.Errorf("registered.Username = %q, want %q", registered.Username, "alice")
 	}
 	if !registered.IsAdmin {
 		t.Error("registered.IsAdmin = false, want true (bootstrap invite grants admin)")
@@ -138,8 +138,8 @@ func TestAuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan user row: %v", err)
 	}
-	if username != "fabio" || !isAdmin || storageUsedBytes != 0 || disabled {
-		t.Errorf("user row = {username:%q isAdmin:%v storageUsedBytes:%d disabled:%v}, want {fabio true 0 false}",
+	if username != "alice" || !isAdmin || storageUsedBytes != 0 || disabled {
+		t.Errorf("user row = {username:%q isAdmin:%v storageUsedBytes:%d disabled:%v}, want {alice true 0 false}",
 			username, isAdmin, storageUsedBytes, disabled)
 	}
 	if quotaBytes <= 0 {
@@ -169,7 +169,7 @@ func TestAuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 
 	// --- login ---------------------------------------------------------------
 	loginRes := postJSON(t, ts.URL+"/api/v1/auth/login", map[string]string{
-		"username": "fabio",
+		"username": "alice",
 		"password": "correct-horse-battery-staple",
 	})
 	if loginRes.StatusCode != http.StatusOK {
@@ -190,7 +190,7 @@ func TestAuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 	}
 
 	badLoginRes := postJSON(t, ts.URL+"/api/v1/auth/login", map[string]string{
-		"username": "fabio",
+		"username": "alice",
 		"password": "wrong-password",
 	})
 	if badLoginRes.StatusCode != http.StatusUnauthorized {

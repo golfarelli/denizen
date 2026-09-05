@@ -1,9 +1,9 @@
 import { writable } from 'svelte/store';
 
 // The "+ New" trigger itself lives in the sidebar now (routes/
-// +layout.svelte, first item — Drive-style, secondbrain session
-// 2026-08-16), but everything it actually does (fileInput ref, ScanDialog,
-// the upload progress panel, the folder-name prompt) stays owned by
+// +layout.svelte, first item — Drive-style), but everything it actually
+// does (fileInput ref, ScanDialog, the upload progress panel, the
+// folder-name prompt) stays owned by
 // whichever page supports it — today only routes/+page.svelte, the file
 // browser itself. This is the handoff: the page registers its handlers on
 // mount and clears them on destroy; the sidebar button calls whatever's

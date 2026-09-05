@@ -35,7 +35,7 @@ func TestMigrate_ExistingDatabaseUpgradesCleanly(t *testing.T) {
 	}
 	if _, err := cn.Exec(
 		`INSERT INTO users (id, username, password_hash, is_admin, quota_bytes, storage_used_bytes, disabled, created_at)
-		 VALUES ('u1', 'fabio', 'hash', 1, 1000, 0, 0, 1000)`,
+		 VALUES ('u1', 'alice', 'hash', 1, 1000, 0, 0, 1000)`,
 	); err != nil {
 		t.Fatalf("insert real data: %v", err)
 	}
@@ -55,8 +55,8 @@ func TestMigrate_ExistingDatabaseUpgradesCleanly(t *testing.T) {
 	if err := cn2.QueryRow(`SELECT username FROM users WHERE id = 'u1'`).Scan(&username); err != nil {
 		t.Fatalf("pre-existing row lost: %v", err)
 	}
-	if username != "fabio" {
-		t.Fatalf("got username %q, want fabio", username)
+	if username != "alice" {
+		t.Fatalf("got username %q, want alice", username)
 	}
 
 	var userSharesExists int

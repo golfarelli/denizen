@@ -21,14 +21,14 @@ func TestMimeTypeFlow_SetOnFileWithNone(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "Ricevuta pagamento", []byte("%PDF-1.4 fake content"))
+	item := uploadFile(t, ts, alice, nil, "Ricevuta pagamento", []byte("%PDF-1.4 fake content"))
 	if item.MimeType != nil {
 		t.Fatalf("uploaded file with no extension in name already has mime_type %q, test assumption broken", *item.MimeType)
 	}
 
-	setRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+item.ID+"/mimetype", fabio, map[string]any{
+	setRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+item.ID+"/mimetype", alice, map[string]any{
 		"mime_type": "application/pdf",
 	})
 	if setRes.StatusCode != http.StatusOK {
@@ -43,7 +43,7 @@ func TestMimeTypeFlow_SetOnFileWithNone(t *testing.T) {
 		t.Errorf("SetMimeType changed name/parent: name=%q parent_id=%v", updated.Name, updated.ParentID)
 	}
 
-	getRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID, fabio, nil)
+	getRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID, alice, nil)
 	fetched := decodeJSON[apiItem](t, getRes)
 	if fetched.MimeType == nil || *fetched.MimeType != "application/pdf" {
 		t.Errorf("persisted MimeType = %v, want application/pdf (fix didn't survive a fresh GET)", fetched.MimeType)
@@ -58,22 +58,22 @@ func TestMimeTypeFlow_RejectsEmptyAndFolders(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "file.txt", []byte("hello"))
+	item := uploadFile(t, ts, alice, nil, "file.txt", []byte("hello"))
 
-	emptyRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+item.ID+"/mimetype", fabio, map[string]any{
+	emptyRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+item.ID+"/mimetype", alice, map[string]any{
 		"mime_type": "",
 	})
 	if emptyRes.StatusCode != http.StatusBadRequest {
 		t.Errorf("empty mime_type: got status %d, want 400", emptyRes.StatusCode)
 	}
 
-	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "A folder", "parent_id": nil,
 	})
 	folder := decodeJSON[apiItem](t, folderRes)
-	onFolderRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+folder.ID+"/mimetype", fabio, map[string]any{
+	onFolderRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+folder.ID+"/mimetype", alice, map[string]any{
 		"mime_type": "application/pdf",
 	})
 	if onFolderRes.StatusCode != http.StatusBadRequest {

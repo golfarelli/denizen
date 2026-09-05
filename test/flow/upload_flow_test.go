@@ -91,9 +91,9 @@ func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	createFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Photos", "parent_id": nil,
 	})
 	if createFolderRes.StatusCode != http.StatusCreated {
@@ -112,7 +112,7 @@ func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 		"filetype":  "image/jpeg",
 	})
 
-	createUploadRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", fabio, nil, map[string]string{
+	createUploadRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", alice, nil, map[string]string{
 		"Upload-Length":   strconv.Itoa(len(content)),
 		"Upload-Metadata": metadataHeader,
 	})
@@ -125,7 +125,7 @@ func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 		t.Fatal("create upload: no Location header in response")
 	}
 
-	patchRes := tusRequest(t, http.MethodPatch, location, fabio, bytes.NewReader(content), map[string]string{
+	patchRes := tusRequest(t, http.MethodPatch, location, alice, bytes.NewReader(content), map[string]string{
 		"Content-Type":  "application/offset+octet-stream",
 		"Upload-Offset": "0",
 	})
@@ -169,7 +169,7 @@ func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 
 	// --- the real assertion the testing convention calls for: the file on
 	// storage, compared byte-for-byte against the input ------------------------
-	onDiskPath := filepath.Join(store.UserFilesRoot(fabio.username), "Photos", "sunset.jpg")
+	onDiskPath := filepath.Join(store.UserFilesRoot(alice.username), "Photos", "sunset.jpg")
 	onDiskContent, err := os.ReadFile(onDiskPath)
 	if err != nil {
 		t.Fatalf("read uploaded file from disk at %s: %v", onDiskPath, err)
@@ -180,7 +180,7 @@ func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 
 	// --- quota accounting was updated to match ---------------------------------
 	var storageUsed int64
-	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, fabio.id).Scan(&storageUsed); err != nil {
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, alice.id).Scan(&storageUsed); err != nil {
 		t.Fatalf("scan storage_used_bytes: %v", err)
 	}
 	if storageUsed != int64(len(content)) {
@@ -188,7 +188,7 @@ func TestUploadFlow_CreateAndUploadInOneShot(t *testing.T) {
 	}
 
 	// --- the file is a normal item now: it shows up in a listing ---------------
-	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+photos.ID, fabio, nil)
+	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+photos.ID, alice, nil)
 	children := decodeJSON[[]apiItem](t, listRes)
 	if len(children) != 1 || children[0].ID != itemID {
 		t.Fatalf("Photos listing = %+v, want just sunset.jpg", children)
@@ -204,7 +204,7 @@ func TestUploadFlow_ResumesAcrossTwoChunks(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := make([]byte, 128*1024)
 	if _, err := rand.Read(content); err != nil {
@@ -213,7 +213,7 @@ func TestUploadFlow_ResumesAcrossTwoChunks(t *testing.T) {
 	firstHalf, secondHalf := content[:64*1024], content[64*1024:]
 
 	metadataHeader := handler.SerializeMetadataHeader(map[string]string{"filename": "archive.bin"})
-	createRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", fabio, nil, map[string]string{
+	createRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", alice, nil, map[string]string{
 		"Upload-Length":   strconv.Itoa(len(content)),
 		"Upload-Metadata": metadataHeader,
 	})
@@ -223,7 +223,7 @@ func TestUploadFlow_ResumesAcrossTwoChunks(t *testing.T) {
 	location := createRes.Header.Get("Location")
 
 	// first chunk — simulates the connection dropping right after this
-	firstRes := tusRequest(t, http.MethodPatch, location, fabio, bytes.NewReader(firstHalf), map[string]string{
+	firstRes := tusRequest(t, http.MethodPatch, location, alice, bytes.NewReader(firstHalf), map[string]string{
 		"Content-Type":  "application/offset+octet-stream",
 		"Upload-Offset": "0",
 	})
@@ -240,13 +240,13 @@ func TestUploadFlow_ResumesAcrossTwoChunks(t *testing.T) {
 	// the client re-checks how much the server actually has before resuming —
 	// this is the point of the protocol: it doesn't have to trust its own
 	// memory of what it already sent
-	headRes := tusRequest(t, http.MethodHead, location, fabio, nil, nil)
+	headRes := tusRequest(t, http.MethodHead, location, alice, nil, nil)
 	if got := headRes.Header.Get("Upload-Offset"); got != strconv.Itoa(len(firstHalf)) {
 		t.Fatalf("HEAD Upload-Offset = %q, want %q", got, strconv.Itoa(len(firstHalf)))
 	}
 
 	// second (resuming) chunk, picking up exactly where the first left off
-	secondRes := tusRequest(t, http.MethodPatch, location, fabio, bytes.NewReader(secondHalf), map[string]string{
+	secondRes := tusRequest(t, http.MethodPatch, location, alice, bytes.NewReader(secondHalf), map[string]string{
 		"Content-Type":  "application/offset+octet-stream",
 		"Upload-Offset": strconv.Itoa(len(firstHalf)),
 	})
@@ -258,7 +258,7 @@ func TestUploadFlow_ResumesAcrossTwoChunks(t *testing.T) {
 		t.Fatal("upload second chunk: no X-Item-Id — upload should be complete and finalized now")
 	}
 
-	onDiskPath := filepath.Join(store.UserFilesRoot(fabio.username), "archive.bin")
+	onDiskPath := filepath.Join(store.UserFilesRoot(alice.username), "archive.bin")
 	onDiskContent, err := os.ReadFile(onDiskPath)
 	if err != nil {
 		t.Fatalf("read uploaded file from disk at %s: %v", onDiskPath, err)

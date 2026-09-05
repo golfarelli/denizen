@@ -1,9 +1,9 @@
 import { writable } from 'svelte/store';
 
-// Promise-based replacements for window.prompt()/confirm() — those are
-// raw, unstyled browser dialogs, the one place left (secondbrain session
-// 2026-08-16) where this app's chrome still looked jarringly unfinished
-// next to everything else already styled to match. The actual <dialog>
+// Promise-based replacements for window.prompt()/confirm() — those were
+// raw, unstyled browser dialogs, the one place left where this app's
+// chrome still looked jarringly unfinished next to everything else
+// already styled to match. The actual <dialog>
 // lives once in routes/+layout.svelte (GlobalDialog.svelte) — this store
 // is how any component asks it to open without needing that component
 // mounted as a child, same handoff shape as lib/newMenu.ts.

@@ -30,10 +30,10 @@ func TestUploadFlow_LocationHonorsForwardedHeaders(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := []byte("hello from behind a reverse proxy")
-	createRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", fabio, nil, map[string]string{
+	createRes := tusRequest(t, http.MethodPost, ts.URL+"/api/v1/uploads/", alice, nil, map[string]string{
 		"Upload-Length":     strconv.Itoa(len(content)),
 		"Upload-Metadata":   handler.SerializeMetadataHeader(map[string]string{"filename": "via-proxy.txt"}),
 		"X-Forwarded-Proto": "https",

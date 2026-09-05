@@ -26,15 +26,15 @@ func TestRecentFlow_MostRecentFirstFoldersExcludedOwnerScoped(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Bollette", "parent_id": nil,
 	})
 	folder := decodeJSON[apiItem](t, folderRes)
 
-	older := uploadFile(t, ts, fabio, nil, "older.txt", []byte("first"))
-	newer := uploadFile(t, ts, fabio, &folder.ID, "newer.txt", []byte("second, nested in a folder"))
+	older := uploadFile(t, ts, alice, nil, "older.txt", []byte("first"))
+	newer := uploadFile(t, ts, alice, &folder.ID, "newer.txt", []byte("second, nested in a folder"))
 	// updated_at is second-resolution and this whole upload sequence runs
 	// within one wall-clock second — same fix thumbnail_flow_test.go's own
 	// cache-invalidation test needed, for the same underlying reason.
@@ -42,18 +42,18 @@ func TestRecentFlow_MostRecentFirstFoldersExcludedOwnerScoped(t *testing.T) {
 		t.Fatalf("bump newer.updated_at: %v", err)
 	}
 
-	// A second user's own file must never show up in fabio's Recent.
-	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	// A second user's own file must never show up in alice's Recent.
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	mario := registerAndLogin(t, ts, secondCode, "mario", "another-strong-password")
-	uploadFile(t, ts, mario, nil, "mario-only.txt", []byte("not fabio's"))
+	uploadFile(t, ts, mario, nil, "mario-only.txt", []byte("not alice's"))
 
-	recent := listRecent(t, ts, fabio)
+	recent := listRecent(t, ts, alice)
 
 	if len(recent) != 2 {
-		t.Fatalf("recent = %d items, want exactly 2 (the folder excluded, mario's file not fabio's)", len(recent))
+		t.Fatalf("recent = %d items, want exactly 2 (the folder excluded, mario's file not alice's)", len(recent))
 	}
 	if recent[0].ID != newer.ID || recent[1].ID != older.ID {
 		t.Errorf("recent order = [%s, %s], want [newer, older] (most recently modified first)", recent[0].Name, recent[1].Name)
@@ -76,15 +76,15 @@ func TestRecentFlow_TrashedFileIsExcluded(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "doomed.txt", []byte("about to be trashed"))
-	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, fabio, nil)
+	item := uploadFile(t, ts, alice, nil, "doomed.txt", []byte("about to be trashed"))
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, alice, nil)
 	if deleteRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("trash the item: got status %d", deleteRes.StatusCode)
 	}
 
-	recent := listRecent(t, ts, fabio)
+	recent := listRecent(t, ts, alice)
 	for _, r := range recent {
 		if r.ID == item.ID {
 			t.Error("recent includes a trashed item")

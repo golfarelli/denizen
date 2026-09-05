@@ -773,7 +773,7 @@ main.fullscreen {
 	   text: a real device long-press landing on the icon or anywhere else
 	   in the row used to reach nothing at all, since only .item-name (a
 	   fairly narrow column) ever had these handlers — found via an
-	   on-screen debug log Fabio reproduced with (2026-08-10). cursor/
+	   on-screen debug log reproduced on a real device (2026-08-10). cursor/
 	   touch-action/user-select/-webkit-touch-callout mirror .item-name's
 	   own, now needed here too since the row itself is what's interactive. */
 	cursor: pointer;
@@ -1054,8 +1054,8 @@ main.fullscreen {
 	color: var(--color-accent);
 }
 
-/* List/grid toggle — a genuine two-way switch now (secondbrain session
-   2026-08-16: the old surface+border "raised card" look on the active
+/* List/grid toggle — a genuine two-way switch now (the old surface+border
+   "raised card" look on the active
    button read as its own inconsistent style, not the selected state
    language the rest of the app already commits to elsewhere), same
    segmented-track construction as .language-toggle right above: a bordered
@@ -1121,8 +1121,8 @@ main.fullscreen {
 
 /* A slight lift instead of just a flat color swap — a card that visibly
    responds to the pointer reads as more "alive" than one that only
-   recolors (secondbrain session 2026-08-16, part of the same pass that
-   already gave the view toggle and buttons real hover/press feedback). */
+   recolors (part of the same pass that already gave the view toggle and
+   buttons real hover/press feedback). */
 .item-tile:hover {
 	background: var(--color-surface);
 	transform: translateY(-2px);
@@ -1293,8 +1293,8 @@ main.fullscreen {
 
 /* Enough room for the fixed .selection-toolbar not to cover the last row
    — a little more than its own typical height, since it can wrap to two
-   (now, with a 6th action button added for favorites — secondbrain session
-   2026-08-16 — sometimes three) lines on a narrow screen with every action
+   (now, with a 6th action button added for favorites — sometimes three)
+   lines on a narrow screen with every action
    button showing full text. Bumped from 5.5rem: a real, reproducible
    e2e failure (files.spec.ts's dblclick-to-open test, only ever failing
    deep into the full suite once root had accumulated enough rows to push

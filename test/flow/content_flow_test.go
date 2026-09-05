@@ -17,16 +17,16 @@ func TestContentFlow_DownloadAndRange(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := make([]byte, 10_000)
 	if _, err := rand.Read(content); err != nil {
 		t.Fatalf("generate random content: %v", err)
 	}
-	item := uploadFile(t, ts, fabio, nil, "report.pdf", content)
+	item := uploadFile(t, ts, alice, nil, "report.pdf", content)
 
 	// --- full download matches the original bytes exactly -----------------------
-	fullRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	fullRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", alice, nil)
 	if fullRes.StatusCode != http.StatusOK {
 		t.Fatalf("download: got status %d", fullRes.StatusCode)
 	}
@@ -43,7 +43,7 @@ func TestContentFlow_DownloadAndRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build range request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+fabio.accessToken)
+	req.Header.Set("Authorization", "Bearer "+alice.accessToken)
 	req.Header.Set("Range", "bytes=100-199")
 	rangeRes, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -64,14 +64,14 @@ func TestContentFlow_DownloadAndRange(t *testing.T) {
 	}
 
 	// --- someone else can't download it -----------------------------------------
-	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	mario := registerAndLogin(t, ts, secondCode, "mario", "another-strong-password")
 	marioRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", mario, nil)
 	if marioRes.StatusCode != http.StatusNotFound {
-		t.Errorf("mario downloading fabio's file: got status %d, want %d", marioRes.StatusCode, http.StatusNotFound)
+		t.Errorf("mario downloading alice's file: got status %d, want %d", marioRes.StatusCode, http.StatusNotFound)
 	}
 
 	// --- no token at all -----------------------------------------------------------
@@ -98,17 +98,17 @@ func TestContentFlow_TrashedFileStillPreviewable(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := []byte("a file about to be trashed, then previewed anyway")
-	item := uploadFile(t, ts, fabio, nil, "doomed.txt", content)
+	item := uploadFile(t, ts, alice, nil, "doomed.txt", content)
 
-	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, fabio, nil)
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, alice, nil)
 	if deleteRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("trash the item: got status %d", deleteRes.StatusCode)
 	}
 
-	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", alice, nil)
 	if contentRes.StatusCode != http.StatusOK {
 		t.Fatalf("download trashed item content: got status %d", contentRes.StatusCode)
 	}
@@ -120,7 +120,7 @@ func TestContentFlow_TrashedFileStillPreviewable(t *testing.T) {
 		t.Error("trashed item content does not match what was uploaded")
 	}
 
-	tokenRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+item.ID+"/content-token", fabio, map[string]any{})
+	tokenRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+item.ID+"/content-token", alice, map[string]any{})
 	if tokenRes.StatusCode != http.StatusOK {
 		t.Fatalf("mint content token for trashed item: got status %d", tokenRes.StatusCode)
 	}

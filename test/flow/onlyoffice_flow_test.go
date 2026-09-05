@@ -50,16 +50,16 @@ func TestOnlyOfficeFlow_DisabledByDefault(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	statusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/onlyoffice/status", fabio, nil)
+	statusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/onlyoffice/status", alice, nil)
 	status := decodeJSON[onlyOfficeStatusResp](t, statusRes)
 	if status.Enabled {
 		t.Error("status.Enabled = true with no Document Server configured, want false")
 	}
 
-	uploaded := uploadFile(t, ts, fabio, nil, "report.docx", []byte("pretend docx bytes"))
-	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", fabio, nil)
+	uploaded := uploadFile(t, ts, alice, nil, "report.docx", []byte("pretend docx bytes"))
+	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", alice, nil)
 	if configRes.StatusCode != http.StatusNotFound {
 		t.Errorf("config endpoint with OnlyOffice disabled: got status %d, want %d", configRes.StatusCode, http.StatusNotFound)
 	}
@@ -85,9 +85,9 @@ func TestOnlyOfficeFlow_EnabledReportsStatusAndSignedConfig(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	statusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/onlyoffice/status", fabio, nil)
+	statusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/onlyoffice/status", alice, nil)
 	status := decodeJSON[onlyOfficeStatusResp](t, statusRes)
 	if !status.Enabled {
 		t.Fatal("status.Enabled = false with a Document Server configured, want true")
@@ -98,9 +98,9 @@ func TestOnlyOfficeFlow_EnabledReportsStatusAndSignedConfig(t *testing.T) {
 	}
 
 	content := []byte("pretend docx bytes")
-	uploaded := uploadFile(t, ts, fabio, nil, "Quarterly Report.docx", content)
+	uploaded := uploadFile(t, ts, alice, nil, "Quarterly Report.docx", content)
 
-	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", fabio, nil)
+	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", alice, nil)
 	if configRes.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(configRes.Body)
 		t.Fatalf("onlyoffice-config: got status %d, body: %s", configRes.StatusCode, body)
@@ -181,14 +181,14 @@ func TestOnlyOfficeFlow_EditorTypeFollowsQueryParam(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
-	uploaded := uploadFile(t, ts, fabio, nil, "notes.docx", []byte("notes"))
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
+	uploaded := uploadFile(t, ts, alice, nil, "notes.docx", []byte("notes"))
 
 	// The client (OnlyOfficeViewer.svelte) is what actually decides this,
 	// based on its own viewport — the server's only job is to trust and
 	// sign whatever valid value it's asked for, or fall back to a sane
 	// default for anything else.
-	mobileRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config?type=mobile", fabio, nil)
+	mobileRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config?type=mobile", alice, nil)
 	mobileCfg := decodeJSON[onlyOfficeConfigResp](t, mobileRes)
 	if mobileCfg.Type != "mobile" {
 		t.Errorf("Type with ?type=mobile = %q, want %q", mobileCfg.Type, "mobile")
@@ -196,7 +196,7 @@ func TestOnlyOfficeFlow_EditorTypeFollowsQueryParam(t *testing.T) {
 
 	// An invalid value doesn't error the whole request — it just isn't
 	// trusted, falling back to "desktop" the same as no ?type= at all.
-	bogusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config?type=not-a-real-type", fabio, nil)
+	bogusRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config?type=not-a-real-type", alice, nil)
 	bogusCfg := decodeJSON[onlyOfficeConfigResp](t, bogusRes)
 	if bogusCfg.Type != "desktop" {
 		t.Errorf("Type with an invalid ?type= = %q, want the %q fallback", bogusCfg.Type, "desktop")
@@ -211,10 +211,10 @@ func TestOnlyOfficeFlow_RejectsUnsupportedExtension(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	uploaded := uploadFile(t, ts, fabio, nil, "archive.zip", []byte("PK\x03\x04"))
-	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", fabio, nil)
+	uploaded := uploadFile(t, ts, alice, nil, "archive.zip", []byte("PK\x03\x04"))
+	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", alice, nil)
 	if res.StatusCode != http.StatusBadRequest {
 		t.Errorf("config for .zip: got status %d, want %d", res.StatusCode, http.StatusBadRequest)
 	}
@@ -235,10 +235,10 @@ func TestOnlyOfficeFlow_PDF(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	uploaded := uploadFile(t, ts, fabio, nil, "Contract.pdf", []byte("%PDF-1.4 pretend bytes"))
-	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", fabio, nil)
+	uploaded := uploadFile(t, ts, alice, nil, "Contract.pdf", []byte("%PDF-1.4 pretend bytes"))
+	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+uploaded.ID+"/onlyoffice-config", alice, nil)
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(res.Body)
 		t.Fatalf("config for .pdf: got status %d, body: %s", res.StatusCode, body)
@@ -263,18 +263,18 @@ func TestOnlyOfficeFlow_EnforcesOwnership(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", bootstrapCode, created, err)
 	}
-	fabio := registerAndLogin(t, ts, bootstrapCode, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, bootstrapCode, "alice", "correct-horse-battery-staple")
 
-	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	guest := registerAndLogin(t, ts, guestCode, "guest", "another-strong-password")
 
-	fabioFile := uploadFile(t, ts, fabio, nil, "private.xlsx", []byte("not yours"))
-	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+fabioFile.ID+"/onlyoffice-config", guest, nil)
+	aliceFile := uploadFile(t, ts, alice, nil, "private.xlsx", []byte("not yours"))
+	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+aliceFile.ID+"/onlyoffice-config", guest, nil)
 	if res.StatusCode == http.StatusOK {
-		t.Fatal("guest was able to get an OnlyOffice config for fabio's file")
+		t.Fatal("guest was able to get an OnlyOffice config for alice's file")
 	}
 }
 
@@ -345,12 +345,12 @@ func TestOnlyOfficeFlow_CallbackSavesDocument(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	original := []byte("original spreadsheet bytes")
-	item := uploadFile(t, ts, fabio, nil, "Budget.xlsx", original)
+	item := uploadFile(t, ts, alice, nil, "Budget.xlsx", original)
 
-	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/onlyoffice-config", fabio, nil)
+	configRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/onlyoffice-config", alice, nil)
 	cfg := decodeJSON[onlyOfficeConfigResp](t, configRes)
 	callbackURL := strings.Replace(cfg.EditorConfig.CallbackURL, "http://denizen.example.internal", ts.URL, 1)
 
@@ -383,7 +383,7 @@ func TestOnlyOfficeFlow_CallbackSavesDocument(t *testing.T) {
 
 	// The real assertion: the item's actual content on disk changed, not
 	// just that the callback returned success.
-	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", alice, nil)
 	contentBody, err := io.ReadAll(contentRes.Body)
 	if err != nil {
 		t.Fatalf("read content: %v", err)
@@ -392,7 +392,7 @@ func TestOnlyOfficeFlow_CallbackSavesDocument(t *testing.T) {
 		t.Errorf("content after callback = %q, want %q", contentBody, edited)
 	}
 
-	updated := decodeJSON[apiItem](t, authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID, fabio, nil))
+	updated := decodeJSON[apiItem](t, authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID, alice, nil))
 	if updated.SizeBytes != int64(len(edited)) {
 		t.Errorf("SizeBytes after callback = %d, want %d", updated.SizeBytes, len(edited))
 	}
@@ -418,10 +418,10 @@ func TestOnlyOfficeFlow_CallbackRejectsInvalidSignature(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	original := []byte("do not touch me")
-	item := uploadFile(t, ts, fabio, nil, "Contract.docx", original)
+	item := uploadFile(t, ts, alice, nil, "Contract.docx", original)
 
 	editedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("forged edit"))
@@ -442,7 +442,7 @@ func TestOnlyOfficeFlow_CallbackRejectsInvalidSignature(t *testing.T) {
 
 	// And the content genuinely wasn't touched — not just that the HTTP
 	// response looked like a rejection.
-	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", alice, nil)
 	contentBody, err := io.ReadAll(contentRes.Body)
 	if err != nil {
 		t.Fatalf("read content: %v", err)

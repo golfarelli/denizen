@@ -25,9 +25,8 @@ setup('register the bootstrap admin account', async ({ page }) => {
 
 	// A successful register+auto-login lands on the file browser — no page
 	// heading to check anymore (routes/+page.svelte dropped it, the
-	// breadcrumb already said the same thing — secondbrain session
-	// 2026-08-16), so the search box is the next-most-reliable "the file
-	// browser really loaded" signal instead.
+	// breadcrumb already said the same thing), so the search box is the
+	// next-most-reliable "the file browser really loaded" signal instead.
 	await expect(page).toHaveURL('/');
 	await expect(page.getByPlaceholder('Search your whole drive…')).toBeVisible();
 

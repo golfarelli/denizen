@@ -7,7 +7,7 @@ import it from './it.json';
 // plural rules or ICU MessageFormat, so a real i18n library would be a lot
 // of dependency weight for {param} substitution this can do in a few
 // lines. One flat JSON dictionary per locale (see en.json/it.json) is the
-// "file per language" model Fabio asked for — adding a third language
+// "file per language" model this calls for — adding a third language
 // later is just a new dictionary file plus one more entry in `dictionaries`
 // and the selector's option list below (see routes/+layout.svelte).
 
@@ -27,9 +27,9 @@ function loadInitial(): Locale {
 	return raw === 'en' || raw === 'it' ? raw : 'it';
 }
 
-// Denizen is single-user (Fabio, Italian) — 'it' is the default for a
-// visitor with no stored preference yet, unlike most i18n setups that
-// default to English or the browser's own language.
+// Denizen's original deployment is a single Italian-speaking household —
+// 'it' is the default for a visitor with no stored preference yet, unlike
+// most i18n setups that default to English or the browser's own language.
 export const locale = writable<Locale>(loadInitial());
 
 locale.subscribe((value) => {

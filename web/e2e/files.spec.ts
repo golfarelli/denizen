@@ -5,9 +5,8 @@ import { answerPrompt, cancelDialog } from './helpers/dialog';
 test('create a folder, navigate into it, and back via breadcrumb', async ({ page }) => {
 	await page.goto('/');
 	// No page heading anymore (routes/+page.svelte dropped it, the
-	// breadcrumb already said the same thing — secondbrain session
-	// 2026-08-16) — the search box is the reliable "file browser loaded"
-	// signal instead.
+	// breadcrumb already said the same thing) — the search box is the
+	// reliable "file browser loaded" signal instead.
 	await expect(page.getByPlaceholder('Search your whole drive…')).toBeVisible();
 
 	const folderName = 'E2E Documents';

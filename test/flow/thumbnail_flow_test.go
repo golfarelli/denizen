@@ -38,12 +38,12 @@ func TestThumbnailFlow_ImageIsGeneratedCachedAndScopedToOwner(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "photo.png", pngBytes(t, 600, 300))
+	item := uploadFile(t, ts, alice, nil, "photo.png", pngBytes(t, 600, 300))
 
 	// --- first request generates it on the fly ---------------------------------
-	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", fabio, nil)
+	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", alice, nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("thumbnail: got status %d", res.StatusCode)
 	}
@@ -63,7 +63,7 @@ func TestThumbnailFlow_ImageIsGeneratedCachedAndScopedToOwner(t *testing.T) {
 	}
 
 	// --- second request serves the same bytes back from cache ------------------
-	res2 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", fabio, nil)
+	res2 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", alice, nil)
 	if res2.StatusCode != http.StatusOK {
 		t.Fatalf("second thumbnail request: got status %d", res2.StatusCode)
 	}
@@ -76,14 +76,14 @@ func TestThumbnailFlow_ImageIsGeneratedCachedAndScopedToOwner(t *testing.T) {
 	}
 
 	// --- someone else can't fetch it ---------------------------------------------
-	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	mario := registerAndLogin(t, ts, secondCode, "mario", "another-strong-password")
 	marioRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", mario, nil)
 	if marioRes.StatusCode != http.StatusNotFound {
-		t.Errorf("mario fetching fabio's thumbnail: got status %d, want %d", marioRes.StatusCode, http.StatusNotFound)
+		t.Errorf("mario fetching alice's thumbnail: got status %d, want %d", marioRes.StatusCode, http.StatusNotFound)
 	}
 }
 
@@ -95,11 +95,11 @@ func TestThumbnailFlow_UnsupportedTypeIs404(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "notes.txt", []byte("nothing to thumbnail here"))
+	item := uploadFile(t, ts, alice, nil, "notes.txt", []byte("nothing to thumbnail here"))
 
-	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", fabio, nil)
+	res := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", alice, nil)
 	if res.StatusCode != http.StatusNotFound {
 		t.Errorf("thumbnail for .txt: got status %d, want %d", res.StatusCode, http.StatusNotFound)
 	}
@@ -117,10 +117,10 @@ func TestThumbnailFlow_ReuploadInvalidatesCache(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "photo.png", pngBytes(t, 100, 100))
-	res1 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", fabio, nil)
+	item := uploadFile(t, ts, alice, nil, "photo.png", pngBytes(t, 100, 100))
+	res1 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", alice, nil)
 	if res1.StatusCode != http.StatusOK {
 		t.Fatalf("first thumbnail: got status %d", res1.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestThumbnailFlow_ReuploadInvalidatesCache(t *testing.T) {
 	// onlyoffice.go) — so this test drives it the same white-box way
 	// EnsureBootstrapInvite/CreateInvite above already do, straight against
 	// ts.app.
-	if _, err := ts.app.Items.ReplaceContent(ctx, fabio.id, item.ID, bytes.NewReader(pngBytes(t, 100, 50))); err != nil {
+	if _, err := ts.app.Items.ReplaceContent(ctx, alice.id, item.ID, bytes.NewReader(pngBytes(t, 100, 50))); err != nil {
 		t.Fatalf("ReplaceContent: %v", err)
 	}
 	// updated_at is second-resolution (see ItemService's now().Unix() —
@@ -145,7 +145,7 @@ func TestThumbnailFlow_ReuploadInvalidatesCache(t *testing.T) {
 		t.Fatalf("bump updated_at: %v", err)
 	}
 
-	res2 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", fabio, nil)
+	res2 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/thumbnail", alice, nil)
 	if res2.StatusCode != http.StatusOK {
 		t.Fatalf("thumbnail after replace: got status %d", res2.StatusCode)
 	}

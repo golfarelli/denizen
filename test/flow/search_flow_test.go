@@ -24,17 +24,17 @@ func TestSearchFlow_FindsByNameAcrossTheWholeTreeNotJustOneFolder(t *testing.T) 
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Bollette", "parent_id": nil,
 	})
 	folder := decodeJSON[apiItem](t, folderRes)
 
-	uploadFile(t, ts, fabio, nil, "ricetta pasta.txt", []byte("niente a che vedere"))
-	nested := uploadFile(t, ts, fabio, &folder.ID, "bolletta luce agosto.txt", []byte("consumo elettrico"))
+	uploadFile(t, ts, alice, nil, "ricetta pasta.txt", []byte("niente a che vedere"))
+	nested := uploadFile(t, ts, alice, &folder.ID, "bolletta luce agosto.txt", []byte("consumo elettrico"))
 
-	results := search(t, ts, fabio, "bolletta")
+	results := search(t, ts, alice, "bolletta")
 	if len(results) != 1 || results[0].ID != nested.ID {
 		t.Errorf("search(bolletta) = %+v, want exactly the nested file (whole-tree, not just root)", results)
 	}
@@ -48,9 +48,9 @@ func TestSearchFlow_FindsByContentAndIsScopedToTheCallersOwnItems(t *testing.T) 
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
@@ -58,22 +58,22 @@ func TestSearchFlow_FindsByContentAndIsScopedToTheCallersOwnItems(t *testing.T) 
 
 	// A generic filename that gives no hint of the content — only a
 	// content-index match can find this one.
-	target := uploadFile(t, ts, fabio, nil, "note.txt", []byte("il verbale della riunione parla di un preventivo per il tetto"))
-	uploadFile(t, ts, fabio, nil, "altro.txt", []byte("contenuto completamente estraneo"))
+	target := uploadFile(t, ts, alice, nil, "note.txt", []byte("il verbale della riunione parla di un preventivo per il tetto"))
+	uploadFile(t, ts, alice, nil, "altro.txt", []byte("contenuto completamente estraneo"))
 	// mario has a file mentioning the exact same word, but it must never
-	// show up in fabio's results — search is scoped to the caller's own
+	// show up in alice's results — search is scoped to the caller's own
 	// items, same as everything else in this app.
 	uploadFile(t, ts, mario, nil, "mario-note.txt", []byte("anche il mio preventivo per il tetto"))
 
-	results := search(t, ts, fabio, "preventivo")
+	results := search(t, ts, alice, "preventivo")
 	if len(results) != 1 || results[0].ID != target.ID {
-		t.Errorf("fabio's search(preventivo) = %+v, want exactly his own note.txt", results)
+		t.Errorf("alice's search(preventivo) = %+v, want exactly his own note.txt", results)
 	}
 
 	// Diacritic-insensitive: "perche" (no accent, as someone would likely
 	// actually type it) still finds content containing "perché".
-	uploadFile(t, ts, fabio, nil, "motivazione.txt", []byte("l'ho fatto perché era necessario"))
-	accentResults := search(t, ts, fabio, "perche")
+	uploadFile(t, ts, alice, nil, "motivazione.txt", []byte("l'ho fatto perché era necessario"))
+	accentResults := search(t, ts, alice, "perche")
 	found := false
 	for _, r := range accentResults {
 		if r.Name == "motivazione.txt" {
@@ -81,7 +81,7 @@ func TestSearchFlow_FindsByContentAndIsScopedToTheCallersOwnItems(t *testing.T) 
 		}
 	}
 	if !found {
-		t.Errorf("fabio's search(perche) = %+v, want it to match content containing 'perché'", accentResults)
+		t.Errorf("alice's search(perche) = %+v, want it to match content containing 'perché'", accentResults)
 	}
 }
 
@@ -93,14 +93,14 @@ func TestSearchFlow_ExcludesTrashedItems(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	item := uploadFile(t, ts, fabio, nil, "vecchio contratto.txt", []byte("testo del contratto"))
-	if res := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, fabio, nil); res.StatusCode != http.StatusNoContent {
+	item := uploadFile(t, ts, alice, nil, "vecchio contratto.txt", []byte("testo del contratto"))
+	if res := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+item.ID, alice, nil); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("trash the item: got status %d", res.StatusCode)
 	}
 
-	if results := search(t, ts, fabio, "contratto"); len(results) != 0 {
+	if results := search(t, ts, alice, "contratto"); len(results) != 0 {
 		t.Errorf("search(contratto) after trashing = %+v, want empty", results)
 	}
 }
@@ -113,13 +113,13 @@ func TestSearchFlow_EmptyQueryReturnsNoResultsNotAnError(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
-	uploadFile(t, ts, fabio, nil, "anything.txt", []byte("anything"))
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
+	uploadFile(t, ts, alice, nil, "anything.txt", []byte("anything"))
 
-	if results := search(t, ts, fabio, ""); len(results) != 0 {
+	if results := search(t, ts, alice, ""); len(results) != 0 {
 		t.Errorf("search('') = %+v, want empty", results)
 	}
-	if results := search(t, ts, fabio, "   "); len(results) != 0 {
+	if results := search(t, ts, alice, "   "); len(results) != 0 {
 		t.Errorf("search('   ') = %+v, want empty", results)
 	}
 }
@@ -137,24 +137,24 @@ func TestSearchFlow_FindsSharedItemsTooNotJustOwnedOnes(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	marioCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	mario := registerAndLogin(t, ts, marioCode, "mario", "another-strong-password")
 
-	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	folderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Team", "parent_id": nil,
 	})
 	folder := decodeJSON[apiItem](t, folderRes)
-	byName := uploadFile(t, ts, fabio, &folder.ID, "bolletta gas.txt", []byte("consumo del mese"))
-	byContent := uploadFile(t, ts, fabio, &folder.ID, "nota.txt", []byte("il preventivo per il tetto è pronto"))
+	byName := uploadFile(t, ts, alice, &folder.ID, "bolletta gas.txt", []byte("consumo del mese"))
+	byContent := uploadFile(t, ts, alice, &folder.ID, "nota.txt", []byte("il preventivo per il tetto è pronto"))
 	// Not shared — must never show up in mario's results.
-	uploadFile(t, ts, fabio, nil, "privato.txt", []byte("preventivo riservato, non condiviso"))
+	uploadFile(t, ts, alice, nil, "privato.txt", []byte("preventivo riservato, non condiviso"))
 
-	if res := createUserShareWithPermission(t, ts, fabio, folder.ID, mario.id, "view"); res.StatusCode != http.StatusCreated {
+	if res := createUserShareWithPermission(t, ts, alice, folder.ID, mario.id, "view"); res.StatusCode != http.StatusCreated {
 		t.Fatalf("share folder: got status %d", res.StatusCode)
 	}
 
@@ -168,6 +168,6 @@ func TestSearchFlow_FindsSharedItemsTooNotJustOwnedOnes(t *testing.T) {
 
 	contentResults := search(t, ts, mario, "preventivo")
 	if len(contentResults) != 1 || contentResults[0].ID != byContent.ID {
-		t.Errorf("mario's search(preventivo) = %+v, want exactly fabio's shared nota.txt (not the unshared privato.txt)", contentResults)
+		t.Errorf("mario's search(preventivo) = %+v, want exactly alice's shared nota.txt (not the unshared privato.txt)", contentResults)
 	}
 }

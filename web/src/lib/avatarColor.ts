@@ -1,6 +1,6 @@
 // A deterministic color per username instead of every avatar being the
-// same flat accent blue (secondbrain session 2026-08-16) — same idea
-// Slack/Notion use for user avatars: a stable hash into a hue, so the
+// same flat accent blue — same idea Slack/Notion use for user avatars:
+// a stable hash into a hue, so the
 // same person always gets the same color across sessions/devices without
 // storing anything.
 export function avatarColor(username: string): string {

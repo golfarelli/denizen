@@ -23,9 +23,9 @@
 	let { children } = $props();
 
 	// The sidebar's own "+ New" trigger — Drive-style, first item, so it's
-	// always the same tap regardless of which page you're on (secondbrain
-	// session 2026-08-16, moved out of routes/+page.svelte's toolbar). What
-	// it actually does is registered by whichever page supports it — see
+	// always the same tap regardless of which page you're on (moved out of
+	// routes/+page.svelte's toolbar). What it actually does is registered
+	// by whichever page supports it — see
 	// lib/newMenu.ts's own doc comment; $newMenuActions is null on a page
 	// that doesn't (Trash, Shares, ...), which hides this button entirely
 	// rather than showing a trigger with nothing to do.

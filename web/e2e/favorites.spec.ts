@@ -42,7 +42,7 @@ test('bulk-favoriting a selection adds every item, a shared item can be favorite
 	// the invite — back to the file browser before uploading anything.
 	await page.goto('/');
 
-	// --- bulk favorite on fabio's own two files -----------------------------------
+	// --- bulk favorite on alice's own two files -----------------------------------
 	const nameA = uniqueName('bulk-fav-a');
 	const nameB = uniqueName('bulk-fav-b');
 	await page.locator('input[type="file"]').setInputFiles([
@@ -59,7 +59,7 @@ test('bulk-favoriting a selection adds every item, a shared item can be favorite
 	await expect(page.locator('.item-row', { hasText: nameA })).toBeVisible();
 	await expect(page.locator('.item-row', { hasText: nameB })).toBeVisible();
 
-	// --- a file fabio shares with anna, anna favorites it from Shared with me -----
+	// --- a file alice shares with anna, anna favorites it from Shared with me -----
 	await page.goto('/');
 	const sharedName = uniqueName('shared-favorite');
 	await page.locator('input[type="file"]').setInputFiles({

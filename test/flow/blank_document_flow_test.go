@@ -15,7 +15,7 @@ func TestBlankDocumentFlow_CreatesARealDownloadableFile(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	cases := []struct {
 		ext, name, wantMime string
@@ -26,7 +26,7 @@ func TestBlankDocumentFlow_CreatesARealDownloadableFile(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.ext, func(t *testing.T) {
-			createRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+			createRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 				"type": c.ext, "name": c.name, "parent_id": nil,
 			})
 			if createRes.StatusCode != http.StatusCreated {
@@ -45,7 +45,7 @@ func TestBlankDocumentFlow_CreatesARealDownloadableFile(t *testing.T) {
 			}
 
 			// Real, downloadable bytes — not just a DB row with no content.
-			contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", fabio, nil)
+			contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+item.ID+"/content", alice, nil)
 			if contentRes.StatusCode != http.StatusOK {
 				t.Fatalf("download: got status %d", contentRes.StatusCode)
 			}
@@ -65,7 +65,7 @@ func TestBlankDocumentFlow_CreatesARealDownloadableFile(t *testing.T) {
 
 	// Quota actually moved — these aren't free.
 	var storageUsed int64
-	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, fabio.id).Scan(&storageUsed); err != nil {
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, alice.id).Scan(&storageUsed); err != nil {
 		t.Fatalf("scan storage_used_bytes: %v", err)
 	}
 	if storageUsed <= 0 {
@@ -81,11 +81,11 @@ func TestBlankDocumentFlow_RejectsUnsupportedTypeAndMismatchedExtension(t *testi
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	// Not folder, not docx/xlsx/pptx — every other file needs real bytes,
 	// created via upload instead.
-	badTypeRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	badTypeRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "pdf", "name": "Something.pdf", "parent_id": nil,
 	})
 	if badTypeRes.StatusCode != http.StatusBadRequest {
@@ -95,7 +95,7 @@ func TestBlankDocumentFlow_RejectsUnsupportedTypeAndMismatchedExtension(t *testi
 	// A name that doesn't end in .docx would silently break OnlyOffice
 	// later (see CreateBlankDocument's own comment) — rejected up front
 	// instead.
-	mismatchRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	mismatchRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "docx", "name": "Something.txt", "parent_id": nil,
 	})
 	if mismatchRes.StatusCode != http.StatusBadRequest {

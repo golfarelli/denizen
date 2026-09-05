@@ -121,8 +121,8 @@ original all-Unicode-icon kebab did.
 
 Trash and My shares *used* to be `.item-row-flex` pages too, each with its
 own bespoke layout — full-text Restore/Delete forever buttons on trash,
-two extra `.item-size` spans (status, expiry) on shares — until Fabio
-asked for them to visually match the file browser itself. Both now use the
+two extra `.item-size` spans (status, expiry) on shares — until they were
+changed to visually match the file browser itself. Both now use the
 real 5-column grid and a row action menu identical in shape to the file
 browser's own (Trash: Open/Restore/Delete forever; My shares: Open/Revoke
 — "Open" only rendered when the target is an openable file, not a
@@ -167,7 +167,7 @@ page's own `openMenuFor`/`toggleMenu`/`closeMenu` state and outside-click/
 Escape handling (unchanged from before this) drive both presentations —
 only the CSS differs by viewport width, not the open/close logic itself.
 
-A later pass, prompted by Fabio comparing a Drive screenshot directly
+A later pass, prompted by a direct comparison of a Drive screenshot
 against Denizen's own file list, dropped `.item-list`'s outer bordered
 card in favor of rows sitting straight on the page background (Drive's own
 list has no such box either), and replaced the row-menu's own permanent
@@ -178,7 +178,7 @@ own button styling but `position: fixed` to the viewport rather than
 anchored to a relative wrapper, since there's nothing to anchor to at the
 bottom of the screen) instead of eating a permanent row of vertical space
 a phone can't spare. First cut also dropped the hairline between rows
-entirely; Fabio asked for at least one back, so `.item-row:not(:last-child)`
+entirely; at least one was brought back, so `.item-row:not(:last-child)`
 keeps a single 1px divider between rows (skipping the last one so it
 doesn't sit flush against whatever follows the list) without reintroducing
 the outer card border.
@@ -597,8 +597,8 @@ message instead.
 
 The private preview page's own toolbar also traded its lone Download
 button for the same "⋮" row action menu the file browser's rows use
-(Download/Rename/Move/Make a copy/Share/Copy link/Delete) — Fabio's own
-ask, so the full set of actions is reachable without leaving the preview.
+(Download/Rename/Move/Make a copy/Share/Copy link/Delete), so the full
+set of actions is reachable without leaving the preview.
 
 ## Quotas
 

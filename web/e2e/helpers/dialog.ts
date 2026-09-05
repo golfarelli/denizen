@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 
 // Fills and confirms the app's custom prompt dialog (lib/GlobalDialog.svelte,
-// replacing window.prompt() — secondbrain session 2026-08-16). Call right
+// replacing window.prompt()). Call right
 // after whatever opens it (a "New folder"/"Rename" menu item, ...) instead
 // of the old page.once('dialog', ...) pattern, which stopped firing once
 // there was no more native browser dialog to catch.

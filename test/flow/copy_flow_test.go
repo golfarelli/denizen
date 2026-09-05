@@ -19,14 +19,14 @@ func TestCopyFlow_FileCopyIsRealIndependentBytes(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := []byte("the original content, byte for byte")
-	original := uploadFile(t, ts, fabio, nil, "original.txt", content)
+	original := uploadFile(t, ts, alice, nil, "original.txt", content)
 
 	// Copying into the same folder as the source collides with the source's
 	// own name — same auto-suffix behavior as any other name collision.
-	copyRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+original.ID+"/copy", fabio, map[string]any{
+	copyRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+original.ID+"/copy", alice, map[string]any{
 		"parent_id": nil,
 	})
 	if copyRes.StatusCode != http.StatusCreated {
@@ -41,8 +41,8 @@ func TestCopyFlow_FileCopyIsRealIndependentBytes(t *testing.T) {
 	}
 
 	// Real, independent bytes on disk — not a hard link, not the same file.
-	originalPath := filepath.Join(store.UserFilesRoot(fabio.username), "original.txt")
-	duplicatePath := filepath.Join(store.UserFilesRoot(fabio.username), "original (1).txt")
+	originalPath := filepath.Join(store.UserFilesRoot(alice.username), "original.txt")
+	duplicatePath := filepath.Join(store.UserFilesRoot(alice.username), "original (1).txt")
 	originalBytes, err := os.ReadFile(originalPath)
 	if err != nil {
 		t.Fatalf("read original: %v", err)
@@ -56,7 +56,7 @@ func TestCopyFlow_FileCopyIsRealIndependentBytes(t *testing.T) {
 	}
 
 	// Deleting the duplicate must not touch the original's bytes.
-	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+duplicate.ID, fabio, nil)
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+duplicate.ID, alice, nil)
 	if deleteRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete duplicate: got status %d", deleteRes.StatusCode)
 	}
@@ -68,7 +68,7 @@ func TestCopyFlow_FileCopyIsRealIndependentBytes(t *testing.T) {
 	// copied once = 2x the file's size, even though it's since been trashed
 	// (trash still counts against quota — see docs/ARCHITECTURE.md).
 	var storageUsed int64
-	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, fabio.id).Scan(&storageUsed); err != nil {
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, alice.id).Scan(&storageUsed); err != nil {
 		t.Fatalf("scan storage_used_bytes: %v", err)
 	}
 	if storageUsed != int64(len(content))*2 {
@@ -85,9 +85,9 @@ func TestCopyFlow_FolderCopyIsRecursive(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	createFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Documents", "parent_id": nil,
 	})
 	if createFolderRes.StatusCode != http.StatusCreated {
@@ -96,9 +96,9 @@ func TestCopyFlow_FolderCopyIsRecursive(t *testing.T) {
 	docs := decodeJSON[apiItem](t, createFolderRes)
 
 	content := []byte("nested file content")
-	nestedFile := uploadFile(t, ts, fabio, &docs.ID, "notes.txt", content)
+	nestedFile := uploadFile(t, ts, alice, &docs.ID, "notes.txt", content)
 
-	copyRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+docs.ID+"/copy", fabio, map[string]any{
+	copyRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+docs.ID+"/copy", alice, map[string]any{
 		"parent_id": nil,
 	})
 	if copyRes.StatusCode != http.StatusCreated {
@@ -109,13 +109,13 @@ func TestCopyFlow_FolderCopyIsRecursive(t *testing.T) {
 		t.Errorf("docsCopy.Name = %q, want %q", docsCopy.Name, "Documents (1)")
 	}
 
-	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+docsCopy.ID, fabio, nil)
+	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+docsCopy.ID, alice, nil)
 	children := decodeJSON[[]apiItem](t, listRes)
 	if len(children) != 1 || children[0].Name != "notes.txt" || children[0].ID == nestedFile.ID {
 		t.Fatalf("Documents (1) children = %+v, want a distinct copy of notes.txt", children)
 	}
 
-	nestedCopyPath := filepath.Join(store.UserFilesRoot(fabio.username), "Documents (1)", "notes.txt")
+	nestedCopyPath := filepath.Join(store.UserFilesRoot(alice.username), "Documents (1)", "notes.txt")
 	nestedCopyBytes, err := os.ReadFile(nestedCopyPath)
 	if err != nil {
 		t.Fatalf("read nested copy: %v", err)
@@ -133,10 +133,10 @@ func TestCopyFlow_RejectedOverQuota(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", bootstrapCode, created, err)
 	}
-	fabio := registerAndLogin(t, ts, bootstrapCode, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, bootstrapCode, "alice", "correct-horse-battery-staple")
 
 	smallQuota := int64(1000)
-	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, &smallQuota, time.Hour)
+	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, &smallQuota, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}

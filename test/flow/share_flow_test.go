@@ -39,12 +39,12 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := []byte("these are the contents of a shared file, nothing fancy")
-	item := uploadFile(t, ts, fabio, nil, "recipe.txt", content)
+	item := uploadFile(t, ts, alice, nil, "recipe.txt", content)
 
-	share := createShare(t, ts, fabio, item.ID, false, nil)
+	share := createShare(t, ts, alice, item.ID, false, nil)
 	if share.Token == "" || share.URL == "" {
 		t.Fatalf("share response missing token/url: %+v", share)
 	}
@@ -123,7 +123,7 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 	}
 
 	// --- the share shows up in the owner's own listing --------------------------
-	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/shares", fabio, nil)
+	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/shares", alice, nil)
 	shares := decodeJSON[[]shareCreateResponse](t, listRes)
 	if len(shares) != 1 || shares[0].ID != share.ID {
 		t.Fatalf("shares listing = %+v, want just the one share", shares)
@@ -133,7 +133,7 @@ func TestShareFlow_PublicLinkGrantsAccessAndCanBeRevoked(t *testing.T) {
 	}
 
 	// --- revoking it makes the link stop working ---------------------------------
-	revokeRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/shares/"+share.ID, fabio, nil)
+	revokeRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/shares/"+share.ID, alice, nil)
 	if revokeRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("revoke share: got status %d", revokeRes.StatusCode)
 	}
@@ -154,11 +154,11 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
-	item := uploadFile(t, ts, fabio, nil, "private-ish.txt", []byte("only for logged-in visitors"))
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
+	item := uploadFile(t, ts, alice, nil, "private-ish.txt", []byte("only for logged-in visitors"))
 
 	// --- requires_auth: an anonymous visitor is turned away, a logged-in one isn't
-	protectedShare := createShare(t, ts, fabio, item.ID, true, nil)
+	protectedShare := createShare(t, ts, alice, item.ID, true, nil)
 
 	anonRes, err := http.Get(ts.URL + "/s/" + protectedShare.Token + "/meta")
 	if err != nil {
@@ -168,7 +168,7 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 		t.Errorf("anonymous visitor on a requires_auth share: got status %d, want %d", anonRes.StatusCode, http.StatusUnauthorized)
 	}
 
-	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestShareFlow_RequiresAuthAndExpiry(t *testing.T) {
 
 	// --- an already-expired share is indistinguishable from a nonexistent one ----
 	past := time.Now().Add(-time.Hour).Unix()
-	expiredShare := createShare(t, ts, fabio, item.ID, false, &past)
+	expiredShare := createShare(t, ts, alice, item.ID, false, &past)
 	expiredRes, err := http.Get(ts.URL + "/s/" + expiredShare.Token + "/meta")
 	if err != nil {
 		t.Fatalf("GET /s/token/meta (expired): %v", err)
@@ -208,10 +208,10 @@ func TestShareFlow_CannotShareSomeoneElsesItem(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
-	item := uploadFile(t, ts, fabio, nil, "mine.txt", []byte("fabio's file"))
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
+	item := uploadFile(t, ts, alice, nil, "mine.txt", []byte("alice's file"))
 
-	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
@@ -221,6 +221,6 @@ func TestShareFlow_CannotShareSomeoneElsesItem(t *testing.T) {
 		"requires_auth": false,
 	})
 	if res.StatusCode != http.StatusNotFound {
-		t.Errorf("mario sharing fabio's file: got status %d, want %d", res.StatusCode, http.StatusNotFound)
+		t.Errorf("mario sharing alice's file: got status %d, want %d", res.StatusCode, http.StatusNotFound)
 	}
 }

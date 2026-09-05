@@ -18,10 +18,10 @@ func TestQuotaFlow_UploadRejectedOverQuota(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", bootstrapCode, created, err)
 	}
-	fabio := registerAndLogin(t, ts, bootstrapCode, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, bootstrapCode, "alice", "correct-horse-battery-staple")
 
 	smallQuota := int64(1000) // bytes
-	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, &smallQuota, time.Hour)
+	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, &smallQuota, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite with quota override: %v", err)
 	}

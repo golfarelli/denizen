@@ -180,9 +180,9 @@ test('the native long-press context menu is suppressed on an item row', async ({
 	// A real touch-and-hold on Android fires the browser's own
 	// contextmenu event alongside our timer-based selection — left
 	// unprevented, it leaves the gesture half-handled by native code and
-	// every *subsequent* tap on another row stops registering (the bug
-	// Fabio actually hit; not reproducible via mouse-only interaction, so
-	// it needs its own direct check here rather than another click-based
+	// every *subsequent* tap on another row stops registering (a real bug
+	// hit on an actual phone; not reproducible via mouse-only interaction,
+	// so it needs its own direct check here rather than another click-based
 	// scenario like the test above).
 	await page.goto('/');
 
@@ -275,7 +275,7 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 	await expect(page.locator('.item-row', { hasText: toMoveB })).toBeVisible();
 });
 
-// A regression test for the real bug Fabio hit on his phone (not caught by
+// A regression test for a real bug hit on an actual phone (not caught by
 // a mouse-based test above, which never moves the target element under a
 // stale tap the way an appearing-and-shifting layout can): the selection
 // toolbar used to sit in normal document flow above the list, so the

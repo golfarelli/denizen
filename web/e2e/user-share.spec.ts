@@ -19,7 +19,7 @@ test('sharing a file with a specific person: they see it view-only in Shared wit
 }) => {
 	const { page: annaPage, username: anna } = await registerSecondUser(page, browser);
 
-	// --- fabio uploads a file and shares it directly with anna --------------------
+	// --- alice uploads a file and shares it directly with anna --------------------
 	await page.goto('/');
 	const name = uniqueName('txt');
 	await page
@@ -63,7 +63,7 @@ test('sharing a file with a specific person: they see it view-only in Shared wit
 	await annaPage.locator('.preview-back').click();
 	await expect(annaPage).toHaveURL('/shared-with-me');
 
-	// --- fabio revokes access -------------------------------------------------------
+	// --- alice revokes access -------------------------------------------------------
 	await page.goto('/');
 	await row.getByRole('button', { name: `Actions for ${name}` }).click();
 	await row.locator('.dropdown-menu').getByRole('menuitem', { name: 'Share' }).click();

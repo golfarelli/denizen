@@ -28,10 +28,10 @@ func TestOCRSweepFlow_UploadTriggersItAutomaticallyAndMarksAttempted(t *testing.
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	uploadFile(t, ts, fabio, nil, "scan.pdf", []byte("not actually a pdf"))
-	uploadFile(t, ts, fabio, nil, "photo.jpg", []byte("not actually a jpg"))
+	uploadFile(t, ts, alice, nil, "scan.pdf", []byte("not actually a pdf"))
+	uploadFile(t, ts, alice, nil, "photo.jpg", []byte("not actually a jpg"))
 
 	// Each upload above triggered its own background sweep as a side
 	// effect — running in its own goroutine, so there's no single moment

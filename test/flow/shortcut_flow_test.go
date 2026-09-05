@@ -26,12 +26,12 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := []byte("the real file's real content")
-	original := uploadFile(t, ts, fabio, nil, "original.txt", content)
+	original := uploadFile(t, ts, alice, nil, "original.txt", content)
 
-	createFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createFolderRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Elsewhere", "parent_id": nil,
 	})
 	if createFolderRes.StatusCode != http.StatusCreated {
@@ -40,7 +40,7 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 	elsewhere := decodeJSON[apiItem](t, createFolderRes)
 
 	// --- create --------------------------------------------------------------------
-	shortcutRes := createShortcut(t, ts, fabio, original.ID, &elsewhere.ID)
+	shortcutRes := createShortcut(t, ts, alice, original.ID, &elsewhere.ID)
 	if shortcutRes.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(shortcutRes.Body)
 		t.Fatalf("create shortcut: got status %d, body: %s", shortcutRes.StatusCode, body)
@@ -61,7 +61,7 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 
 	// No quota consumed by the shortcut itself.
 	var storageUsed int64
-	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, fabio.id).Scan(&storageUsed); err != nil {
+	if err := ts.app.DB.QueryRowContext(ctx, `SELECT storage_used_bytes FROM users WHERE id = ?`, alice.id).Scan(&storageUsed); err != nil {
 		t.Fatalf("scan storage_used_bytes: %v", err)
 	}
 	if storageUsed != int64(len(content)) {
@@ -69,7 +69,7 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 	}
 
 	// --- download streams the real target's bytes -----------------------------------
-	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+shortcut.ID+"/content", fabio, nil)
+	contentRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+shortcut.ID+"/content", alice, nil)
 	if contentRes.StatusCode != http.StatusOK {
 		t.Fatalf("download via shortcut: got status %d", contentRes.StatusCode)
 	}
@@ -82,20 +82,20 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 	}
 
 	// --- rename touches only the shortcut's own row ----------------------------------
-	renameRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+shortcut.ID, fabio, map[string]any{
+	renameRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+shortcut.ID, alice, map[string]any{
 		"name": "renamed-locally.txt", "parent_id": elsewhere.ID,
 	})
 	if renameRes.StatusCode != http.StatusOK {
 		t.Fatalf("rename shortcut: got status %d", renameRes.StatusCode)
 	}
-	getOriginalRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+original.ID, fabio, nil)
+	getOriginalRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+original.ID, alice, nil)
 	stillOriginal := decodeJSON[apiItem](t, getOriginalRes)
 	if stillOriginal.Name != "original.txt" {
 		t.Errorf("original.Name = %q after renaming the shortcut, want untouched %q", stillOriginal.Name, "original.txt")
 	}
 
 	// --- move touches only the shortcut's own row ------------------------------------
-	moveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+shortcut.ID, fabio, map[string]any{
+	moveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+shortcut.ID, alice, map[string]any{
 		"name": "renamed-locally.txt", "parent_id": nil,
 	})
 	if moveRes.StatusCode != http.StatusOK {
@@ -105,14 +105,14 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 	if moved.ParentID != nil {
 		t.Errorf("moved shortcut ParentID = %v, want nil (root)", moved.ParentID)
 	}
-	getOriginalRes2 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+original.ID, fabio, nil)
+	getOriginalRes2 := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+original.ID, alice, nil)
 	stillOriginal2 := decodeJSON[apiItem](t, getOriginalRes2)
 	if stillOriginal2.ParentID != nil {
 		t.Errorf("original.ParentID = %v after moving the shortcut, want untouched nil", stillOriginal2.ParentID)
 	}
 
 	// --- copy creates another shortcut, not a content duplicate ----------------------
-	copyRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+shortcut.ID+"/copy", fabio, map[string]any{
+	copyRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+shortcut.ID+"/copy", alice, map[string]any{
 		"parent_id": elsewhere.ID,
 	})
 	if copyRes.StatusCode != http.StatusCreated {
@@ -127,11 +127,11 @@ func TestShortcutFlow_PureAlias(t *testing.T) {
 	}
 
 	// --- delete removes only the pointer, never the original -------------------------
-	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+shortcut.ID, fabio, nil)
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+shortcut.ID, alice, nil)
 	if deleteRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete shortcut: got status %d", deleteRes.StatusCode)
 	}
-	originalStillThereRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+original.ID+"/content", fabio, nil)
+	originalStillThereRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+original.ID+"/content", alice, nil)
 	if originalStillThereRes.StatusCode != http.StatusOK {
 		t.Fatalf("original content after deleting its shortcut: got status %d, want 200", originalStillThereRes.StatusCode)
 	}
@@ -154,18 +154,18 @@ func TestShortcutFlow_ToSharedItem(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	annaCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	annaCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite (anna): %v", err)
 	}
 	anna := registerAndLogin(t, ts, annaCode, "anna", "another-strong-password")
 
-	content := []byte("something fabio shared with anna")
-	shared := uploadFile(t, ts, fabio, nil, "shared.txt", content)
+	content := []byte("something alice shared with anna")
+	shared := uploadFile(t, ts, alice, nil, "shared.txt", content)
 
-	grantRes := createUserShare(t, ts, fabio, shared.ID, anna.id)
+	grantRes := createUserShare(t, ts, alice, shared.ID, anna.id)
 	if grantRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create user-share: got status %d", grantRes.StatusCode)
 	}
@@ -189,8 +189,8 @@ func TestShortcutFlow_ToSharedItem(t *testing.T) {
 		t.Errorf("content via shortcut = %q, want %q", got, content)
 	}
 
-	// Fabio revokes the share.
-	revokeRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/user-shares/"+grant.ID, fabio, nil)
+	// Alice revokes the share.
+	revokeRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/user-shares/"+grant.ID, alice, nil)
 	if revokeRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("revoke share: got status %d", revokeRes.StatusCode)
 	}

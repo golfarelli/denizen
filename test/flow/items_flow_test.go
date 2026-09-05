@@ -114,11 +114,11 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
-	filesRoot := store.UserFilesRoot(fabio.username)
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
+	filesRoot := store.UserFilesRoot(alice.username)
 
 	// --- create a root folder, verify DB row and real directory -------------
-	createDocsRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createDocsRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Documents", "parent_id": nil,
 	})
 	if createDocsRes.StatusCode != http.StatusCreated {
@@ -141,7 +141,7 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	}
 
 	// --- a nested folder lands on disk inside its parent ---------------------
-	createReportsRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createReportsRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Reports", "parent_id": docs.ID,
 	})
 	if createReportsRes.StatusCode != http.StatusCreated {
@@ -151,7 +151,7 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	mustExist(t, filepath.Join(filesRoot, "Documents", "Reports"))
 
 	// --- a name collision at the same level gets auto-suffixed ---------------
-	createDupRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createDupRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Documents", "parent_id": nil,
 	})
 	if createDupRes.StatusCode != http.StatusCreated {
@@ -164,20 +164,20 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	mustExist(t, filepath.Join(filesRoot, "Documents (1)"))
 
 	// --- listing ---------------------------------------------------------------
-	listRootRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items", fabio, nil)
+	listRootRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items", alice, nil)
 	rootItems := decodeJSON[[]apiItem](t, listRootRes)
 	if len(rootItems) != 2 {
 		t.Fatalf("root listing has %d items, want 2 (Documents, Documents (1))", len(rootItems))
 	}
 
-	listDocsRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+docs.ID, fabio, nil)
+	listDocsRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items?parent_id="+docs.ID, alice, nil)
 	docsChildren := decodeJSON[[]apiItem](t, listDocsRes)
 	if len(docsChildren) != 1 || docsChildren[0].ID != reports.ID {
 		t.Fatalf("Documents children = %+v, want just Reports", docsChildren)
 	}
 
 	// --- move: rename Reports to Archives and move it to root ------------------
-	moveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+reports.ID, fabio, map[string]any{
+	moveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+reports.ID, alice, map[string]any{
 		"name": "Archives", "parent_id": nil,
 	})
 	if moveRes.StatusCode != http.StatusOK {
@@ -191,7 +191,7 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	mustExist(t, filepath.Join(filesRoot, "Archives"))
 
 	// --- a folder cannot be moved into itself -----------------------------------
-	selfMoveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+docs.ID, fabio, map[string]any{
+	selfMoveRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+docs.ID, alice, map[string]any{
 		"name": "Documents", "parent_id": docs.ID,
 	})
 	if selfMoveRes.StatusCode != http.StatusBadRequest {
@@ -199,12 +199,12 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	}
 
 	// --- soft delete: real directory ends up in .trash, DB row marked ----------
-	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+archives.ID, fabio, nil)
+	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+archives.ID, alice, nil)
 	if deleteRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete Archives: got status %d", deleteRes.StatusCode)
 	}
 	mustNotExist(t, filepath.Join(filesRoot, "Archives"))
-	trashedPath := store.TrashPath(fabio.username, archives.ID, "Archives")
+	trashedPath := store.TrashPath(alice.username, archives.ID, "Archives")
 	mustExist(t, trashedPath)
 
 	var deletedAt any
@@ -220,7 +220,7 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	// something in the trash before deciding whether to restore or delete
 	// it forever needs this same read, and the response reflects the
 	// trashed state via deleted_at rather than hiding it as a 404.
-	getDeletedRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+archives.ID, fabio, nil)
+	getDeletedRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+archives.ID, alice, nil)
 	if getDeletedRes.StatusCode != http.StatusOK {
 		t.Errorf("GET a trashed item: got status %d, want %d", getDeletedRes.StatusCode, http.StatusOK)
 	}
@@ -231,7 +231,7 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 
 	// It still doesn't show up in an active listing, though — GET-by-id
 	// working doesn't mean it's back to normal.
-	listRootAfterDeleteRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items", fabio, nil)
+	listRootAfterDeleteRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items", alice, nil)
 	rootAfterDelete := decodeJSON[[]apiItem](t, listRootAfterDeleteRes)
 	for _, item := range rootAfterDelete {
 		if item.ID == archives.ID {
@@ -243,7 +243,7 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	// — GetIncludingTrashed is only for the read-only preview path
 	// (internal/handler/item.go's Get/Content/ContentToken); Move (which
 	// PATCH .../items/{id} calls into) keeps using the strict Get.
-	renameTrashedRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+archives.ID, fabio, map[string]any{
+	renameTrashedRes := authedRequest(t, http.MethodPatch, ts.URL+"/api/v1/items/"+archives.ID, alice, map[string]any{
 		"name": "Renamed While Trashed", "parent_id": nil,
 	})
 	if renameTrashedRes.StatusCode != http.StatusNotFound {
@@ -251,14 +251,14 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	}
 
 	// --- trash listing -----------------------------------------------------------
-	listTrashRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/trash", fabio, nil)
+	listTrashRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/trash", alice, nil)
 	trash := decodeJSON[[]apiItem](t, listTrashRes)
 	if len(trash) != 1 || trash[0].ID != archives.ID {
 		t.Fatalf("trash listing = %+v, want just Archives", trash)
 	}
 
 	// --- restore: real directory reappears where it was, DB row cleared --------
-	restoreRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+archives.ID+"/restore", fabio, nil)
+	restoreRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+archives.ID+"/restore", alice, nil)
 	if restoreRes.StatusCode != http.StatusOK {
 		t.Fatalf("restore Archives: got status %d", restoreRes.StatusCode)
 	}
@@ -270,11 +270,11 @@ func TestItemsFlow_FoldersCreateListMoveTrashRestoreDelete(t *testing.T) {
 	mustExist(t, filepath.Join(filesRoot, "Archives"))
 
 	// --- permanent delete: gone from disk, gone from the database --------------
-	deleteAgainRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+archives.ID, fabio, nil)
+	deleteAgainRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+archives.ID, alice, nil)
 	if deleteAgainRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("re-delete Archives: got status %d", deleteAgainRes.StatusCode)
 	}
-	permanentRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/trash/"+archives.ID, fabio, nil)
+	permanentRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/trash/"+archives.ID, alice, nil)
 	if permanentRes.StatusCode != http.StatusNoContent {
 		t.Fatalf("permanently delete Archives: got status %d", permanentRes.StatusCode)
 	}
@@ -297,15 +297,15 @@ func TestItemsFlow_UsersCannotSeeEachOthersItems(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", bootstrapCode, created, err)
 	}
-	fabio := registerAndLogin(t, ts, bootstrapCode, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, bootstrapCode, "alice", "correct-horse-battery-staple")
 
-	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	secondCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	mario := registerAndLogin(t, ts, secondCode, "mario", "another-strong-password")
 
-	createRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+	createRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 		"type": "folder", "name": "Private", "parent_id": nil,
 	})
 	if createRes.StatusCode != http.StatusCreated {
@@ -315,19 +315,19 @@ func TestItemsFlow_UsersCannotSeeEachOthersItems(t *testing.T) {
 
 	getRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items/"+private.ID, mario, nil)
 	if getRes.StatusCode != http.StatusNotFound {
-		t.Errorf("mario reading fabio's folder: got status %d, want %d (not found, not forbidden — existence shouldn't leak)",
+		t.Errorf("mario reading alice's folder: got status %d, want %d (not found, not forbidden — existence shouldn't leak)",
 			getRes.StatusCode, http.StatusNotFound)
 	}
 
 	deleteRes := authedRequest(t, http.MethodDelete, ts.URL+"/api/v1/items/"+private.ID, mario, nil)
 	if deleteRes.StatusCode != http.StatusNotFound {
-		t.Errorf("mario deleting fabio's folder: got status %d, want %d", deleteRes.StatusCode, http.StatusNotFound)
+		t.Errorf("mario deleting alice's folder: got status %d, want %d", deleteRes.StatusCode, http.StatusNotFound)
 	}
 
 	listRes := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/items", mario, nil)
 	marioItems := decodeJSON[[]apiItem](t, listRes)
 	if len(marioItems) != 0 {
-		t.Errorf("mario's root listing = %+v, want empty (fabio's items must not leak in)", marioItems)
+		t.Errorf("mario's root listing = %+v, want empty (alice's items must not leak in)", marioItems)
 	}
 }
 
@@ -339,12 +339,12 @@ func TestItemsFlow_RejectsUnsafeNames(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	cases := []string{"", ".", "..", "a/b", "with/slash"}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
-			res := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", fabio, map[string]any{
+			res := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items", alice, map[string]any{
 				"type": "folder", "name": name, "parent_id": nil,
 			})
 			if res.StatusCode != http.StatusBadRequest {

@@ -33,12 +33,12 @@ func TestContentTokenFlow_GrantsAccessWithoutTheBearerHeader(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
 	content := []byte("pretend this is video bytes")
-	uploaded := uploadFile(t, ts, fabio, nil, "clip.mp4", content)
+	uploaded := uploadFile(t, ts, alice, nil, "clip.mp4", content)
 
-	mintRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+uploaded.ID+"/content-token", fabio, nil)
+	mintRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+uploaded.ID+"/content-token", alice, nil)
 	if mintRes.StatusCode != http.StatusOK {
 		t.Fatalf("mint content token: got status %d", mintRes.StatusCode)
 	}
@@ -73,12 +73,12 @@ func TestContentTokenFlow_RejectsTokenMintedForADifferentItem(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
 
-	fileA := uploadFile(t, ts, fabio, nil, "a.mp4", []byte("file a"))
-	fileB := uploadFile(t, ts, fabio, nil, "b.mp4", []byte("file b"))
+	fileA := uploadFile(t, ts, alice, nil, "a.mp4", []byte("file a"))
+	fileB := uploadFile(t, ts, alice, nil, "b.mp4", []byte("file b"))
 
-	mintRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+fileA.ID+"/content-token", fabio, nil)
+	mintRes := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+fileA.ID+"/content-token", alice, nil)
 	tokenForA := decodeJSON[contentTokenResp](t, mintRes).Token
 
 	// A token minted for A must not open B, even though both belong to the
@@ -98,8 +98,8 @@ func TestContentTokenFlow_ContentStillRejectsRequestsWithNeitherCredential(t *te
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", code, created, err)
 	}
-	fabio := registerAndLogin(t, ts, code, "fabio", "correct-horse-battery-staple")
-	uploaded := uploadFile(t, ts, fabio, nil, "private.txt", []byte("secret"))
+	alice := registerAndLogin(t, ts, code, "alice", "correct-horse-battery-staple")
+	uploaded := uploadFile(t, ts, alice, nil, "private.txt", []byte("secret"))
 
 	// Neither an Authorization header nor a ?token= — this is the
 	// pre-existing behavior RequireAuthOrContentToken must not have loosened.
@@ -117,20 +117,20 @@ func TestContentTokenFlow_CannotMintForAnotherUsersItem(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("EnsureBootstrapInvite: code=%q created=%v err=%v", bootstrapCode, created, err)
 	}
-	fabio := registerAndLogin(t, ts, bootstrapCode, "fabio", "correct-horse-battery-staple")
+	alice := registerAndLogin(t, ts, bootstrapCode, "alice", "correct-horse-battery-staple")
 
-	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, fabio.id, nil, time.Hour)
+	guestCode, _, err := ts.app.Auth.CreateInvite(ctx, alice.id, nil, time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	guest := registerAndLogin(t, ts, guestCode, "guest", "another-strong-password")
 
-	fabioFile := uploadFile(t, ts, fabio, nil, "fabio-only.txt", []byte("not yours"))
+	aliceFile := uploadFile(t, ts, alice, nil, "alice-only.txt", []byte("not yours"))
 
 	// The same ownership check every other item route already enforces —
 	// this endpoint isn't a way around it.
-	res := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+fabioFile.ID+"/content-token", guest, nil)
+	res := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/items/"+aliceFile.ID+"/content-token", guest, nil)
 	if res.StatusCode == http.StatusOK {
-		t.Fatal("guest was able to mint a content token for fabio's file")
+		t.Fatal("guest was able to mint a content token for alice's file")
 	}
 }

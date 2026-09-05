@@ -169,8 +169,8 @@
 	}
 
 	// Persisted (same reasoning as $viewMode in lib/viewMode.ts — see
-	// lib/persistedState.ts's own doc comment) — Fabio asked for this
-	// 2026-08-16, having it reset each visit was more annoying than useful.
+	// lib/persistedState.ts's own doc comment) — having it reset on every
+	// visit was more annoying than useful.
 	const storedSort = loadPersisted<{ field: SortField; direction: SortDirection }>('denizen.sort.files', {
 		field: 'name',
 		direction: 'asc'
@@ -916,8 +916,8 @@
 		return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 	}
 
-	// No forced locale: the browser's own locale (whatever Fabio's device
-	// is set to) decides the actual date format, the same way Drive/
+	// No forced locale: the browser's own locale (whatever the visiting
+	// device is set to) decides the actual date format, the same way Drive/
 	// Nextcloud's own "Last modified" column does — not hardcoded to any
 	// one language.
 	function formatDate(unixSeconds: number): string {
@@ -943,9 +943,8 @@
 </nav>
 
 <!-- Its own full-width row, not sharing space with a title/sort/view —
-     "give the search bar the importance Drive gives it" was the explicit
-     ask (secondbrain session 2026-08-16): a title here was redundant with
-     the breadcrumb above anyway. -->
+     giving the search bar the importance Drive gives it: a title here
+     would be redundant with the breadcrumb above anyway. -->
 <div class="search-bar-row">
 	<div class="search-box">
 		<svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
