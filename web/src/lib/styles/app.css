@@ -764,7 +764,15 @@ main.fullscreen {
 	column-gap: var(--space-3);
 	padding: var(--space-4);
 	border-radius: var(--radius);
-	background: var(--color-bg);
+	/* Transparent, not var(--color-bg): on the main file browser this row
+	   sits directly on the page (--color-bg), so transparent renders
+	   identically — but the same class is reused inside dialogs (Move,
+	   Share, Trash, Admin — see .item-row-flex's own comment) whose card
+	   background is --color-surface, one step lighter in dark mode. A
+	   hardcoded --color-bg there painted an unintended darker box nested
+	   in the lighter dialog instead of blending into it, which is what
+	   made folder names hard to read in the Move dialog in dark mode. */
+	background: transparent;
 	position: relative;
 	transition: background 0.12s ease;
 	/* The file browser's own rows (not trash/shares/admin, which still use
