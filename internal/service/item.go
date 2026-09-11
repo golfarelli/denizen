@@ -1153,13 +1153,30 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 // is far slower than pdftotext. Every candidate gets marked attempted
 // whether or not OCR found anything, so a genuinely blank/corrupt file
 // only ever costs CPU once. Returns how many candidates it looked at.
+// sweepItemPause is the gap RunOCRSweep leaves between items in a batch —
+// see its own loop comment.
+const sweepItemPause = 2 * time.Second
+
 func (s *ItemService) RunOCRSweep(ctx context.Context, batchSize int) (int, error) {
 	candidates, err := s.ocr.ListPending(ctx, batchSize)
 	if err != nil {
 		return 0, err
 	}
 	usernames := make(map[string]string)
-	for _, item := range candidates {
+	for i, item := range candidates {
+		// A short breather between items, not before the first one — niced
+		// subprocesses (see textextract.niced) already yield CPU under
+		// contention, but a multi-item batch run back-to-back with zero gap
+		// can still keep the scheduler busy enough to starve a concurrent
+		// request for a moment right as it lands. Cheap insurance on top of
+		// niceness, not a substitute for it.
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return i, ctx.Err()
+			case <-time.After(sweepItemPause):
+			}
+		}
 		username, ok := usernames[item.OwnerID]
 		if !ok {
 			username, err = s.username(ctx, item.OwnerID)
