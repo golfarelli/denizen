@@ -30,6 +30,12 @@
 }
 
 :root {
+	/* Mirrors app.html's <meta name="color-scheme"> — see its own comment.
+	   Both point the same direction (the page renders both schemes itself,
+	   media-query-driven below) so a browser that consults either one
+	   trusts our colors instead of layering its own dark-theme heuristic
+	   on top. */
+	color-scheme: light dark;
 	--color-bg: #ffffff;
 	--color-surface: #f7f8fa;
 	--color-sidebar-bg: #f1f3f6;

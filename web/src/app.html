@@ -9,6 +9,19 @@
 		     on the lang= mismatch that used to invite it in the first
 		     place). -->
 		<meta name="google" content="notranslate" />
+		<!-- Without this, a browser that force-darkens sites lacking an
+		     explicit color-scheme (Chrome on Android does) can layer its own
+		     darkening heuristic on top of this app's own real dark theme
+		     (app.css's prefers-color-scheme media query) instead of trusting
+		     it — form controls with a transparent background (e.g.
+		     .item-name, the folder-picker's row button) are where this shows
+		     up worst: the browser can't tell what's behind them, assumes a
+		     native light control, and darkens the text to stay "readable"
+		     against that assumed light face — dark text on a real dark
+		     background. This tells the browser the page already handles
+		     both schemes itself, so it should render them as authored
+		     instead of guessing. -->
+		<meta name="color-scheme" content="light dark" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<link rel="manifest" href="/manifest.json" />
