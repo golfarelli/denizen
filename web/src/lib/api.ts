@@ -31,8 +31,36 @@ async function rawFetch(path: string, init: RequestInit = {}): Promise<Response>
 /** Exported for internal/upload.ts's tus client too — a large upload can
  * easily outlive the access token's TTL (default 15 minutes), so it needs
  * to be able to refresh mid-upload the same way apiFetch does between two
- * ordinary requests. */
-export async function refreshAccessToken(): Promise<boolean> {
+ * ordinary requests.
+ *
+ * The backend rotates refresh tokens on use (the presented one is revoked,
+ * a brand new pair issued) — see AuthService.Refresh. That makes it unsafe
+ * for two callers to refresh concurrently: an upload's per-chunk 401 (see
+ * upload.ts's onShouldRetry) and an ordinary request's 401 (apiFetch, e.g.
+ * the file list reloading while the upload is still running) can both
+ * notice an expired access token around the same moment and each call this
+ * function with the *same* stored refresh token. Whichever request reaches
+ * the backend second gets rejected — already revoked by the first — even
+ * though the first one just succeeded, and a failed refresh here means
+ * apiFetch logs the user out (clearAuth + redirect to /login), wiping the
+ * valid tokens the winning call had just installed.
+ *
+ * refreshInFlight de-dupes that: every caller within the same refresh
+ * window shares one real request/promise instead of racing separate ones,
+ * so the rotation happens at most once per expiry no matter how many call
+ * sites hit a 401 around the same time. */
+let refreshInFlight: Promise<boolean> | null = null;
+
+export function refreshAccessToken(): Promise<boolean> {
+	if (!refreshInFlight) {
+		refreshInFlight = doRefresh().finally(() => {
+			refreshInFlight = null;
+		});
+	}
+	return refreshInFlight;
+}
+
+async function doRefresh(): Promise<boolean> {
 	const state = get(auth);
 	if (!state?.refreshToken) return false;
 	const res = await fetch('/api/v1/auth/refresh', {
