@@ -9,6 +9,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof/* on http.DefaultServeMux — see the loopback listener below
 	"os/signal"
 	"syscall"
 	"time"
@@ -51,6 +52,19 @@ func main() {
 	// and the HTTP server's shutdown wait on it.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Debug-only: a CPU/goroutine profiling endpoint (net/http/pprof, wired
+	// above) on its own listener bound to loopback only — reachable via
+	// `docker exec denizen wget -O- 'http://127.0.0.1:6061/debug/pprof/...'`,
+	// never on the app's own port/network. Temporary, for diagnosing the
+	// CPU spikes reported around uploads (see #5's thread) with a real
+	// profile instead of more guessing from logs; safe to leave running
+	// otherwise (no exposure outside the container's own network namespace).
+	go func() {
+		if err := http.ListenAndServe("127.0.0.1:6061", nil); err != nil {
+			log.Printf("pprof: %v", err)
+		}
+	}()
 
 	go runPeriodically(ctx, cfg.UploadGCInterval, func() {
 		removed, err := upload.CollectGarbage(a.Store.StagingRoot(), cfg.UploadGCAfter)
