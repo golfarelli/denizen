@@ -1121,16 +1121,18 @@ func (s *ItemService) ReplaceContent(ctx context.Context, callerID, id string, r
 	if err := s.users.IncrementStorageUsed(ctx, item.OwnerID, written-item.SizeBytes); err != nil {
 		return nil, err
 	}
-	s.indexContent(ctx, item.ID, item.Name, targetPath)
 	// A prior version of this file may have been a blank scan the OCR
 	// sweep already gave up on (see RunOCRSweep) — the new bytes deserve
 	// their own fresh attempt instead of staying permanently skipped over
-	// something that no longer even exists. Best-effort, same as the
-	// index update just above: a stale marker left behind by a failure
-	// here just costs one skipped OCR attempt, never a broken upload.
+	// something that no longer even exists. Best-effort: a stale marker
+	// left behind by a failure here just costs one skipped OCR attempt,
+	// never a broken upload. Must come *before* indexContent: that's what
+	// queues the file for OCR, and it deliberately won't queue a file that
+	// still has an attempt marker.
 	if err := s.ocr.ClearAttempt(ctx, item.ID); err != nil {
 		log.Printf("ocr: clear attempt for %s: %v", item.ID, err)
 	}
+	s.indexContent(ctx, item.ID, item.Name, targetPath)
 	s.TriggerOCRSweep(s.ocrBatchSize)
 
 	item.SizeBytes = written
@@ -1274,18 +1276,33 @@ func (s *ItemService) ReindexAllContent(ctx context.Context) (int, error) {
 // failing (unsupported type, corrupt file, pdftotext missing, ...) never
 // fails the upload/edit itself, that file just won't turn up in a content
 // search. See internal/textextract's own doc comment.
+//
+// It's also where "does this file still need OCR?" gets decided, once,
+// instead of being re-derived from the indexed text on every sweep (see
+// db/migrations/0008_ocr_queue.sql for why that was far too expensive): a
+// PDF or photo (textextract.OCREligible) is queued for OCR unless
+// extraction just produced real text — photos never do (nothing else even
+// tries), and a scanned PDF's pdftotext output is nothing but page breaks.
 func (s *ItemService) indexContent(ctx context.Context, itemID, name, path string) {
 	ext := textextract.ExtFor(name)
-	if !textextract.Supported(ext) {
-		return
+	needsOCR := textextract.OCREligible(ext)
+	if textextract.Supported(ext) {
+		text, err := textextract.Extract(path, ext)
+		if err != nil {
+			log.Printf("search index: extract %s (%s): %v", itemID, ext, err)
+		} else {
+			if err := s.search.IndexContent(ctx, itemID, text); err != nil {
+				log.Printf("search index: store %s: %v", itemID, err)
+			}
+			if textextract.HasRealText(text) {
+				needsOCR = false
+			}
+		}
 	}
-	text, err := textextract.Extract(path, ext)
-	if err != nil {
-		log.Printf("search index: extract %s (%s): %v", itemID, ext, err)
-		return
-	}
-	if err := s.search.IndexContent(ctx, itemID, text); err != nil {
-		log.Printf("search index: store %s: %v", itemID, err)
+	if textextract.OCREligible(ext) {
+		if err := s.ocr.SetQueued(ctx, itemID, needsOCR, s.now().Unix()); err != nil {
+			log.Printf("ocr: queue %s: %v", itemID, err)
+		}
 	}
 }
 
