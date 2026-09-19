@@ -251,6 +251,30 @@ func ExtractOCRPDF(path string) (string, error) {
 // both work off the exact same list instead of drifting apart.
 var OCRImageExts = []string{"jpg", "jpeg", "png"}
 
+// OCREligible reports whether ext (no leading dot, lowercase) is a type
+// the background OCR sweep can act on at all: scanned PDFs plus the photo
+// formats in OCRImageExts. Whether a given file *needs* OCR is a separate,
+// per-file question (does its PDF have a real text layer?) that
+// ItemService.indexContent answers when the file is indexed.
+func OCREligible(ext string) bool {
+	if ext == "pdf" {
+		return true
+	}
+	for _, e := range OCRImageExts {
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
+// HasRealText reports whether text contains anything beyond whitespace and
+// form feeds — pdftotext separates pages with \f, so a scanned, text-less
+// PDF comes back as nothing but page breaks.
+func HasRealText(text string) bool {
+	return strings.TrimSpace(strings.ReplaceAll(text, "\f", "")) != ""
+}
+
 // ExtractOCRImage is ExtractOCRPDF's counterpart for a photographed
 // document instead of a scanned one — a .jpg/.png with no separate
 // text-extraction path at all (see Supported: images are never attempted
