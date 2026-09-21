@@ -13,6 +13,7 @@
 	import { locale, t, type Locale } from '$lib/i18n';
 	import { walkAncestors } from '$lib/ancestorChain';
 	import { autoExpandFolderIds, treeVersion } from '$lib/folderTree';
+	import { dropTarget } from '$lib/dragMove';
 	import FolderTreeItem from '$lib/FolderTreeItem.svelte';
 	import { newMenuActions } from '$lib/newMenu';
 	import GlobalDialog from '$lib/GlobalDialog.svelte';
@@ -334,7 +335,7 @@
 				     single tap down in the tab bar already reaches. -->
 				<div class="sidebar-nav-primary">
 				<div class="tree-root">
-					<div class="tree-row">
+					<div class="tree-row" use:dropTarget={{ folderId: null, folderName: $t('common.home'), enabled: true }}>
 						<button
 							class="tree-toggle"
 							class:tree-toggle-expanded={homeExpanded}

@@ -2169,3 +2169,33 @@ dialog::backdrop {
 .app-main:has(.item-list.has-selection, .item-grid.has-selection) .bottom-tabbar {
 	display: none;
 }
+
+/* Drag-and-drop moving (lib/dragMove.ts): a valid drop target — a folder
+   row/tile in the listing, or a folder/Home entry in the sidebar tree —
+   gets .drop-target while an item drag is over it. Kept at the end of the
+   file on purpose: .item-row:hover has the same specificity, so this has to
+   come later to win while hovering. */
+.item-row.drop-target,
+.item-tile.drop-target,
+.tree-row.drop-target {
+	background: var(--color-accent-soft);
+	outline: 2px solid var(--color-accent);
+	outline-offset: -2px;
+	border-radius: var(--radius);
+}
+
+/* The drag image shown when several items are dragged at once (built and
+   removed by routes/+page.svelte's handleDragStart) — parked off-screen,
+   the browser just snapshots it. */
+.drag-badge {
+	position: fixed;
+	top: -200px;
+	left: -200px;
+	padding: var(--space-2) var(--space-3);
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+	border-radius: var(--radius);
+	font-size: 0.85rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
