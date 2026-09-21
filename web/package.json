@@ -24,6 +24,7 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@techstark/opencv-js": "^4.9.0-release.3",
 		"docx-preview": "^0.4.0",
 		"pdfjs-dist": "^6.2.108",
 		"tus-js-client": "^4.3.1",

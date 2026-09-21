@@ -18,10 +18,15 @@ test('scan two pages and upload as one multi-page PDF', async ({ page }) => {
 	// each page, one at a time, same as a real person tapping it twice.
 	await dialog.getByRole('button', { name: '+ Add page' }).click();
 	await dialog.locator('input[type="file"]').setInputFiles(PHOTO_PATH);
+	// Each capture goes through the crop step before it counts as a page —
+	// accepting the corners as they stand is enough here (the crop itself
+	// has its own spec, scan-crop.spec.ts).
+	await dialog.getByRole('button', { name: 'Use this page' }).click();
 	await expect(dialog.locator('.scan-page-thumb')).toHaveCount(1);
 
 	await dialog.getByRole('button', { name: '+ Add page' }).click();
 	await dialog.locator('input[type="file"]').setInputFiles(PHOTO_PATH);
+	await dialog.getByRole('button', { name: 'Use this page' }).click();
 	await expect(dialog.locator('.scan-page-thumb')).toHaveCount(2);
 
 	await dialog.getByRole('button', { name: 'Save as PDF (2)' }).click();
