@@ -290,6 +290,51 @@ input {
 	overflow: hidden;
 }
 
+/* Desktop-only: the user-dragged width (lib/sidebarWidth.ts sets
+   --sidebar-width-user on <html> for the rest of the browser session; unset
+   until the first drag, so this falls back to the default). Scoped to the
+   same breakpoint at which .sidebar stops being a permanent column and
+   becomes a slide-in drawer (see the max-width: 900px block below) so a
+   width chosen on a big window never leaks into the mobile drawer. */
+@media (min-width: 901px) {
+	.sidebar {
+		width: var(--sidebar-width-user, var(--sidebar-width));
+	}
+}
+
+/* Drag handle on the sidebar's right edge. A wider hit area than the 1px
+   border it sits over (easier to grab), with the visible line only on
+   hover/drag/keyboard focus so it doesn't add chrome at rest. Not rendered
+   below the drawer breakpoint — resizing is a desktop affordance. */
+.sidebar-resizer {
+	display: none;
+}
+
+@media (min-width: 901px) {
+	.sidebar-resizer {
+		display: block;
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: 6px;
+		cursor: col-resize;
+		touch-action: none;
+		z-index: 1;
+	}
+
+	.sidebar-resizer:hover,
+	.sidebar-resizer.active,
+	.sidebar-resizer:focus-visible {
+		background: var(--color-accent);
+		opacity: 0.6;
+	}
+
+	.sidebar-resizer:focus-visible {
+		outline: none;
+	}
+}
+
 .sidebar-nav {
 	display: flex;
 	flex-direction: column;

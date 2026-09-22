@@ -57,6 +57,7 @@
 	"nav.collapseFolder": "Collapse {name}",
 
 	"layout.openMenu": "Open menu",
+	"layout.resizeSidebar": "Resize sidebar",
 	"layout.storageLabel": "{used} GB of {quota} GB",
 	"layout.languageItalian": "Italiano",
 	"layout.languageEnglish": "English",
