@@ -153,6 +153,38 @@ var pdftoppmPath = sync.OnceValue(func() string {
 	return p
 })
 
+// nicePath resolves `nice`, used to run the two commands above at reduced
+// CPU scheduling priority — see niced's own comment for why. Missing nice
+// degrades to running OCR at normal priority, same as before this existed,
+// rather than failing OCR altogether over it.
+var nicePath = sync.OnceValue(func() string {
+	p, err := exec.LookPath("nice")
+	if err != nil {
+		return ""
+	}
+	return p
+})
+
+// niced runs bin (with args) under `nice`, when available, at a
+// deliberately low priority. RunOCRSweep already keeps this work off the
+// upload's own request path, running it later in the background instead —
+// but "later, in the background" still meant "sharing the same CPU as
+// every other request at equal priority", which on a resource-constrained
+// host processing a real backlog (dozens to hundreds of never-OCR'd files,
+// each up to ocrTimeout=5 minutes of pdftoppm+tesseract work) was enough to
+// make the whole app feel stuck for minutes at a time — reported as
+// happening after even a single new upload, since one new file is all it
+// takes to re-trigger a sweep against whatever backlog is still pending.
+// Niceness doesn't cap how much CPU this can use, just how eagerly the
+// scheduler hands it CPU when something else — a real HTTP request — also
+// wants some, which is exactly the tradeoff a background sweep should make.
+func niced(ctx context.Context, bin string, args ...string) *exec.Cmd {
+	if p := nicePath(); p != "" {
+		return exec.CommandContext(ctx, p, append([]string{"-n", "15", bin}, args...)...)
+	}
+	return exec.CommandContext(ctx, bin, args...)
+}
+
 var tesseractPath = sync.OnceValue(func() string {
 	p, err := exec.LookPath("tesseract")
 	if err != nil {
@@ -188,7 +220,7 @@ func ExtractOCRPDF(path string) (string, error) {
 	defer cancel()
 
 	prefix := filepath.Join(dir, "page")
-	rasterize := exec.CommandContext(ctx, ppmBin,
+	rasterize := niced(ctx, ppmBin,
 		"-png", "-r", "200", "-l", strconv.Itoa(maxOCRPages), path, prefix)
 	if err := rasterize.Run(); err != nil {
 		return "", err
@@ -219,6 +251,30 @@ func ExtractOCRPDF(path string) (string, error) {
 // both work off the exact same list instead of drifting apart.
 var OCRImageExts = []string{"jpg", "jpeg", "png"}
 
+// OCREligible reports whether ext (no leading dot, lowercase) is a type
+// the background OCR sweep can act on at all: scanned PDFs plus the photo
+// formats in OCRImageExts. Whether a given file *needs* OCR is a separate,
+// per-file question (does its PDF have a real text layer?) that
+// ItemService.indexContent answers when the file is indexed.
+func OCREligible(ext string) bool {
+	if ext == "pdf" {
+		return true
+	}
+	for _, e := range OCRImageExts {
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
+// HasRealText reports whether text contains anything beyond whitespace and
+// form feeds — pdftotext separates pages with \f, so a scanned, text-less
+// PDF comes back as nothing but page breaks.
+func HasRealText(text string) bool {
+	return strings.TrimSpace(strings.ReplaceAll(text, "\f", "")) != ""
+}
+
 // ExtractOCRImage is ExtractOCRPDF's counterpart for a photographed
 // document instead of a scanned one — a .jpg/.png with no separate
 // text-extraction path at all (see Supported: images are never attempted
@@ -236,7 +292,7 @@ func ExtractOCRImage(path string) (string, error) {
 }
 
 func ocrOne(ctx context.Context, tessBin, imagePath string) (string, error) {
-	cmd := exec.CommandContext(ctx, tessBin, imagePath, "-", "-l", "ita+eng")
+	cmd := niced(ctx, tessBin, imagePath, "-", "-l", "ita+eng")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
