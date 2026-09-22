@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { loadPersisted, savePersisted } from '$lib/persistedState';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -29,6 +29,7 @@
 	import { viewMode } from '$lib/viewMode';
 	import { walkAncestors } from '$lib/ancestorChain';
 	import { invalidateTree } from '$lib/folderTree';
+	import { dragItems, lastMoveResult, DRAG_MIME, endDrag, dropTarget } from '$lib/dragMove';
 	import SortArrow from '$lib/SortArrow.svelte';
 	import SortMenu from '$lib/SortMenu.svelte';
 	import { t } from '$lib/i18n';
@@ -338,6 +339,77 @@
 		}
 		handleItemClick(item, event);
 	}
+
+	// Drag-and-drop moving (desktop): rows/tiles are draggable, folders in
+	// this listing and in the sidebar tree are drop targets — see
+	// lib/dragMove.ts. Native drag-and-drop doesn't do touch well and
+	// clashes with the long-press-to-select flow above, so this is gated on
+	// a fine pointer with hover; touch keeps using "Move to…".
+	let canDragMove = $state(false);
+	$effect(() => {
+		canDragMove = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+	});
+
+	// Same convention as Drive/Finder: dragging something that's part of the
+	// selection drags the whole selection; dragging something that isn't
+	// selects just that one (replacing the selection) and drags it. Items the
+	// caller can't edit are left out of the drag; if nothing is left, no drag.
+	function handleDragStart(item: Item, e: DragEvent) {
+		if (!canDragMove || !e.dataTransfer) return;
+		let dragged: Item[];
+		if (selectedIds.has(item.id)) {
+			dragged = selectedItems;
+		} else {
+			selectedIds = new Set([item.id]);
+			selectionAnchorId = item.id;
+			dragged = [item];
+		}
+		dragged = dragged.filter((i) => i.can_edit);
+		if (dragged.length === 0) {
+			e.preventDefault();
+			return;
+		}
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData(DRAG_MIME, JSON.stringify(dragged.map((i) => i.id)));
+		dragItems.set(dragged);
+		if (dragged.length > 1) {
+			// The browser's own drag image is just the one row grabbed —
+			// show how many items are actually travelling.
+			const badge = document.createElement('div');
+			badge.className = 'drag-badge';
+			badge.textContent = $t('fileBrowser.dragMove.badge', { count: dragged.length });
+			document.body.appendChild(badge);
+			e.dataTransfer.setDragImage(badge, 12, 12);
+			setTimeout(() => badge.remove(), 0);
+		}
+	}
+
+	// A drop-move (here or onto the sidebar tree — lib/dragMove.ts) finished:
+	// refresh this listing and say what happened. lastSeenMoveSeq starts at
+	// whatever the store already holds so remounting this page (navigating
+	// back to it) doesn't replay an old result.
+	let lastSeenMoveSeq = $state($lastMoveResult?.seq ?? 0);
+	$effect(() => {
+		const result = $lastMoveResult;
+		if (!result || result.seq === lastSeenMoveSeq) return;
+		lastSeenMoveSeq = result.seq;
+		untrack(() => {
+			clearSelection();
+			load(currentFolderId);
+			if (result.failed === 0) {
+				showStatus(
+					result.moved === 1
+						? $t('fileBrowser.dragMove.movedOne', { name: result.firstName, folder: result.folderName })
+						: $t('fileBrowser.dragMove.movedMany', { count: result.moved, folder: result.folderName })
+				);
+			} else {
+				error =
+					result.moved === 0
+						? $t('common.errors.couldNotMove')
+						: $t('dialogs.move.errors.someFailed', { count: result.failed });
+			}
+		});
+	});
 
 	// Click-and-drag over empty space rubber-band-selects everything the
 	// rectangle touches, same as Drive's own desktop list/grid. Mouse-only
@@ -1133,6 +1205,9 @@
 <div
 	class="dropzone"
 	ondragover={(e) => {
+		// Only files dragged in from the OS are an upload — an item drag
+		// inside Denizen (lib/dragMove.ts) must not light up "drop to upload".
+		if (!e.dataTransfer?.types.includes('Files')) return;
 		e.preventDefault();
 		dragging = true;
 	}}
@@ -1336,6 +1411,14 @@
 					data-item-id={item.id}
 					role="button"
 					tabindex="0"
+					draggable={canDragMove && item.can_edit}
+					ondragstart={(e) => handleDragStart(item, e)}
+					ondragend={endDrag}
+					use:dropTarget={{
+						folderId: item.id,
+						folderName: item.name,
+						enabled: item.type === 'folder' && !item.target_id && item.can_edit
+					}}
 					onpointerdown={(e) => startLongPress(item.id, e)}
 					onpointerup={cancelLongPress}
 					onpointerleave={cancelLongPress}
@@ -1381,7 +1464,20 @@
 		{:else}
 			<div class="item-grid" class:has-selection={selectedIds.size > 0}>
 				{#each visibleItems as item (item.id)}
-					<div class="item-tile" class:item-row-selected={selectedIds.has(item.id)} data-item-id={item.id}>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="item-tile"
+						class:item-row-selected={selectedIds.has(item.id)}
+						data-item-id={item.id}
+						draggable={canDragMove && item.can_edit}
+						ondragstart={(e) => handleDragStart(item, e)}
+						ondragend={endDrag}
+						use:dropTarget={{
+							folderId: item.id,
+							folderName: item.name,
+							enabled: item.type === 'folder' && !item.target_id && item.can_edit
+						}}
+					>
 						<input
 							type="checkbox"
 							class="row-checkbox tile-checkbox"
