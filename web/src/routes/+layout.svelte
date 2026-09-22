@@ -10,9 +10,17 @@
 	import { registerServiceWorker } from '$lib/pwa';
 	import { fullscreen } from '$lib/fullscreen';
 	import { sidebarOpen, closeSidebar } from '$lib/sidebar';
+	import {
+		SIDEBAR_MIN,
+		SIDEBAR_MAX,
+		loadSidebarWidth,
+		saveSidebarWidth,
+		applySidebarWidth
+	} from '$lib/sidebarWidth';
 	import { locale, t, type Locale } from '$lib/i18n';
 	import { walkAncestors } from '$lib/ancestorChain';
 	import { autoExpandFolderIds, treeVersion } from '$lib/folderTree';
+	import { dropTarget } from '$lib/dragMove';
 	import FolderTreeItem from '$lib/FolderTreeItem.svelte';
 	import { newMenuActions } from '$lib/newMenu';
 	import GlobalDialog from '$lib/GlobalDialog.svelte';
@@ -21,6 +29,56 @@
 	import TabIcon from '$lib/TabIcon.svelte';
 
 	let { children } = $props();
+
+	// Desktop sidebar resize (drag handle on its right edge, .sidebar-resizer
+	// in app.css — hidden below the drawer breakpoint). Width is applied live
+	// as a CSS variable while dragging and only saved (for this browser
+	// session, see lib/sidebarWidth.ts) once the drag ends.
+	let sidebarEl = $state<HTMLElement>();
+	let resizing = $state(false);
+	let sidebarWidth = $state(0); // for aria-valuenow only; refreshed on focus and every change
+
+	onMount(() => {
+		const saved = loadSidebarWidth();
+		if (saved !== null) sidebarWidth = applySidebarWidth(saved);
+	});
+
+	function measureSidebar(): number {
+		return Math.round(sidebarEl?.getBoundingClientRect().width ?? SIDEBAR_MIN);
+	}
+
+	function startResize(e: PointerEvent) {
+		if (e.button !== 0) return;
+		resizing = true;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		e.preventDefault(); // no text selection while dragging
+	}
+
+	function moveResize(e: PointerEvent) {
+		if (!resizing || !sidebarEl) return;
+		sidebarWidth = applySidebarWidth(e.clientX - sidebarEl.getBoundingClientRect().left);
+	}
+
+	function endResize() {
+		if (!resizing) return;
+		resizing = false;
+		sidebarWidth = measureSidebar();
+		saveSidebarWidth(sidebarWidth);
+	}
+
+	function keyResize(e: KeyboardEvent) {
+		const step = e.shiftKey ? 48 : 16;
+		const current = measureSidebar();
+		let next: number;
+		if (e.key === 'ArrowLeft') next = current - step;
+		else if (e.key === 'ArrowRight') next = current + step;
+		else if (e.key === 'Home') next = SIDEBAR_MIN;
+		else if (e.key === 'End') next = SIDEBAR_MAX;
+		else return;
+		e.preventDefault();
+		sidebarWidth = applySidebarWidth(next);
+		saveSidebarWidth(sidebarWidth);
+	}
 
 	// The sidebar's own "+ New" trigger — Drive-style, first item, so it's
 	// always the same tap regardless of which page you're on (moved out of
@@ -229,7 +287,29 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div class="sidebar-backdrop" class:visible={$sidebarOpen} onclick={closeSidebar}></div>
 
-		<aside class="sidebar" class:open={$sidebarOpen}>
+		<aside class="sidebar" class:open={$sidebarOpen} bind:this={sidebarEl}>
+			<!-- A focusable separator is the ARIA pattern for a window splitter
+			     (WAI-ARIA "Window Splitter"); svelte's a11y lint only knows
+			     separators as non-interactive, hence the ignores. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<div
+				class="sidebar-resizer"
+				class:active={resizing}
+				role="separator"
+				aria-orientation="vertical"
+				aria-label={$t('layout.resizeSidebar')}
+				aria-valuemin={SIDEBAR_MIN}
+				aria-valuemax={SIDEBAR_MAX}
+				aria-valuenow={sidebarWidth}
+				tabindex="0"
+				onpointerdown={startResize}
+				onpointermove={moveResize}
+				onpointerup={endResize}
+				onpointercancel={endResize}
+				onfocus={() => (sidebarWidth = measureSidebar())}
+				onkeydown={keyResize}
+			></div>
 			<a class="brand" href="/">
 				<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
 					<rect width="24" height="24" rx="6" fill="var(--color-accent)" />
@@ -334,7 +414,7 @@
 				     single tap down in the tab bar already reaches. -->
 				<div class="sidebar-nav-primary">
 				<div class="tree-root">
-					<div class="tree-row">
+					<div class="tree-row" use:dropTarget={{ folderId: null, folderName: $t('common.home'), enabled: true }}>
 						<button
 							class="tree-toggle"
 							class:tree-toggle-expanded={homeExpanded}

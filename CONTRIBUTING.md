@@ -37,11 +37,16 @@ involved is small — it keeps the project resilient to unmaintained or broken
 upstream packages. Exceptions go to genuinely complex infrastructure that would
 be substantial and risky to reimplement (e.g. the tus resumable-upload protocol,
 the SQLite driver, the JWT library, PDF/Word/Excel *rendering* via pdf.js,
-docx-preview, and xlsx) — those stay as dependencies. The line isn't always
+docx-preview, xlsx, and OpenCV.js for the camera scanner's document-edge
+detection) — those stay as dependencies. The line isn't always
 obvious from the file format alone: this
 project's own PDF *writer* (`lib/pdf.ts`, used by the camera scanner) is hand-
 rolled, because emitting one full-page JPEG per page is a small, bounded
 problem — parsing and rendering an arbitrary PDF someone else produced is not.
+The scanner's perspective correction (`lib/scanWarp.ts`) is hand-rolled for the
+same reason, while *finding* the page in a photo is real computer vision: that
+is the one thing OpenCV.js does, in a Web Worker loaded on the first scan only
+(it is a ~10MB WebAssembly build), and the manual crop works without it.
 
 ## Naming conventions
 

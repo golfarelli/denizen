@@ -11,6 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { api, type Item } from '$lib/api';
 	import { autoExpandFolderIds, treeVersion } from '$lib/folderTree';
+	import { dropTarget } from '$lib/dragMove';
 	import { t } from '$lib/i18n';
 	import FileIcon from '$lib/FileIcon.svelte';
 	import FolderTreeItem from '$lib/FolderTreeItem.svelte';
@@ -86,7 +87,7 @@
 </script>
 
 <li class="tree-item">
-	<div class="tree-row">
+	<div class="tree-row" use:dropTarget={{ folderId: item.id, folderName: item.name, enabled: true }}>
 		<button
 			class="tree-toggle"
 			class:tree-toggle-expanded={expanded}
