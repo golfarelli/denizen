@@ -104,6 +104,11 @@
 	// rather than Items so it survives a `load()` refresh (a fresh array
 	// of Item objects each time) without losing track of what's selected.
 	let selectedIds = $state<Set<string>>(new Set());
+	// Measured height of the fixed .selection-toolbar, used below to reserve
+	// exactly that much room under the listing. app.css used to hard-code the
+	// reserve and was wrong twice: the bar wraps to a different number of
+	// lines depending on the viewport width and the translated label widths.
+	let selectionToolbarHeight = $state(0);
 	// The last item explicitly clicked or Ctrl/Cmd-clicked (not
 	// Shift-clicked) — Shift+click selects the whole range between this and
 	// the new target, same anchor Drive/Finder both use, kept until a plain
@@ -1131,7 +1136,7 @@
 {/if}
 
 {#if selectedIds.size > 0}
-	<div class="selection-toolbar">
+	<div class="selection-toolbar" bind:clientHeight={selectionToolbarHeight}>
 		<button class="btn icon-btn" aria-label={$t('common.cancel')} onclick={clearSelection}>✕</button>
 		<span>{$t('fileBrowser.selection.count', { count: selectedIds.size })}</span>
 		<button class="btn" onclick={toggleSelectAll}>
@@ -1402,7 +1407,13 @@
 				</button>
 				<span class="row-menu"></span>
 			</div>
-			<div class="item-list" class:has-selection={selectedIds.size > 0}>
+			<div
+				class="item-list"
+				class:has-selection={selectedIds.size > 0}
+				style:padding-bottom={selectedIds.size > 0
+					? `calc(${selectionToolbarHeight}px + var(--space-4))`
+					: undefined}
+			>
 				{#each visibleItems as item (item.id)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
@@ -1462,7 +1473,13 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="item-grid" class:has-selection={selectedIds.size > 0}>
+			<div
+				class="item-grid"
+				class:has-selection={selectedIds.size > 0}
+				style:padding-bottom={selectedIds.size > 0
+					? `calc(${selectionToolbarHeight}px + var(--space-4))`
+					: undefined}
+			>
 				{#each visibleItems as item (item.id)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div

@@ -1346,23 +1346,28 @@ main.fullscreen {
 
 .selection-toolbar-actions {
 	display: flex;
+	/* Wraps for the same reason .selection-toolbar itself does: 6 action
+	   buttons with full-text labels measure ~611px, which doesn't fit a
+	   390px phone. Without this they overflowed a position: fixed element
+	   — which contributes nothing to the document's scrollable width — so
+	   the last buttons (Share/Add to favorites/Delete, wider still in
+	   Italian) sat past the screen edge with no scroll, no gesture and no
+	   hit-testable area to reach them at all. Measured in a 390px viewport
+	   before and after; e2e/bulk-select.spec.ts keeps it measured. */
+	flex-wrap: wrap;
 	gap: var(--space-2);
 	margin-left: auto;
 }
 
-/* Enough room for the fixed .selection-toolbar not to cover the last row
-   — a little more than its own typical height, since it can wrap to two
-   (now, with a 6th action button added for favorites — sometimes three)
-   lines on a narrow screen with every action
-   button showing full text. Bumped from 5.5rem: a real, reproducible
-   e2e failure (files.spec.ts's dblclick-to-open test, only ever failing
-   deep into the full suite once root had accumulated enough rows to push
-   the target below the old, now-insufficient reserve) confirmed the old
-   value no longer covered the toolbar's real worst-case height. */
-.item-list.has-selection,
-.item-grid.has-selection {
-	padding-bottom: 7.5rem;
-}
+/* The room that keeps the fixed .selection-toolbar off the last row is no
+   longer a constant here: routes/+page.svelte measures the bar's own
+   height (bind:clientHeight) and sets padding-bottom from it. A constant
+   was guessed wrong twice (5.5rem, then 7.5rem) because the real height
+   depends on how many lines the bar wraps to, which depends on the
+   viewport and on the translated label widths — 7.5rem (120px) was still
+   short of the 163px the bar measured at 390px in Italian. .has-selection
+   stays as a marker class: the :has() rule at the end of this file uses it
+   to hide .bottom-tabbar while a selection is active. */
 
 .selection-toolbar-actions .danger {
 	color: var(--color-danger);
