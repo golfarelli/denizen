@@ -275,6 +275,51 @@ test('bulk delete trashes every selected item, bulk move relocates every selecte
 	await expect(page.locator('.item-row', { hasText: toMoveB })).toBeVisible();
 });
 
+// A second phone regression test, for the other half of that same fixed
+// toolbar: the action buttons have to stay *reachable*, not just render.
+// With 6 of them at full-text labels the actions row measures far wider
+// than a 390px phone, and because .selection-toolbar is position: fixed it
+// contributes nothing to the document's scrollable width — so whatever
+// overflowed it sat past the screen edge with no scroll, no gesture and no
+// hit-testable area to reach it (Share/Add to favorites/Delete were simply
+// unusable on a phone). app.css's .selection-toolbar-actions wraps for
+// exactly this reason. Measured in the viewport rather than asserted
+// against the CSS, since what overflows depends on the rendered width of
+// whichever translation is loaded.
+test('every bulk action button stays inside the viewport and tappable on a phone', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+
+	const name = uniqueName('bulk-mobile-reach');
+	await page.locator('input[type="file"]').setInputFiles({
+		name,
+		mimeType: 'text/plain',
+		buffer: Buffer.from('for the mobile reachability test')
+	});
+	const row = page.locator('.item-row', { hasText: name });
+	await expect(row).toBeVisible({ timeout: 15_000 });
+	await row.click();
+	await expect(page.locator('.selection-toolbar')).toContainText('1 selected');
+
+	// elementFromPoint, not just the bounding box: a button can be inside
+	// the viewport and still be covered by something else, and one past the
+	// edge returns null here — both count as unreachable.
+	const unreachable = await page.locator('.selection-toolbar-actions').evaluate((actions) => {
+		const vw = window.innerWidth;
+		return [...actions.querySelectorAll('button')]
+			.filter((el) => {
+				const r = el.getBoundingClientRect();
+				if (r.left < 0 || r.right > vw) return true;
+				const hit = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+				return !el.contains(hit);
+			})
+			.map((el) => el.textContent?.trim());
+	});
+	expect(unreachable).toEqual([]);
+});
+
 // A regression test for a real bug hit on an actual phone (not caught by
 // a mouse-based test above, which never moves the target element under a
 // stale tap the way an appearing-and-shifting layout can): the selection
